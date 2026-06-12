@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 10 region, kill/yank, and undo support is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, and use basic region editing.
+Milestone 11 query replace support is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, and run interactive query replacement.
 
 Current binary behavior:
 
@@ -45,11 +45,12 @@ Basic editor keys:
 - `C-x o` selects the next window.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
+- `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit.
 - `C-x C-c` quits.
 - `M-x` runs an exact command name.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current search is exact UTF-8 substring search within individual lines. It does not wrap around the buffer and does not match across line breaks yet.
+Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
 Window splitting currently stores per-window cursor state but does not scroll automatically yet.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
 

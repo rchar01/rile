@@ -93,6 +93,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
+        KeyBinding::new([KeyEvent::Meta('%')], "query-replace"),
         KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())],
@@ -175,6 +176,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('w')]),
             KeyResolution::Command("copy-region-as-kill")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('%')]),
+            KeyResolution::Command("query-replace")
         );
     }
 

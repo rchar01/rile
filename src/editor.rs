@@ -31,6 +31,7 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     search: Option<SearchState>,
+    query_replace: Option<QueryReplaceState>,
     region: Option<RegionState>,
     kill_ring: Vec<String>,
     undo_stack: Vec<UndoEntry>,
@@ -48,6 +49,15 @@ struct RegionState {
 struct UndoEntry {
     buffer: BufferId,
     record: UndoRecord,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct QueryReplaceState {
+    query: String,
+    replacement: String,
+    current: Option<TextRange>,
+    replacements: usize,
+    visited: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +104,7 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             search: None,
+            query_replace: None,
             region: None,
             kill_ring: Vec::new(),
             undo_stack: Vec::new(),
@@ -152,6 +163,10 @@ impl Editor {
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
         if self.minibuffer.prompt().is_some() {
             return self.handle_prompt_key(key);
+        }
+
+        if self.query_replace.is_some() {
+            return self.handle_query_replace_key(key);
         }
 
         if key == KeyEvent::Ctrl('g') {
@@ -227,9 +242,15 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 };
                 self.minibuffer.clear();
-                self.submit_prompt(kind, input.trim())
+                self.submit_prompt(kind, &input)
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                if matches!(
+                    self.minibuffer.prompt_kind(),
+                    Some(PromptKind::QueryReplaceSearch | PromptKind::QueryReplaceReplacement)
+                ) {
+                    self.query_replace = None;
+                }
                 self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
             }
@@ -248,11 +269,13 @@ impl Editor {
 
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
         match kind {
-            PromptKind::ExtendedCommand => self.execute_command_by_name(input),
-            PromptKind::FindFile => self.find_file(input),
+            PromptKind::ExtendedCommand => self.execute_command_by_name(input.trim()),
+            PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
-            PromptKind::KillBuffer => self.kill_buffer(input),
-            PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
+            PromptKind::KillBuffer => self.kill_buffer(input.trim()),
+            PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
+            PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
+            PromptKind::SwitchToBuffer => self.switch_to_buffer(input.trim()),
         }
     }
 
@@ -277,6 +300,7 @@ impl Editor {
             KillRegion => self.kill_region(),
             NextLine => self.move_line(1),
             PreviousLine => self.move_line(-1),
+            QueryReplace => self.start_query_replace(),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             SetMarkCommand => self.set_mark_command(),
@@ -580,6 +604,7 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.query_replace = None;
                 self.deactivate_region();
                 self.clear_insert_group();
                 self.sync_current_window();
@@ -603,6 +628,7 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.query_replace = None;
                 self.deactivate_region();
                 self.clear_insert_group();
                 self.sync_current_window();
@@ -637,6 +663,7 @@ impl Editor {
                     self.cursor = Position::new(0, 0);
                     self.goal_display_column = None;
                     self.search = None;
+                    self.query_replace = None;
                     self.deactivate_region();
                     self.clear_insert_group();
                     self.sync_current_window();
@@ -651,6 +678,7 @@ impl Editor {
 
     fn start_incremental_search(&mut self, direction: SearchDirection) -> Result<()> {
         self.sync_current_window();
+        self.query_replace = None;
         self.search = Some(SearchState {
             direction,
             origin: self.cursor,
@@ -659,6 +687,171 @@ impl Editor {
         self.minibuffer
             .start_prompt(PromptKind::IncrementalSearch, direction.label());
         Ok(())
+    }
+
+    fn start_query_replace(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.minibuffer
+            .start_prompt(PromptKind::QueryReplaceSearch, "Query replace: ");
+        Ok(())
+    }
+
+    fn submit_query_replace_search(&mut self, query: &str) -> Result<EditorOutcome> {
+        if query.is_empty() {
+            self.query_replace = None;
+            self.minibuffer.set_error("missing search string");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        self.query_replace = Some(QueryReplaceState {
+            query: query.to_owned(),
+            replacement: String::new(),
+            current: None,
+            replacements: 0,
+            visited: false,
+        });
+        self.minibuffer.start_prompt(
+            PromptKind::QueryReplaceReplacement,
+            format!("Query replace {query} with: "),
+        );
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn submit_query_replace_replacement(&mut self, replacement: &str) -> Result<EditorOutcome> {
+        let Some(query_replace) = &mut self.query_replace else {
+            self.minibuffer.set_error("query replace is not active");
+            return Ok(EditorOutcome::Continue);
+        };
+        query_replace.replacement = replacement.to_owned();
+        self.advance_query_replace(self.cursor)?;
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn handle_query_replace_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        match key {
+            KeyEvent::Text(text) if text == "y" || text == " " => {
+                let next_start = self.replace_query_replace_current()?;
+                self.advance_query_replace(next_start)?;
+            }
+            KeyEvent::Text(text) if text == "n" => {
+                if let Some(current) = self.query_replace.as_ref().and_then(|state| state.current) {
+                    self.cursor = current.end;
+                    self.goal_display_column = None;
+                    self.sync_current_window();
+                    self.advance_query_replace(current.end)?;
+                } else {
+                    self.finish_query_replace(false);
+                }
+            }
+            KeyEvent::Text(text) if text == "!" => {
+                while self
+                    .query_replace
+                    .as_ref()
+                    .and_then(|state| state.current)
+                    .is_some()
+                {
+                    let next_start = self.replace_query_replace_current()?;
+                    self.advance_query_replace(next_start)?;
+                }
+            }
+            KeyEvent::Text(text) if text == "q" => self.finish_query_replace(false),
+            KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                self.finish_query_replace(true);
+            }
+            _ => self
+                .minibuffer
+                .set_message("Query replace: type y, n, !, or q"),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn advance_query_replace(&mut self, start: Position) -> Result<()> {
+        let Some(query) = self.query_replace.as_ref().map(|state| state.query.clone()) else {
+            return Ok(());
+        };
+
+        let found = find_match(
+            self.document().buffer(),
+            &query,
+            start,
+            SearchDirection::Forward,
+        )?;
+        if let Some(range) = found {
+            if let Some(state) = &mut self.query_replace {
+                state.current = Some(range);
+                state.visited = true;
+            }
+            self.cursor = range.start;
+            self.goal_display_column = None;
+            self.sync_current_window();
+            self.minibuffer
+                .set_message("Query replace: type y, n, !, or q");
+        } else if self
+            .query_replace
+            .as_ref()
+            .is_some_and(|state| state.replacements == 0 && !state.visited)
+        {
+            self.query_replace = None;
+            self.minibuffer
+                .set_message(format!("No matches for {query}"));
+        } else {
+            self.finish_query_replace(false);
+        }
+        Ok(())
+    }
+
+    fn replace_query_replace_current(&mut self) -> Result<Position> {
+        let Some((old_range, replacement)) = self.query_replace.as_ref().and_then(|state| {
+            state
+                .current
+                .map(|current| (current, state.replacement.clone()))
+        }) else {
+            return Ok(self.cursor);
+        };
+
+        let old_text = self.document_mut().buffer_mut().delete_range(old_range)?;
+        let new_end = self
+            .document_mut()
+            .buffer_mut()
+            .insert(old_range.start, &replacement)?;
+        self.cursor = new_end;
+        self.goal_display_column = None;
+        self.record_replace(
+            TextRange::new(old_range.start, new_end),
+            old_text,
+            replacement,
+            old_range.start,
+            new_end,
+        );
+        if let Some(state) = &mut self.query_replace {
+            state.current = None;
+            state.replacements += 1;
+        }
+        self.sync_current_window();
+        Ok(new_end)
+    }
+
+    fn finish_query_replace(&mut self, cancelled: bool) {
+        let replacements = self
+            .query_replace
+            .take()
+            .map(|state| state.replacements)
+            .unwrap_or(0);
+        let noun = if replacements == 1 {
+            "replacement"
+        } else {
+            "replacements"
+        };
+        if cancelled {
+            self.minibuffer
+                .set_message(format!("Quit query replace ({replacements} {noun})"));
+        } else {
+            self.minibuffer
+                .set_message(format!("Query replace done ({replacements} {noun})"));
+        }
     }
 
     fn handle_search_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -920,6 +1113,30 @@ impl Editor {
         self.clear_insert_group();
     }
 
+    fn record_replace(
+        &mut self,
+        range: TextRange,
+        old_text: String,
+        new_text: String,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) {
+        if old_text == new_text {
+            return;
+        }
+        self.undo_stack.push(UndoEntry {
+            buffer: self.current_buffer,
+            record: UndoRecord::Replace {
+                range,
+                old_text,
+                new_text,
+                cursor_before,
+                cursor_after,
+            },
+        });
+        self.clear_insert_group();
+    }
+
     fn clear_insert_group(&mut self) {
         self.grouping_insert = false;
     }
@@ -936,6 +1153,7 @@ impl Editor {
         self.cursor = viewport.cursor;
         self.goal_display_column = None;
         self.search = None;
+        self.query_replace = None;
         self.clear_insert_group();
     }
 }
@@ -945,6 +1163,10 @@ impl DecorationProvider for Editor {
         let mut spans = Vec::new();
         if let Some(region_span) = self.region_span_for_line(line_index, line) {
             spans.push(region_span);
+        }
+
+        if let Some(query_replace_span) = self.query_replace_span_for_line(line_index) {
+            spans.push(query_replace_span);
         }
 
         let Some(search) = &self.search else {
@@ -1001,6 +1223,18 @@ impl Editor {
             start_byte: start,
             end_byte: end,
             face: Face::Region,
+        })
+    }
+
+    fn query_replace_span_for_line(&self, line_index: usize) -> Option<Span> {
+        let range = self.query_replace.as_ref()?.current?;
+        if range.start.line != line_index || range.end.line != line_index {
+            return None;
+        }
+        Some(Span {
+            start_byte: range.start.byte,
+            end_byte: range.end.byte,
+            face: Face::CurrentSearchMatch,
         })
     }
 }
@@ -1670,6 +1904,115 @@ mod tests {
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should remove grouped typing");
         assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    fn submit_prompt_text(editor: &mut Editor, text: &str) {
+        for character in text.chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("prompt input should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("prompt should submit");
+    }
+
+    #[test]
+    fn query_replace_replaces_utf8_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "é a é")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('%'))
+            .expect("query replace should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Query replace: ")
+        );
+        submit_prompt_text(&mut editor, "é");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Query replace é with: ")
+        );
+        submit_prompt_text(&mut editor, "e");
+
+        let spans = editor.spans_for_line(0, "é a é");
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_byte, 0);
+        assert_eq!(spans[0].end_byte, "é".len());
+        assert_eq!(spans[0].face, Face::CurrentSearchMatch);
+
+        editor
+            .handle_key(KeyEvent::Text("y".to_owned()))
+            .expect("yes should replace current candidate");
+        assert_eq!(editor.document().buffer().serialize(), "e a é");
+        assert_eq!(editor.cursor(), Position::new(0, "e a ".len()));
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("quit should finish query replace");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore replacement");
+        assert_eq!(editor.document().buffer().serialize(), "é a é");
+    }
+
+    #[test]
+    fn query_replace_skips_and_replaces_all_remaining() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo foo foo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("query-replace")
+            .expect("query replace should prompt");
+        submit_prompt_text(&mut editor, "foo");
+        submit_prompt_text(&mut editor, "bar");
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("no should skip current candidate");
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("bang should replace all remaining candidates");
+
+        assert_eq!(editor.document().buffer().serialize(), "foo bar bar");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Query replace done (2 replacements)")
+        );
+    }
+
+    #[test]
+    fn query_replace_reports_empty_and_missing_searches() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("query-replace")
+            .expect("query replace should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty query should submit");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: missing search string")
+        );
+
+        editor
+            .execute_command_by_name("query-replace")
+            .expect("query replace should prompt");
+        submit_prompt_text(&mut editor, "missing");
+        submit_prompt_text(&mut editor, "replacement");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No matches for missing")
+        );
     }
 
     #[test]

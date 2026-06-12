@@ -125,7 +125,17 @@ Milestone 10 adds region, kill/yank, and undo:
 - normal printable typing is grouped into a single undo record until another command interrupts it;
 - tests cover Unicode-safe region highlighting, kill/yank, kill-line, grouped typing undo, and new control-key parsing.
 
-Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
+Milestone 11 adds query replace:
+
+- `M-%` and `query-replace` start an interactive replacement workflow;
+- the minibuffer prompts first for the search string, then for the replacement string;
+- the current candidate is highlighted with the current-search face;
+- choice keys support `y` to replace, `n` to skip, `!` to replace all remaining candidates, and `q`/Escape/`C-g` to quit;
+- replacements are UTF-8-safe and reuse the buffer range validation path;
+- each replacement records an undo entry so `C-_` can restore replaced text;
+- tests cover UTF-8 replacement, skip/all behavior, missing input, highlighting, and undo.
+
+Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 ## Line Ending Policy
 

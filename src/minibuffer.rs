@@ -15,6 +15,8 @@ pub enum PromptKind {
     FindFile,
     IncrementalSearch,
     KillBuffer,
+    QueryReplaceReplacement,
+    QueryReplaceSearch,
     SwitchToBuffer,
 }
 

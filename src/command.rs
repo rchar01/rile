@@ -21,6 +21,7 @@ pub enum Command {
     KillRegion,
     NextLine,
     PreviousLine,
+    QueryReplace,
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
@@ -153,6 +154,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
+        CommandSpec::new(
+            "query-replace",
+            "Interactively replace text",
+            true,
+            QueryReplace,
+        ),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
         CommandSpec::new(
             "save-buffers-kill-terminal",
@@ -212,6 +219,7 @@ mod tests {
         assert!(registry.contains("copy-region-as-kill"));
         assert!(registry.contains("yank"));
         assert!(registry.contains("undo"));
+        assert!(registry.contains("query-replace"));
         assert!(registry.contains("set-mark-command"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
