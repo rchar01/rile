@@ -12,6 +12,7 @@ pub mod input;
 pub mod keymap;
 pub mod minibuffer;
 pub mod render;
+pub mod syntax;
 pub mod terminal;
 pub mod window;
 

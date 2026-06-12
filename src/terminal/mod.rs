@@ -9,7 +9,7 @@ use crate::buffer::{Buffer, Position};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
-use crate::render::{DecorationProvider, Face, Span, clip_spans, merge_spans};
+use crate::render::{Face, Span, clip_spans, merge_spans};
 use crate::window::{Viewport, WindowLayout, WindowRect};
 use crate::{Result, RileError};
 
@@ -276,11 +276,7 @@ fn draw_window<W: Write>(
         terminal.move_cursor(screen_row as u16, screen_column as u16)?;
         let line_index = viewport.first_visible_line + row;
         if let Some(line) = document.buffer().line(line_index) {
-            let spans = if layout.id == editor.current_window_id() {
-                editor.spans_for_line(line_index, line)
-            } else {
-                Vec::new()
-            };
+            let spans = editor.spans_for_buffer_line(viewport.buffer, line_index, line);
             write_buffer_line(
                 terminal,
                 document.buffer(),
@@ -297,8 +293,13 @@ fn draw_window<W: Write>(
 
     let mode_line_row = layout.rect.row + layout.rect.rows;
     terminal.move_cursor(mode_line_row as u16, (layout.rect.column + 1) as u16)?;
+    let syntax_mode = if editor.syntax_enabled() {
+        editor.syntax_mode_for_buffer(viewport.buffer).name()
+    } else {
+        "Syntax off"
+    };
     let mode_line = format!(
-        "{}{} | C-x C-s save | C-x C-c quit | M-x",
+        "{}{} | {syntax_mode} | C-x C-s save | C-x C-c quit | M-x",
         if layout.id == editor.current_window_id() {
             "* "
         } else {
@@ -443,6 +444,9 @@ fn face_start_code(face: Face) -> Option<&'static str> {
         Face::ModeLine => Some("\x1b[7m"),
         Face::Error => Some("\x1b[31m"),
         Face::Warning => Some("\x1b[33m"),
+        Face::SyntaxKeyword => Some("\x1b[34;1m"),
+        Face::SyntaxString => Some("\x1b[32m"),
+        Face::SyntaxComment => Some("\x1b[2m"),
         _ => None,
     }
 }

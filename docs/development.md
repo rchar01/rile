@@ -145,6 +145,17 @@ Milestone 12 cleans up the face and decoration architecture:
 - terminal rendering applies mode-line, minibuffer, warning, and error faces through the same face-to-ANSI path;
 - tests cover provider collection, UTF-8 boundary rejection, span priority splitting, clipping, and fixed-width faced terminal output.
 
+Milestone 13 adds syntax highlighting:
+
+- `syntax::Highlighter` defines the line-highlighting interface;
+- `syntax::SyntaxMode` selects modes by file extension, with a plain-text fallback;
+- simple line-local highlighters cover Rust, C, shell, Markdown, and TOML;
+- syntax spans use shared `Face::SyntaxKeyword`, `Face::SyntaxString`, and `Face::SyntaxComment` faces;
+- syntax spans flow through the same decoration collection and priority merge path as region, search, and query-replace spans;
+- syntax highlighting is enabled by default and can be toggled with `M-x toggle-syntax-highlighting`;
+- the mode line displays the selected syntax mode or `Syntax off`;
+- tests cover mode selection, language span output, syntax/search/region merge priority, and the toggle command.
+
 Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 ## Line Ending Policy

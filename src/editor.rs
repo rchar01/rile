@@ -10,6 +10,7 @@ use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
+use crate::syntax::{Highlighter, SyntaxHighlighter, SyntaxMode};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
@@ -36,6 +37,7 @@ pub struct Editor {
     kill_ring: Vec<String>,
     undo_stack: Vec<UndoEntry>,
     grouping_insert: bool,
+    syntax_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -109,6 +111,7 @@ impl Editor {
             kill_ring: Vec::new(),
             undo_stack: Vec::new(),
             grouping_insert: false,
+            syntax_enabled: true,
         }
     }
 
@@ -158,6 +161,46 @@ impl Editor {
 
     pub fn minibuffer(&self) -> &MinibufferState {
         &self.minibuffer
+    }
+
+    pub fn syntax_enabled(&self) -> bool {
+        self.syntax_enabled
+    }
+
+    pub fn syntax_mode_for_buffer(&self, id: BufferId) -> SyntaxMode {
+        self.buffers
+            .document(id)
+            .map(|document| SyntaxMode::for_path(document.path()))
+            .unwrap_or(SyntaxMode::PlainText)
+    }
+
+    pub fn spans_for_buffer_line(
+        &self,
+        buffer: BufferId,
+        line_index: usize,
+        line: &str,
+    ) -> Vec<Span> {
+        let syntax = SyntaxDecorator {
+            enabled: self.syntax_enabled,
+            mode: self.syntax_mode_for_buffer(buffer),
+        };
+        if buffer != self.current_buffer {
+            let providers: [&dyn DecorationProvider; 1] = [&syntax];
+            return collect_spans_for_line(&providers, line_index, line);
+        }
+
+        let region = RegionDecorator {
+            range: self.active_region_range(),
+        };
+        let query_replace = QueryReplaceDecorator {
+            current: self.query_replace.as_ref().and_then(|state| state.current),
+        };
+        let search = SearchDecorator {
+            search: self.search.as_ref(),
+            query: self.minibuffer.prompt_input(),
+        };
+        let providers: [&dyn DecorationProvider; 4] = [&syntax, &region, &query_replace, &search];
+        collect_spans_for_line(&providers, line_index, line)
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -309,6 +352,7 @@ impl Editor {
             SwitchToBuffer => self.start_switch_to_buffer(),
             SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
             SplitWindowRight => self.split_window(SplitAxis::Vertical),
+            ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
             Yank => self.yank(),
         }?;
@@ -1011,6 +1055,18 @@ impl Editor {
         Ok(())
     }
 
+    fn toggle_syntax_highlighting(&mut self) -> Result<()> {
+        self.syntax_enabled = !self.syntax_enabled;
+        let status = if self.syntax_enabled {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        self.minibuffer
+            .set_message(format!("Syntax highlighting {status}"));
+        Ok(())
+    }
+
     fn clear_key_sequence(&mut self) {
         self.key_sequence.clear();
     }
@@ -1160,18 +1216,21 @@ impl Editor {
 
 impl DecorationProvider for Editor {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
-        let region = RegionDecorator {
-            range: self.active_region_range(),
-        };
-        let query_replace = QueryReplaceDecorator {
-            current: self.query_replace.as_ref().and_then(|state| state.current),
-        };
-        let search = SearchDecorator {
-            search: self.search.as_ref(),
-            query: self.minibuffer.prompt_input(),
-        };
-        let providers: [&dyn DecorationProvider; 3] = [&region, &query_replace, &search];
-        collect_spans_for_line(&providers, line_index, line)
+        self.spans_for_buffer_line(self.current_buffer, line_index, line)
+    }
+}
+
+struct SyntaxDecorator {
+    enabled: bool,
+    mode: SyntaxMode,
+}
+
+impl DecorationProvider for SyntaxDecorator {
+    fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        if !self.enabled || self.mode == SyntaxMode::PlainText {
+            return Vec::new();
+        }
+        SyntaxHighlighter::new(self.mode).highlight_line(line_index, line)
     }
 }
 
@@ -1357,7 +1416,8 @@ mod tests {
     use crate::buffer::Position;
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
-    use crate::render::{DecorationProvider, Face};
+    use crate::render::{DecorationProvider, Face, Span};
+    use crate::syntax::SyntaxMode;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -1926,6 +1986,74 @@ mod tests {
         assert_eq!(editor.document().buffer().serialize(), "");
     }
 
+    #[test]
+    fn syntax_highlighting_uses_file_extension_and_can_toggle() {
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        let mut document = Document::open(&path).expect("missing Rust file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "fn main()")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        assert_eq!(
+            editor.syntax_mode_for_buffer(editor.current_buffer_id()),
+            SyntaxMode::Rust
+        );
+        assert!(editor.syntax_enabled());
+        assert!(editor.spans_for_line(0, "fn main()").contains(&Span::new(
+            0,
+            2,
+            Face::SyntaxKeyword
+        )));
+
+        editor
+            .execute_command_by_name("toggle-syntax-highlighting")
+            .expect("toggle should work");
+        assert!(!editor.syntax_enabled());
+        assert!(editor.spans_for_line(0, "fn main()").is_empty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Syntax highlighting disabled")
+        );
+    }
+
+    #[test]
+    fn syntax_spans_merge_below_region_and_search_priority() {
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        let mut document = Document::open(&path).expect("missing Rust file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "fn fn")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("end-of-line")
+            .expect("cursor should move to end");
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("cursor should move to beginning");
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        submit_prompt_text_without_enter(&mut editor, "fn");
+
+        assert_eq!(
+            editor.spans_for_line(0, "fn fn"),
+            vec![
+                Span::new(0, 2, Face::CurrentSearchMatch),
+                Span::new(2, 3, Face::Region),
+                Span::new(3, 5, Face::SearchMatch),
+            ]
+        );
+    }
+
     fn submit_prompt_text(editor: &mut Editor, text: &str) {
         for character in text.chars() {
             editor
@@ -1935,6 +2063,14 @@ mod tests {
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("prompt should submit");
+    }
+
+    fn submit_prompt_text_without_enter(editor: &mut Editor, text: &str) {
+        for character in text.chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("prompt input should update");
+        }
     }
 
     #[test]

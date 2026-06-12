@@ -13,6 +13,9 @@ pub enum Face {
     ModeLine,
     Error,
     Warning,
+    SyntaxKeyword,
+    SyntaxString,
+    SyntaxComment,
 }
 
 impl Face {
@@ -21,6 +24,9 @@ impl Face {
             Self::Default => 0,
             Self::Minibuffer => 10,
             Self::ModeLine => 10,
+            Self::SyntaxKeyword => 15,
+            Self::SyntaxString => 15,
+            Self::SyntaxComment => 15,
             Self::Warning => 20,
             Self::Error => 30,
             Self::Region => 40,
