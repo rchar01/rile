@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rile contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if cargo nextest --version >/dev/null 2>&1; then
+  cargo nextest run --locked
+else
+  cargo test --locked
+fi

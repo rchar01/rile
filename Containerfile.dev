@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 Rile contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+ARG RUST_VERSION=1.95.0
+FROM docker.io/library/rust:${RUST_VERSION}-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    bash \
+    ca-certificates \
+    curl \
+    git \
+    make \
+    pkg-config \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN rustup component add rustfmt clippy rust-analyzer
+
+RUN cargo install --locked \
+    cargo-audit \
+    cargo-deny \
+    cargo-machete \
+    cargo-nextest
+
+RUN chmod -R a+rwX /usr/local/cargo /usr/local/rustup \
+ && mkdir -p /workspace \
+ && chmod 777 /workspace
+
+WORKDIR /workspace

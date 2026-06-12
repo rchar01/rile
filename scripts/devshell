@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rile contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+IMAGE=${IMAGE:-rile-dev}
+PODMAN=${PODMAN:-podman}
+CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
+
+"$PODMAN" build -f "$CONTAINERFILE" -t "$IMAGE" .
+
+"$PODMAN" run --rm -it \
+  --userns=keep-id \
+  -e CARGO_TERM_COLOR=always \
+  -v "$PWD":/workspace:z \
+  -w /workspace \
+  "$IMAGE" bash

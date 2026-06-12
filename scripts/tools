@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Rile contributors
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+missing=0
+
+check_tool() {
+  tool=$1
+  if command -v "$tool" >/dev/null 2>&1; then
+    version=$($tool --version 2>&1)
+    printf '%-18s %s\n' "$tool" "${version%%$'\n'*}"
+  else
+    printf '%-18s MISSING\n' "$tool" >&2
+    missing=1
+  fi
+}
+
+check_cargo_command() {
+  command=$1
+  label=$2
+  if cargo "$command" --version >/dev/null 2>&1; then
+    version=$(cargo "$command" --version 2>&1)
+    printf '%-18s %s\n' "$label" "${version%%$'\n'*}"
+  else
+    printf '%-18s MISSING\n' "$label" >&2
+    missing=1
+  fi
+}
+
+check_tool rustup
+check_tool cargo
+check_tool rustfmt
+check_tool clippy-driver
+check_tool rust-analyzer
+check_cargo_command nextest cargo-nextest
+check_cargo_command deny cargo-deny
+check_cargo_command audit cargo-audit
+check_cargo_command machete cargo-machete
+
+exit "$missing"
