@@ -853,10 +853,50 @@ mod tests {
         assert_eq!(rendered_cursor_position(&mut editor, size), Some((1, 1)));
     }
 
+    #[test]
+    fn redraw_updates_mode_line_position_during_repeated_previous_line_scroll() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\nfour\nfive\nsix")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 60,
+        };
+
+        for _ in 0..5 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+            rendered_frame(&mut editor, size);
+        }
+        assert!(rendered_frame(&mut editor, size).contains("Bot (6,0)"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up");
+        assert!(rendered_frame(&mut editor, size).contains("Bot (5,0)"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up again");
+        assert!(rendered_frame(&mut editor, size).contains("Bot (4,0)"));
+    }
+
     fn rendered_cursor_position(editor: &mut Editor, size: TerminalSize) -> Option<(usize, usize)> {
+        last_cursor_position(rendered_frame_bytes(editor, size).as_slice())
+    }
+
+    fn rendered_frame(editor: &mut Editor, size: TerminalSize) -> String {
+        String::from_utf8(rendered_frame_bytes(editor, size)).expect("frame should be UTF-8")
+    }
+
+    fn rendered_frame_bytes(editor: &mut Editor, size: TerminalSize) -> Vec<u8> {
         let mut terminal = AnsiTerminal::new(Vec::new());
         draw_editor_frame(&mut terminal, editor, size).expect("frame should draw");
-        last_cursor_position(&terminal.into_inner())
+        terminal.into_inner()
     }
 
     fn last_cursor_position(output: &[u8]) -> Option<(usize, usize)> {

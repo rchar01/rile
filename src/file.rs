@@ -47,6 +47,13 @@ Rile is free software under GPL-3.0-or-later.\n",
         let path = path.as_ref().to_path_buf();
         match fs::read(&path) {
             Ok(bytes) => {
+                if bytes.contains(&0) {
+                    return Err(RileError::InvalidInput(format!(
+                        "{} appears to be a binary file and was not opened",
+                        path.display()
+                    )));
+                }
+
                 let text = String::from_utf8(bytes).map_err(|error| {
                     RileError::InvalidInput(format!(
                         "{} is not valid UTF-8: {}",
@@ -331,6 +338,17 @@ mod tests {
         let error = Document::open(&path).expect_err("invalid UTF-8 should fail");
 
         assert!(error.to_string().contains("not valid UTF-8"));
+    }
+
+    #[test]
+    fn rejects_nul_containing_binary_files() {
+        let directory = TestDir::new();
+        let path = directory.path().join("binary.dat");
+        fs::write(&path, b"text\0more").expect("file should be written");
+
+        let error = Document::open(&path).expect_err("binary file should fail");
+
+        assert!(error.to_string().contains("appears to be a binary file"));
     }
 
     #[test]
