@@ -2,13 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::io::{self, IsTerminal, Read, Write};
+use std::ops::Range;
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
+use crate::buffer::{Buffer, Position};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
 use crate::render::{DecorationProvider, Face, Span};
+use crate::window::{Viewport, WindowLayout, WindowRect};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -230,26 +233,11 @@ where
         self.screen.terminal.move_cursor(1, 1)?;
         self.screen.terminal.clear_screen()?;
 
-        let text_rows = size.rows.saturating_sub(2).max(1);
-        for row in 0..text_rows {
-            self.screen.terminal.move_cursor(row + 1, 1)?;
-            self.screen.terminal.clear_line()?;
-            let line_index = usize::from(row);
-            if let Some(line) = editor.document().buffer().line(line_index) {
-                let spans = editor.spans_for_line(line_index, line);
-                write_line_with_spans(&mut self.screen.terminal, line, &spans)?;
-            } else {
-                self.screen.terminal.write_text("~")?;
-            }
+        let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
+        let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
+        for layout in &layouts {
+            draw_window(&mut self.screen.terminal, editor, *layout)?;
         }
-
-        let status_row = size.rows.saturating_sub(1).max(1);
-        self.screen.terminal.move_cursor(status_row, 1)?;
-        self.screen.terminal.clear_line()?;
-        self.screen.terminal.write_text(&format!(
-            "{} | C-x C-s save | C-x C-c quit | M-x",
-            editor.document().mode_line()
-        ))?;
 
         self.screen.terminal.move_cursor(size.rows.max(1), 1)?;
         self.screen.terminal.clear_line()?;
@@ -257,14 +245,148 @@ where
             self.screen.terminal.write_text(&text)?;
         }
 
-        let cursor = editor.cursor();
-        let cursor_row = (cursor.line + 1).min(usize::from(text_rows)) as u16;
-        let cursor_column = editor.document().buffer().display_column(cursor)? + 1;
-        self.screen
-            .terminal
-            .move_cursor(cursor_row.max(1), cursor_column as u16)?;
+        move_cursor_to_current_window(&mut self.screen.terminal, editor, &layouts)?;
         self.screen.terminal.flush()
     }
+}
+
+fn draw_window<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    layout: WindowLayout,
+) -> Result<()> {
+    if layout.rect.rows == 0 || layout.rect.columns == 0 {
+        return Ok(());
+    }
+    let Some(viewport) = editor.window_viewport(layout.id) else {
+        return Ok(());
+    };
+    let Some(document) = editor.document_for_buffer(viewport.buffer) else {
+        return Ok(());
+    };
+
+    let text_rows = layout.rect.rows.saturating_sub(1);
+    for row in 0..text_rows {
+        let screen_row = layout.rect.row + row + 1;
+        let screen_column = layout.rect.column + 1;
+        terminal.move_cursor(screen_row as u16, screen_column as u16)?;
+        let line_index = viewport.first_visible_line + row;
+        if let Some(line) = document.buffer().line(line_index) {
+            let spans = if layout.id == editor.current_window_id() {
+                editor.spans_for_line(line_index, line)
+            } else {
+                Vec::new()
+            };
+            write_buffer_line(
+                terminal,
+                document.buffer(),
+                viewport,
+                line_index,
+                line,
+                &spans,
+                layout.rect,
+            )?;
+        } else {
+            write_fixed_width_text(terminal, "~", layout.rect.columns)?;
+        }
+    }
+
+    let mode_line_row = layout.rect.row + layout.rect.rows;
+    terminal.move_cursor(mode_line_row as u16, (layout.rect.column + 1) as u16)?;
+    let mode_line = format!(
+        "{}{} | C-x C-s save | C-x C-c quit | M-x",
+        if layout.id == editor.current_window_id() {
+            "* "
+        } else {
+            "  "
+        },
+        document.mode_line()
+    );
+    write_fixed_width_text(terminal, &mode_line, layout.rect.columns)
+}
+
+fn write_buffer_line<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    buffer: &Buffer,
+    viewport: &Viewport,
+    line_index: usize,
+    line: &str,
+    spans: &[Span],
+    rect: WindowRect,
+) -> Result<()> {
+    let range = buffer.visible_range(line_index, viewport.first_visible_column, rect.columns)?;
+    let segment = &line[range.clone()];
+    let relative_spans = relative_spans(spans, range);
+    write_line_with_spans(terminal, segment, &relative_spans)?;
+    let width = Buffer::display_width(segment);
+    if width < rect.columns {
+        terminal.write_text(&" ".repeat(rect.columns - width))?;
+    }
+    Ok(())
+}
+
+fn relative_spans(spans: &[Span], range: Range<usize>) -> Vec<Span> {
+    spans
+        .iter()
+        .copied()
+        .filter(|span| span.start_byte >= range.start && span.end_byte <= range.end)
+        .map(|span| Span {
+            start_byte: span.start_byte - range.start,
+            end_byte: span.end_byte - range.start,
+            face: span.face,
+        })
+        .collect()
+}
+
+fn write_fixed_width_text<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    width: usize,
+) -> Result<()> {
+    let clipped: String = text.chars().take(width).collect();
+    terminal.write_text(&clipped)?;
+    let used = clipped.chars().count();
+    if used < width {
+        terminal.write_text(&" ".repeat(width - used))?;
+    }
+    Ok(())
+}
+
+fn move_cursor_to_current_window<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    layouts: &[WindowLayout],
+) -> Result<()> {
+    let Some(layout) = layouts
+        .iter()
+        .find(|layout| layout.id == editor.current_window_id())
+    else {
+        return Ok(());
+    };
+    let Some(viewport) = editor.window_viewport(layout.id) else {
+        return Ok(());
+    };
+    let Some(document) = editor.document_for_buffer(viewport.buffer) else {
+        return Ok(());
+    };
+    let cursor = viewport.cursor;
+    let text_rows = layout.rect.rows.saturating_sub(1).max(1);
+    let cursor_row = cursor
+        .line
+        .saturating_sub(viewport.first_visible_line)
+        .min(text_rows - 1);
+    let cursor_column = cursor_display_column(document.buffer(), viewport, cursor)?
+        .min(layout.rect.columns.saturating_sub(1));
+    terminal.move_cursor(
+        (layout.rect.row + cursor_row + 1) as u16,
+        (layout.rect.column + cursor_column + 1) as u16,
+    )
+}
+
+fn cursor_display_column(buffer: &Buffer, viewport: &Viewport, cursor: Position) -> Result<usize> {
+    Ok(buffer
+        .display_column(cursor)?
+        .saturating_sub(viewport.first_visible_column))
 }
 
 fn write_line_with_spans<W: Write>(

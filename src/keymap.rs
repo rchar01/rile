@@ -89,6 +89,22 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
         KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())],
+            "delete-window",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("1".to_owned())],
+            "delete-other-windows",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("2".to_owned())],
+            "split-window-below",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("3".to_owned())],
+            "split-window-right",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("b".to_owned())],
             "switch-to-buffer",
         ),
@@ -98,6 +114,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "kill-buffer",
         ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')], "save-buffer"),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("o".to_owned())],
+            "other-window",
+        ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('c')],
             "save-buffers-kill-terminal",
@@ -151,6 +171,26 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())]),
             KeyResolution::Command("kill-buffer")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("2".to_owned())]),
+            KeyResolution::Command("split-window-below")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("3".to_owned())]),
+            KeyResolution::Command("split-window-right")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())]),
+            KeyResolution::Command("delete-window")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("1".to_owned())]),
+            KeyResolution::Command("delete-other-windows")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("o".to_owned())]),
+            KeyResolution::Command("other-window")
         );
     }
 

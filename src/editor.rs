@@ -9,6 +9,7 @@ use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span};
+use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -20,6 +21,7 @@ pub enum EditorOutcome {
 #[derive(Debug, Clone)]
 pub struct Editor {
     buffers: BufferManager,
+    windows: WindowSet,
     current_buffer: BufferId,
     cursor: Position,
     goal_display_column: Option<usize>,
@@ -64,6 +66,7 @@ impl Editor {
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
         Self {
+            windows: WindowSet::new(current_buffer),
             buffers,
             current_buffer,
             cursor: Position::new(0, 0),
@@ -94,6 +97,26 @@ impl Editor {
 
     pub fn buffer_count(&self) -> usize {
         self.buffers.len()
+    }
+
+    pub fn current_window_id(&self) -> WindowId {
+        self.windows.current_id()
+    }
+
+    pub fn window_count(&self) -> usize {
+        self.windows.len()
+    }
+
+    pub fn window_layouts(&self, rows: usize, columns: usize) -> Vec<WindowLayout> {
+        self.windows.layouts(rows, columns)
+    }
+
+    pub fn window_viewport(&self, id: WindowId) -> Option<&Viewport> {
+        self.windows.window(id).map(|window| window.viewport())
+    }
+
+    pub fn document_for_buffer(&self, id: BufferId) -> Option<&Document> {
+        self.buffers.document(id)
     }
 
     pub fn cursor(&self) -> Position {
@@ -217,6 +240,8 @@ impl Editor {
             BeginningOfLine => self.move_beginning_of_line(),
             DeleteBackwardChar => self.delete_backward_char(),
             DeleteChar => self.delete_char(),
+            DeleteOtherWindows => self.delete_other_windows(),
+            DeleteWindow => self.delete_window(),
             EndOfLine => self.move_end_of_line(),
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
@@ -228,7 +253,10 @@ impl Editor {
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             KillBuffer => self.start_kill_buffer(),
+            OtherWindow => self.other_window(),
             SwitchToBuffer => self.start_switch_to_buffer(),
+            SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
+            SplitWindowRight => self.split_window(SplitAxis::Vertical),
         }?;
 
         Ok(EditorOutcome::Continue)
@@ -239,6 +267,7 @@ impl Editor {
         self.cursor = self.document_mut().buffer_mut().insert(cursor, text)?;
         self.goal_display_column = None;
         self.minibuffer.clear();
+        self.sync_current_window();
         Ok(())
     }
 
@@ -248,6 +277,7 @@ impl Editor {
             .buffer()
             .move_grapheme_backward(self.cursor)?;
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -257,6 +287,7 @@ impl Editor {
             .buffer()
             .move_grapheme_forward(self.cursor)?;
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -267,12 +298,14 @@ impl Editor {
                 .move_line(self.cursor, delta, self.goal_display_column)?;
         self.cursor = position;
         self.goal_display_column = Some(goal);
+        self.sync_current_window();
         Ok(())
     }
 
     fn move_beginning_of_line(&mut self) -> Result<()> {
         self.cursor = Position::new(self.cursor.line, 0);
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -285,6 +318,7 @@ impl Editor {
         };
         self.cursor = Position::new(self.cursor.line, line.len());
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -302,6 +336,7 @@ impl Editor {
             .delete_range(TextRange::new(start, cursor))?;
         self.cursor = start;
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -318,6 +353,7 @@ impl Editor {
             .buffer_mut()
             .delete_range(TextRange::new(cursor, end))?;
         self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -367,6 +403,7 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.sync_current_window();
                 self.minibuffer
                     .set_message(format!("Opened {}", self.document().display_name()));
             }
@@ -387,6 +424,7 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.sync_current_window();
                 self.minibuffer
                     .set_message(format!("Switched to buffer {name}"));
             }
@@ -412,11 +450,13 @@ impl Editor {
 
         match self.buffers.kill(target) {
             Ok(next_current) => {
+                self.windows.replace_buffer(target, next_current);
                 if target == self.current_buffer {
                     self.current_buffer = next_current;
                     self.cursor = Position::new(0, 0);
                     self.goal_display_column = None;
                     self.search = None;
+                    self.sync_current_window();
                 }
                 self.minibuffer
                     .set_message(format!("Killed buffer {target_name}"));
@@ -427,6 +467,7 @@ impl Editor {
     }
 
     fn start_incremental_search(&mut self, direction: SearchDirection) -> Result<()> {
+        self.sync_current_window();
         self.search = Some(SearchState {
             direction,
             origin: self.cursor,
@@ -447,6 +488,7 @@ impl Editor {
                 if let Some(search) = self.search.take() {
                     self.cursor = search.origin;
                     self.goal_display_column = None;
+                    self.sync_current_window();
                 }
                 self.minibuffer.cancel_prompt();
             }
@@ -482,6 +524,7 @@ impl Editor {
             }
             self.cursor = origin;
             self.goal_display_column = None;
+            self.sync_current_window();
             self.minibuffer.set_prompt_label(direction.label());
             return Ok(());
         }
@@ -493,6 +536,7 @@ impl Editor {
             }
             self.cursor = range.start;
             self.goal_display_column = None;
+            self.sync_current_window();
             self.minibuffer.set_prompt_label(direction.label());
         } else {
             if let Some(search) = &mut self.search {
@@ -500,6 +544,7 @@ impl Editor {
             }
             self.cursor = origin;
             self.goal_display_column = None;
+            self.sync_current_window();
             self.minibuffer.set_prompt_label(direction.failing_label());
         }
         Ok(())
@@ -538,14 +583,55 @@ impl Editor {
             }
             self.cursor = range.start;
             self.goal_display_column = None;
+            self.sync_current_window();
             self.minibuffer.set_prompt_label(direction.label());
         } else {
             if let Some(search) = &mut self.search {
                 search.current = None;
             }
             self.cursor = previous_cursor;
+            self.sync_current_window();
             self.minibuffer.set_prompt_label(direction.failing_label());
         }
+        Ok(())
+    }
+
+    fn split_window(&mut self, axis: SplitAxis) -> Result<()> {
+        self.sync_current_window();
+        self.windows.split_current(axis);
+        self.load_current_window();
+        self.minibuffer.set_message(match axis {
+            SplitAxis::Horizontal => "Split window below",
+            SplitAxis::Vertical => "Split window right",
+        });
+        Ok(())
+    }
+
+    fn delete_window(&mut self) -> Result<()> {
+        if self.windows.len() <= 1 {
+            self.minibuffer.set_message("Only one window");
+            return Ok(());
+        }
+        self.sync_current_window();
+        self.windows.delete_current();
+        self.load_current_window();
+        self.minibuffer.set_message("Deleted window");
+        Ok(())
+    }
+
+    fn delete_other_windows(&mut self) -> Result<()> {
+        self.sync_current_window();
+        self.windows.delete_others();
+        self.load_current_window();
+        self.minibuffer.set_message("Deleted other windows");
+        Ok(())
+    }
+
+    fn other_window(&mut self) -> Result<()> {
+        self.sync_current_window();
+        self.windows.other_window();
+        self.load_current_window();
+        self.minibuffer.set_message("Selected other window");
         Ok(())
     }
 
@@ -559,6 +645,20 @@ impl Editor {
         self.buffers
             .document_mut(self.current_buffer)
             .expect("current buffer must exist")
+    }
+
+    fn sync_current_window(&mut self) {
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.buffer = self.current_buffer;
+        viewport.cursor = self.cursor;
+    }
+
+    fn load_current_window(&mut self) {
+        let viewport = *self.windows.current().viewport();
+        self.current_buffer = viewport.buffer;
+        self.cursor = viewport.cursor;
+        self.goal_display_column = None;
+        self.search = None;
     }
 }
 
@@ -1071,6 +1171,71 @@ mod tests {
                 .message
                 .as_deref()
                 .is_some_and(|message| message.contains("unsaved changes"))
+        );
+    }
+
+    #[test]
+    fn window_commands_split_cycle_and_restore_per_window_cursor() {
+        let mut editor = Editor::new(Document::scratch());
+        for text in ["a", "b", "c"] {
+            editor
+                .handle_key(KeyEvent::Text(text.to_owned()))
+                .expect("text should insert");
+        }
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("split should execute");
+        assert_eq!(editor.window_count(), 2);
+        assert_eq!(editor.cursor(), Position::new(0, 3));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("current split cursor should move");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other-window should execute");
+        assert_eq!(editor.cursor(), Position::new(0, 3));
+    }
+
+    #[test]
+    fn delete_window_commands_update_window_count() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("split-window-below")
+            .expect("split below should work");
+        editor
+            .execute_command_by_name("split-window-right")
+            .expect("split right should work");
+        assert_eq!(editor.window_count(), 3);
+        assert_eq!(editor.window_layouts(12, 80).len(), 3);
+
+        editor
+            .execute_command_by_name("delete-window")
+            .expect("delete current should work");
+        assert_eq!(editor.window_count(), 2);
+
+        editor
+            .execute_command_by_name("delete-other-windows")
+            .expect("delete others should work");
+        assert_eq!(editor.window_count(), 1);
+
+        editor
+            .execute_command_by_name("delete-window")
+            .expect("single delete should be harmless");
+        assert_eq!(editor.window_count(), 1);
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Only one window")
         );
     }
 

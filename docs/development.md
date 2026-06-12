@@ -102,7 +102,18 @@ Milestone 8 adds multiple buffers:
 - switching or killing the current buffer resets point to the start of the selected buffer;
 - tests cover buffer reuse, switching, killing, and dirty-buffer protection.
 
-Current limitations: there is no scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
+Milestone 9 adds windows and splits:
+
+- `window::WindowSet` stores a split tree, stable `WindowId` values, and per-window `Viewport` state;
+- `C-x 2` and `split-window-below` split the current window into stacked viewports;
+- `C-x 3` and `split-window-right` split the current window into side-by-side viewports;
+- `C-x 0` and `delete-window` delete the current window when more than one exists;
+- `C-x 1` and `delete-other-windows` collapse back to the selected window;
+- `C-x o` and `other-window` cycle through windows and restore each window's cursor;
+- terminal drawing lays out all windows, draws one mode line per window, and places point in the selected window;
+- layout tests cover horizontal and vertical splitting, deletion, cycling, and per-window viewport state.
+
+Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
 
 ## Line Ending Policy
 

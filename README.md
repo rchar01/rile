@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 8 multiple-buffer editing is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, and search with active highlights.
+Milestone 9 window splitting is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, and search with active highlights.
 
 Current binary behavior:
 
@@ -32,6 +32,11 @@ Basic editor keys:
 - `C-x C-f` prompts for a file path and opens it.
 - `C-x b` prompts for a buffer name and switches to it.
 - `C-x k` prompts for a buffer name and kills it; empty input kills the current buffer.
+- `C-x 2` splits the current window below.
+- `C-x 3` splits the current window right.
+- `C-x 0` deletes the current window.
+- `C-x 1` deletes other windows.
+- `C-x o` selects the next window.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `C-x C-c` quits.
@@ -39,6 +44,7 @@ Basic editor keys:
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search is exact UTF-8 substring search within individual lines. It does not wrap around the buffer and does not match across line breaks yet.
+Window splitting currently stores per-window cursor state but does not scroll automatically yet.
 
 ## License
 

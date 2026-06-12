@@ -7,6 +7,8 @@ pub enum Command {
     BeginningOfLine,
     DeleteBackwardChar,
     DeleteChar,
+    DeleteOtherWindows,
+    DeleteWindow,
     EndOfLine,
     ExecuteExtendedCommand,
     FindFile,
@@ -18,6 +20,9 @@ pub enum Command {
     PreviousLine,
     SaveBuffer,
     SaveBuffersKillTerminal,
+    OtherWindow,
+    SplitWindowBelow,
+    SplitWindowRight,
     SwitchToBuffer,
 }
 
@@ -102,6 +107,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             DeleteChar,
         ),
+        CommandSpec::new(
+            "delete-other-windows",
+            "Delete all other windows",
+            true,
+            DeleteOtherWindows,
+        ),
+        CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow),
         CommandSpec::new("end-of-line", "Move cursor to end of line", true, EndOfLine),
         CommandSpec::new(
             "execute-extended-command",
@@ -125,6 +137,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
+        CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
         CommandSpec::new(
@@ -132,6 +145,18 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Quit Rile",
             true,
             SaveBuffersKillTerminal,
+        ),
+        CommandSpec::new(
+            "split-window-below",
+            "Split current window horizontally",
+            true,
+            SplitWindowBelow,
+        ),
+        CommandSpec::new(
+            "split-window-right",
+            "Split current window vertically",
+            true,
+            SplitWindowRight,
         ),
         CommandSpec::new(
             "switch-to-buffer",
@@ -160,6 +185,11 @@ mod tests {
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));
+        assert!(registry.contains("split-window-below"));
+        assert!(registry.contains("split-window-right"));
+        assert!(registry.contains("delete-window"));
+        assert!(registry.contains("delete-other-windows"));
+        assert!(registry.contains("other-window"));
         assert!(!registry.contains("save"));
     }
 }
