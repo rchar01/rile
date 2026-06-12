@@ -1,5 +1,15 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* demos/movement.tape, demos/split-pane.tape: Add pauses after named
+	screenshots so subsequent key input cannot race visual capture.
+	* demos/split-pane.tape: Send C-x o as Ctrl-X followed by plain o.
+	* src/window.rs (WindowSet::split_current): Keep the original window
+	selected after splitting, matching Emacs-style split-window commands.
+	* tests/pty_movement.rs, tests/pty_split_pane.rs: Assert the initial
+	mode-line position, active split pane, and plain-o C-x o sequence.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* Containerfile.visual: New visual tooling image for VHS, ttyd, ffmpeg,
 	Chromium, and Rust.
 	* Makefile (VISUAL_IMAGE, VISUAL_IN_CONTAINER, visual-demos,

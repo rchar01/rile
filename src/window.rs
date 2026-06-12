@@ -139,7 +139,6 @@ impl WindowSet {
                 children: vec![SplitNode::Leaf(self.current), SplitNode::Leaf(id)],
             },
         );
-        self.current = id;
         id
     }
 
@@ -308,6 +307,7 @@ mod tests {
         let second = windows.split_current(SplitAxis::Horizontal);
         assert_ne!(original, second);
         assert_eq!(windows.len(), 2);
+        assert_eq!(windows.current_id(), original);
 
         let layouts = windows.layouts(10, 80);
         assert_eq!(
@@ -333,18 +333,18 @@ mod tests {
         let layouts = windows.layouts(10, 80);
         assert_eq!(layouts.len(), 3);
         assert_eq!(
-            layouts[1].rect,
+            layouts[0].rect,
             WindowRect {
-                row: 5,
+                row: 0,
                 column: 0,
                 rows: 5,
                 columns: 40
             }
         );
         assert_eq!(
-            layouts[2].rect,
+            layouts[1].rect,
             WindowRect {
-                row: 5,
+                row: 0,
                 column: 40,
                 rows: 5,
                 columns: 40
@@ -357,8 +357,6 @@ mod tests {
         let mut windows = WindowSet::new(BufferId(1));
         let first = windows.current_id();
         let second = windows.split_current(SplitAxis::Horizontal);
-
-        windows.other_window();
         assert_eq!(windows.current_id(), first);
 
         windows.other_window();
@@ -374,6 +372,7 @@ mod tests {
         let mut windows = WindowSet::new(BufferId(1));
         let first = windows.current_id();
         let second = windows.split_current(SplitAxis::Vertical);
+        assert_eq!(windows.current_id(), first);
 
         windows
             .window_mut(second)
@@ -382,7 +381,7 @@ mod tests {
             .cursor = Position::new(3, 2);
         windows.other_window();
 
-        assert_eq!(windows.current_id(), first);
-        assert_eq!(windows.current().viewport().cursor, Position::new(0, 0));
+        assert_eq!(windows.current_id(), second);
+        assert_eq!(windows.current().viewport().cursor, Position::new(3, 2));
     }
 }

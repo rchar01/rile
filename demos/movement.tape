@@ -16,28 +16,36 @@ Enter
 Wait+Screen /Rile VISUAL/
 Sleep 500ms
 Screenshot artifacts/frames/movement-00-open.png
+Sleep 500ms
 
 Ctrl+N
 Sleep 1s
 Screenshot artifacts/frames/movement-01-C-n.png
+Sleep 500ms
 Ctrl+N
 Sleep 1s
 Screenshot artifacts/frames/movement-02-C-n.png
+Sleep 500ms
 Ctrl+F
 Sleep 1s
 Screenshot artifacts/frames/movement-03-C-f.png
+Sleep 500ms
 Ctrl+F
 Sleep 1s
 Screenshot artifacts/frames/movement-04-C-f.png
+Sleep 500ms
 Ctrl+P
 Sleep 1s
 Screenshot artifacts/frames/movement-05-C-p.png
+Sleep 500ms
 Ctrl+A
 Sleep 1s
 Screenshot artifacts/frames/movement-06-C-a.png
+Sleep 500ms
 Ctrl+E
 Sleep 1s
 Screenshot artifacts/frames/movement-07-C-e.png
+Sleep 500ms
 
 Ctrl+X
 Ctrl+C

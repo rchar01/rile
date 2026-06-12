@@ -14,6 +14,7 @@ fn movement_demo_flow_updates_cursor_and_status() -> Result<()> {
 
     rile.wait_for_screen_contains("numbered.txt")?;
     rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
 
     rile.send("C-n", keys::control('n'))?;
     rile.assert_cursor(1, 0)?;
