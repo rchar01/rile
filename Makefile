@@ -5,9 +5,11 @@ SHELL := /bin/sh
 .DEFAULT_GOAL := help
 
 IMAGE ?= rile-dev
+VISUAL_IMAGE ?= rile-visual
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
+VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run visual-demos clean
+.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -74,7 +76,11 @@ run:
 
 ## Generate optional VHS visual demo GIFs; pass ARGS='demos/name.tape'
 visual-demos:
-	./scripts/visual-demos $(ARGS)
+	$(VISUAL_IN_CONTAINER) ./scripts/visual-demos $(ARGS)
+
+## Generate named PNG frames for visual review; pass ARGS='demos/name.tape'
+visual-frames:
+	$(VISUAL_IN_CONTAINER) ./scripts/visual-frames $(ARGS)
 
 ## Remove Cargo build artifacts
 clean:

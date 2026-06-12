@@ -7,29 +7,44 @@ Set Width 1280
 Set Height 720
 Set FontSize 18
 Set Padding 12
+Set CursorBlink false
 
-Type "cargo run --locked -- --visual-test --test-size 80x24 fixtures/visual/split_left.txt"
+Require target/debug/rile
+
+Type "./target/debug/rile --visual-test --test-size 120x32 fixtures/visual/split_left.txt"
 Enter
-Sleep 2s
+Wait+Screen /Rile VISUAL/
+Sleep 500ms
+Screenshot artifacts/frames/split-pane-00-open.png
 
 Ctrl+X
 Type "3"
-Sleep 500ms
+Sleep 1s
+Screenshot artifacts/frames/split-pane-01-C-x-3.png
 
 Ctrl+X
 Ctrl+O
-Sleep 500ms
+Sleep 1s
+Screenshot artifacts/frames/split-pane-02-C-x-o.png
 
 Ctrl+X
 Ctrl+F
+Sleep 1s
+Screenshot artifacts/frames/split-pane-03-C-x-C-f.png
 Type "fixtures/visual/split_right.txt"
+Sleep 1s
+Screenshot artifacts/frames/split-pane-04-path-entered.png
 Enter
-Sleep 1s
+Wait+Screen /split_right.txt/
+Sleep 500ms
+Screenshot artifacts/frames/split-pane-05-open-right.png
 
 Ctrl+N
+Sleep 1s
+Screenshot artifacts/frames/split-pane-06-C-n.png
 Ctrl+N
 Sleep 1s
-
+Screenshot artifacts/frames/split-pane-07-C-n.png
 
 Ctrl+X
 Ctrl+C

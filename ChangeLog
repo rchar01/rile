@@ -1,5 +1,49 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* Containerfile.visual: New visual tooling image for VHS, ttyd, ffmpeg,
+	Chromium, and Rust.
+	* Makefile (VISUAL_IMAGE, VISUAL_IN_CONTAINER, visual-demos,
+	visual-frames): Run optional visual tooling inside the visual container
+	and add a PNG frame generation target.
+	* scripts/visual-frames: New helper to regenerate demos and verify named
+	PNG screenshots for step-by-step review.
+	* demos/movement.tape, demos/split-pane.tape: Disable cursor blinking,
+	wait for screen content, and capture named screenshots after each demo
+	step.
+	* Containerfile.visual: Use a Chromium wrapper with --no-sandbox for
+	rootless container recording.
+	* src/terminal/mod.rs (AnsiTerminal::set_steady_block_cursor): New
+	method.
+	(AnsiTerminal::reset_cursor_style): New method.
+	(ScreenGuard::set_steady_block_cursor): New method.
+	(TerminalSession::enter): Use a steady block cursor in visual-test mode.
+	* .containerignore: Exclude generated visual artifacts from container
+	build contexts.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	containerized visual demos and named PNG frame extraction.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* tests/pty_movement.rs, tests/pty_split_pane.rs: Add PTY assertions
+	covering the visual demo movement and split-pane flows at the demo
+	render size.
+	* docs/pty-vt100-visual-testing-plan.md: Record demo hardening,
+	generated GIFs, and PTY demo-flow coverage.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* scripts/visual-demos: Check for ttyd, validate tapes, and build Rile
+	once before recording.
+	* demos/movement.tape, demos/split-pane.tape: Use the prebuilt Rile
+	binary and a larger deterministic render size.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* demos/movement.tape, demos/split-pane.tape: Add longer pauses
+	between visible VHS demo actions.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* demos/movement.tape, demos/split-pane.tape: New optional VHS
 	visual demo recordings.
 	* scripts/visual-demos: New helper for generating demo GIFs when VHS

@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+cd "$root"
+"$root/scripts/visual-demos" "$@"
+
+selected=()
+if (($# == 0)); then
+    selected=(movement split-pane)
+else
+    for tape in "$@"; do
+        name=${tape##*/}
+        selected+=("${name%.tape}")
+    done
+fi
+
+expect_frame() {
+    local output=$1
+
+    if [[ ! -s "$output" ]]; then
+        printf 'visual frame was not generated: %s\n' "$output" >&2
+        exit 1
+    fi
+}
+
+for demo in "${selected[@]}"; do
+    case "$demo" in
+        movement)
+            expect_frame artifacts/frames/movement-00-open.png
+            expect_frame artifacts/frames/movement-01-C-n.png
+            expect_frame artifacts/frames/movement-02-C-n.png
+            expect_frame artifacts/frames/movement-03-C-f.png
+            expect_frame artifacts/frames/movement-04-C-f.png
+            expect_frame artifacts/frames/movement-05-C-p.png
+            expect_frame artifacts/frames/movement-06-C-a.png
+            expect_frame artifacts/frames/movement-07-C-e.png
+            ;;
+        split-pane)
+            expect_frame artifacts/frames/split-pane-00-open.png
+            expect_frame artifacts/frames/split-pane-01-C-x-3.png
+            expect_frame artifacts/frames/split-pane-02-C-x-o.png
+            expect_frame artifacts/frames/split-pane-03-C-x-C-f.png
+            expect_frame artifacts/frames/split-pane-04-path-entered.png
+            expect_frame artifacts/frames/split-pane-05-open-right.png
+            expect_frame artifacts/frames/split-pane-06-C-n.png
+            expect_frame artifacts/frames/split-pane-07-C-n.png
+            ;;
+        *)
+            printf 'no frame recipe for visual demo: %s\n' "$demo" >&2
+            exit 1
+            ;;
+    esac
+done

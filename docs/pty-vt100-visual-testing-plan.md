@@ -131,6 +131,7 @@ Tasks:
 
 - [x] Add `tests/pty_open.rs` with an open-file assertion and first parsed-screen snapshot. Evidence: `opens_visual_fixture_in_pty` asserts parsed screen contents, status text, and cursor position.
 - [ ] Add `tests/pty_movement.rs` for `C-f`, `C-b`, `C-n`, `C-p`, arrow keys, `C-a`, `C-e`, `M-f`, and `M-b` where stable.
+- [x] Add `tests/pty_movement.rs` coverage for the movement VHS demo flow.
 - [ ] Add `tests/pty_insert.rs` for printable ASCII, UTF-8 text, Enter, Backspace, and Delete.
 - [ ] Add `tests/pty_save.rs` for modification and `C-x C-s`, including verifying file contents on disk.
 - [ ] Add `tests/pty_statusline.rs` for clean/dirty state, save state, line/column changes, visual-test marker, and error messages.
@@ -139,7 +140,7 @@ Tasks:
 Validation gate:
 
 - [x] `cargo test --test pty_open` passes locally. Evidence: command passed on 2026-06-12.
-- [ ] `cargo test --test pty_movement` passes locally.
+- [x] `cargo nextest run --locked --test pty_movement` passes locally.
 - [ ] Snapshot failure output is understandable without reading raw ANSI bytes.
 
 ## Phase 5: Scrolling, Resize, and Splits
@@ -151,7 +152,8 @@ Tasks:
 - [ ] Add `tests/pty_scrolling.rs` with vertical cursor visibility after repeated `C-n` and `C-p`.
 - [ ] Add horizontal scrolling tests using `long_lines.txt` and a narrow test size.
 - [ ] Add `tests/pty_resize.rs` using `--test-size` for small and narrow terminal snapshots.
-- [ ] Add `tests/pty_split.rs` for `C-x 3`, `C-x 2`, `C-x o`, active pane marker, cursor-in-active-pane, and separator rendering.
+- [x] Add `tests/pty_split_pane.rs` coverage for the split-pane VHS demo flow.
+- [ ] Add broader split PTY coverage for `C-x 3`, `C-x 2`, `C-x o`, active pane marker, cursor-in-active-pane, and separator rendering.
 - [ ] Add split snapshot tests only after visual-test pane labels are deterministic.
 
 Validation gate:
@@ -183,7 +185,7 @@ Goal: Add optional reproducible demos for humans and multimodal LLMs.
 
 Tasks:
 
-- [x] Add `demos/movement.tape` using `--visual-test --test-size 80x24 fixtures/visual/numbered.txt`.
+- [x] Add `demos/movement.tape` using `--visual-test --test-size 120x32 fixtures/visual/numbered.txt`.
 - [x] Add `demos/split-pane.tape` using split and pane-switching commands.
 - [ ] Add `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` after the core demos work.
 - [x] Add `artifacts/` to `.gitignore` unless artifacts are explicitly requested for distribution.
@@ -201,8 +203,8 @@ Visual review checklist:
 
 Validation gate:
 
-- [ ] `vhs demos/movement.tape` generates `artifacts/movement.gif` on a machine with VHS installed.
-- [ ] `vhs demos/split-pane.tape` generates `artifacts/split-pane.gif` on a machine with VHS installed.
+- [x] `make visual-demos` generates `artifacts/movement.gif` on a machine with VHS and ttyd installed.
+- [x] `make visual-demos` generates `artifacts/split-pane.gif` on a machine with VHS and ttyd installed.
 
 ## Phase 8: CI and Developer Workflow
 
@@ -210,16 +212,19 @@ Goal: Integrate structured tests into normal verification without making visual 
 
 Tasks:
 
-- [ ] Add PTY tests to normal `cargo test` and `make test` once stable.
+- [x] Add PTY tests to normal `cargo test` and `make test` once stable.
 - [ ] Add `cargo insta test` to `make verify` only after snapshot churn is low and snapshots are committed.
 - [x] Keep VHS out of default `make verify`.
 - [x] Add optional `make demos` or `make visual-demos` target that checks for `vhs` and writes to `artifacts/`.
+- [x] Run optional visual tooling in a separate container from normal verification.
+- [x] Add optional `make visual-frames` target for named PNG frames after each demo step.
 - [ ] Document optional CI artifact generation for hosted CI after Codeberg CI is configured.
 
 Validation gate:
 
 - [x] `make verify` passes on the dev container without requiring VHS.
 - [x] Optional visual demo generation fails clearly when VHS is missing.
+- [x] Optional visual frame generation writes named PNGs under `artifacts/frames/`.
 
 ## Risks
 
@@ -233,11 +238,11 @@ Validation gate:
 ## Validation Summary
 
 - [x] `make fmt` passes.
-- [ ] `make test` passes with PTY tests enabled.
+- [x] `make test` passes with PTY tests enabled.
 - [x] `make verify` passes without requiring VHS.
 - [ ] `cargo insta test` passes after snapshots are committed.
 - [ ] At least one deliberately failed PTY assertion produces a readable screen dump during local harness validation.
-- [ ] At least one VHS movement GIF is generated manually under `artifacts/`.
+- [x] At least one VHS movement GIF is generated manually under `artifacts/`.
 
 ## Progress Log
 
@@ -247,6 +252,8 @@ Validation gate:
 | 2026-06-12 | Phase 1 and visual fixtures started. | Added `--visual-test`, `--test-size`, deterministic visual mode-line rendering, and `fixtures/visual/*`. |
 | 2026-06-12 | PTY harness skeleton and first smoke test added. | Added `tests/support/*`, dev dependencies, and passing `tests/pty_open.rs`. |
 | 2026-06-12 | Optional VHS demo infrastructure added. | Added `demos/movement.tape`, `demos/split-pane.tape`, `scripts/visual-demos`, `make visual-demos`, and ignored `artifacts/`. |
+| 2026-06-12 | VHS demos hardened and mirrored by PTY tests. | `scripts/visual-demos` builds the binary before recording; tapes use `./target/debug/rile --visual-test --test-size 120x32`; `tests/pty_movement.rs` and `tests/pty_split_pane.rs` pass. |
+| 2026-06-12 | Visual tooling container and named frames added. | Added `Containerfile.visual`, containerized `make visual-demos`, and `make visual-frames` for named PNG review screenshots. |
 
 ## Decision Log
 

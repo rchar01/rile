@@ -156,6 +156,14 @@ impl<W: Write> AnsiTerminal<W> {
         self.write_escape("?25h")
     }
 
+    pub fn set_steady_block_cursor(&mut self) -> Result<()> {
+        self.write_escape("2 q")
+    }
+
+    pub fn reset_cursor_style(&mut self) -> Result<()> {
+        self.write_escape("0 q")
+    }
+
     pub fn clear_screen(&mut self) -> Result<()> {
         self.write_escape("2J")
     }
@@ -227,6 +235,9 @@ where
         let output_fd = output.as_raw_fd();
         let raw_mode = RawModeGuard::activate(input_fd)?;
         let mut screen = ScreenGuard::enter(output)?;
+        if options.visual_test {
+            screen.set_steady_block_cursor()?;
+        }
         screen.terminal.clear_screen()?;
         screen.terminal.flush()?;
 
@@ -726,6 +737,7 @@ fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
 struct ScreenGuard<W: Write> {
     terminal: AnsiTerminal<W>,
     active: bool,
+    reset_cursor_style_on_drop: bool,
 }
 
 impl<W: Write> ScreenGuard<W> {
@@ -736,13 +748,23 @@ impl<W: Write> ScreenGuard<W> {
         Ok(Self {
             terminal,
             active: true,
+            reset_cursor_style_on_drop: false,
         })
+    }
+
+    fn set_steady_block_cursor(&mut self) -> Result<()> {
+        self.terminal.set_steady_block_cursor()?;
+        self.reset_cursor_style_on_drop = true;
+        Ok(())
     }
 }
 
 impl<W: Write> Drop for ScreenGuard<W> {
     fn drop(&mut self) {
         if self.active {
+            if self.reset_cursor_style_on_drop {
+                let _ = self.terminal.reset_cursor_style();
+            }
             let _ = self.terminal.show_cursor();
             let _ = self.terminal.leave_alternate_screen();
             let _ = self.terminal.flush();

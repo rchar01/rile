@@ -12,8 +12,14 @@ if ! command -v vhs >/dev/null 2>&1; then
     exit 127
 fi
 
+if ! command -v ttyd >/dev/null 2>&1; then
+    printf '%s\n' "ttyd not found; install ttyd to generate visual demo GIFs" >&2
+    printf '%s\n' "see: https://github.com/tsl0922/ttyd" >&2
+    exit 127
+fi
+
 cd "$root"
-mkdir -p artifacts
+mkdir -p artifacts/frames
 
 if (($# == 0)); then
     shopt -s nullglob
@@ -34,5 +40,11 @@ for tape in "${tapes[@]}"; do
         exit 1
     fi
 
+    vhs validate "$tape"
+done
+
+cargo build --locked
+
+for tape in "${tapes[@]}"; do
     vhs "$tape"
 done

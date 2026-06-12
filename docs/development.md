@@ -209,7 +209,7 @@ Use `--visual-test` to make terminal output deterministic for integration tests 
 
 PTY integration tests use support helpers under `tests/support/`. The harness spawns the compiled `rile` binary through `expectrl`, drains terminal output into `vt100::Parser`, and reports assertion failures with normalized screen dumps and cursor markers.
 
-Optional VHS demos live under `demos/` and write generated GIFs under ignored `artifacts/`. Run `make visual-demos` to generate every demo, or pass one or more tapes with `make visual-demos ARGS='demos/movement.tape'`. VHS output is review evidence for humans and multimodal tools; it is not a pass/fail oracle and is intentionally outside `make verify`.
+Optional VHS demos live under `demos/` and write generated GIFs under ignored `artifacts/`. Run `make visual-demos` to generate every demo in the separate visual tooling container, or pass one or more tapes with `make visual-demos ARGS='demos/movement.tape'`. Run `make visual-frames` to regenerate the demos and verify the named PNG screenshots under `artifacts/frames/` for step-by-step human or LLM review. GIF and PNG output is review evidence; PTY tests remain the pass/fail oracle and visual tooling is intentionally outside `make verify`.
 
 ## Quality Gate
 
@@ -230,7 +230,7 @@ Host requirements:
 | `podman` | Builds and runs the dev container. |
 | `make` | Provides stable local command targets. |
 
-The dev container provides:
+The dev container in `Containerfile.dev` provides:
 
 | Tool | Purpose | Required |
 | --- | --- | --- |
@@ -245,6 +245,8 @@ The dev container provides:
 | `cargo-machete` | Unused dependency detection. | Yes |
 
 Current host status in this workspace: `cargo`, `podman`, and `make` are available; `rustup`, `rustfmt`, clippy, `rust-analyzer`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, and `cargo-machete` are not. That is why the dev container is the canonical tooling environment.
+
+The visual tooling container in `Containerfile.visual` provides `vhs`, `ttyd`, `ffmpeg`, Chromium, and Rust for optional visual artifact generation. It is separate from the normal dev container so `make verify` stays smaller, faster, and independent of browser/video tooling.
 
 ## Dev Container Workflow
 
@@ -268,6 +270,7 @@ make audit
 make unused-deps
 make verify
 make visual-demos
+make visual-frames
 ```
 
 The Makefile delegates to scripts:
@@ -283,6 +286,8 @@ The Makefile delegates to scripts:
 - `scripts/audit` runs `cargo deny check` and `cargo audit`.
 - `scripts/unused-deps` runs `cargo machete`.
 - `scripts/verify` runs build, test, lint, audit, and unused dependency checks.
+- `scripts/visual-demos` validates VHS tapes, builds Rile once, and records optional GIFs.
+- `scripts/visual-frames` regenerates visual demos and verifies named PNG screenshots.
 - `scripts/tools` prints the versions of expected tools.
 
 `cargo-deny` reads policy from `deny.toml`. The current policy denies yanked crates, denies unknown registries and git sources, denies wildcard dependencies, warns on multiple dependency versions, and allows Rile's GPL license plus the permissive licenses used by current dependencies.
