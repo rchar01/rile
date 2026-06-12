@@ -208,7 +208,6 @@ where
         let output_fd = output.as_raw_fd();
         let raw_mode = RawModeGuard::activate(input_fd)?;
         let mut screen = ScreenGuard::enter(output)?;
-        screen.terminal.hide_cursor()?;
         screen.terminal.clear_screen()?;
         screen.terminal.flush()?;
 
@@ -231,7 +230,6 @@ where
 
     fn draw(&mut self, editor: &mut Editor) -> Result<()> {
         let size = terminal_size(self.output_fd)?;
-        self.screen.terminal.hide_cursor()?;
         self.screen.terminal.move_cursor(1, 1)?;
         self.screen.terminal.clear_screen()?;
 
@@ -273,12 +271,11 @@ fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) 
         return Ok(());
     };
 
-    let cursor = viewport.cursor;
     let gutter_width = line_number_gutter_width(editor, document.buffer());
     let text_rows = layout.rect.rows.saturating_sub(1);
     let text_columns = layout.rect.columns.saturating_sub(gutter_width);
     let cursor_display_column =
-        cursor_absolute_display_column(document.buffer(), cursor, editor.tab_width())?;
+        cursor_absolute_display_column(document.buffer(), editor.cursor(), editor.tab_width())?;
     editor.ensure_current_window_contains_cursor(text_rows, text_columns, cursor_display_column);
     Ok(())
 }
