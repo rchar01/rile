@@ -1,5 +1,16 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* Cargo.toml: Add PTY visual-test dev dependencies.
+	* tests/support/mod.rs, tests/support/keys.rs,
+	tests/support/screen.rs, tests/support/fixtures.rs,
+	tests/support/pty.rs: New integration-test support modules.
+	* tests/pty_open.rs: New PTY smoke test for opening a visual
+	fixture through the real binary.
+	* docs/pty-vt100-visual-testing-plan.md: Record Phase 2 and PTY
+	harness progress.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* src/app.rs (CliOptions): Add visual_test and test_size options.
 	(parse_args): Parse --visual-test and --test-size.
 	* src/main.rs: Pass terminal runtime options to the editor runner.

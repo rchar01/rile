@@ -80,9 +80,9 @@ Tasks:
 
 Validation gate:
 
-- [ ] `cargo run -- --help` documents both flags.
+- [x] `cargo run -- --help` documents both flags. Evidence: `make run ARGS='--help'` prints both flags.
 - [ ] `cargo run -- --visual-test --test-size 80x24 fixtures/visual/numbered.txt` runs in an interactive terminal.
-- [ ] Existing unit tests continue to pass.
+- [x] Existing unit tests continue to pass. Evidence: `make verify` passed after Phase 1.
 
 ## Phase 2: Fixtures and Harness Skeleton
 
@@ -94,14 +94,14 @@ Tasks:
 - [x] Add `fixtures/visual/wide.txt` with ASCII, accented, Greek, CJK, emoji, and mixed-width rows. Evidence: fixture file exists.
 - [x] Add `fixtures/visual/long_lines.txt` for horizontal scrolling and clipping. Evidence: fixture file exists.
 - [x] Add `fixtures/visual/split_left.txt` and `fixtures/visual/split_right.txt` for split-pane demos and tests. Evidence: fixture files exist.
-- [ ] Add `tests/support/mod.rs` and expose support modules.
-- [ ] Add `tests/support/keys.rs` with common escape sequences and Emacs control-key helpers.
-- [ ] Add `tests/support/screen.rs` with screen dump normalization and caret rendering helpers.
-- [ ] Add `tests/support/fixtures.rs` with fixture loaders and temporary-file helpers.
+- [x] Add `tests/support/mod.rs` and expose support modules. Evidence: `tests/support/mod.rs` exposes fixture, key, screen, and PTY helpers.
+- [x] Add `tests/support/keys.rs` with common escape sequences and Emacs control-key helpers. Evidence: common control, meta, arrow, enter, backspace, and delete sequences are defined.
+- [x] Add `tests/support/screen.rs` with screen dump normalization and caret rendering helpers. Evidence: parsed `vt100::Screen` text and dumps are normalized with cursor carets.
+- [x] Add `tests/support/fixtures.rs` with fixture loaders and temporary-file helpers. Evidence: visual fixture lookup, fixture loading, temporary files, and temporary HOME helpers are available.
 
 Validation gate:
 
-- [ ] `cargo test` compiles the empty integration-test support modules.
+- [x] `cargo test` compiles the empty integration-test support modules. Evidence: `cargo test --test pty_open` compiles support modules.
 - [ ] Fixture line endings and Unicode contents are documented and stable.
 
 ## Phase 3: PTY Harness
@@ -110,17 +110,17 @@ Goal: Spawn the compiled Rile binary in a real PTY and expose readable assertion
 
 Tasks:
 
-- [ ] Add dev dependencies: `anyhow`, `expectrl`, `vt100`, `insta`, `tempfile`, `assert_cmd`, and `predicates`.
-- [ ] Add `tests/support/pty.rs` with `RilePty` owning an `expectrl` session, `vt100::Parser`, `TempDir`, file path, rows, and columns.
-- [ ] Force deterministic environment variables in the harness, including `TERM`, `NO_COLOR` if useful, and a temporary `HOME` or test config path.
-- [ ] Start Rile with `--visual-test --test-size WIDTHxHEIGHT` and a shell-safe path.
-- [ ] Implement `send`, `drain_for`, `wait_for_screen_contains`, `assert_screen_contains`, `assert_status_contains`, `cursor_position`, `assert_cursor`, `snapshot_text`, and `quit`.
-- [ ] Include the last action name in failure messages.
+- [x] Add dev dependencies: `anyhow`, `expectrl`, `vt100`, `insta`, `tempfile`, `assert_cmd`, and `predicates`. Evidence: dependencies are listed in `Cargo.toml` and locked in `Cargo.lock`.
+- [x] Add `tests/support/pty.rs` with `RilePty` owning an `expectrl` session, `vt100::Parser`, `TempDir`, file path, rows, and columns. Evidence: `RilePty` owns the session, parser, temporary HOME, file path, rows, and columns; file path is passed through `Command` args instead of shell quoting.
+- [x] Force deterministic environment variables in the harness, including `TERM`, `NO_COLOR` if useful, and a temporary `HOME` or test config path. Evidence: harness sets `TERM=xterm-256color`, `NO_COLOR=1`, and a temporary `HOME`.
+- [x] Start Rile with `--visual-test --test-size WIDTHxHEIGHT` and a shell-safe path. Evidence: harness uses `std::process::Command` with separate args.
+- [x] Implement `send`, `drain_for`, `wait_for_screen_contains`, `assert_screen_contains`, `assert_status_contains`, `cursor_position`, `assert_cursor`, `snapshot_text`, and `quit`. Evidence: these methods exist on `RilePty`.
+- [x] Include the last action name in failure messages. Evidence: `RilePty` assertion failures include `last_action` and screen dumps.
 - [ ] Confirm `expectrl` read APIs are reliable enough; if not, record a decision to switch the internals to `portable-pty` while preserving the public `RilePty` API.
 
 Validation gate:
 
-- [ ] A smoke test can open a temp file, parse the visible screen, find the file name, and quit cleanly.
+- [x] A smoke test can open a temp file, parse the visible screen, find the file name, and quit cleanly. Evidence: `cargo test --test pty_open` passes.
 - [ ] A deliberately wrong cursor assertion prints a readable screen dump during local development.
 
 ## Phase 4: First Structured Tests
@@ -129,7 +129,7 @@ Goal: Prove real-terminal open, movement, insert, save, and status behavior with
 
 Tasks:
 
-- [ ] Add `tests/pty_open.rs` with an open-file assertion and first parsed-screen snapshot.
+- [x] Add `tests/pty_open.rs` with an open-file assertion and first parsed-screen snapshot. Evidence: `opens_visual_fixture_in_pty` asserts parsed screen contents, status text, and cursor position.
 - [ ] Add `tests/pty_movement.rs` for `C-f`, `C-b`, `C-n`, `C-p`, arrow keys, `C-a`, `C-e`, `M-f`, and `M-b` where stable.
 - [ ] Add `tests/pty_insert.rs` for printable ASCII, UTF-8 text, Enter, Backspace, and Delete.
 - [ ] Add `tests/pty_save.rs` for modification and `C-x C-s`, including verifying file contents on disk.
@@ -138,7 +138,7 @@ Tasks:
 
 Validation gate:
 
-- [ ] `cargo test --test pty_open` passes locally.
+- [x] `cargo test --test pty_open` passes locally. Evidence: command passed on 2026-06-12.
 - [ ] `cargo test --test pty_movement` passes locally.
 - [ ] Snapshot failure output is understandable without reading raw ANSI bytes.
 
@@ -236,6 +236,7 @@ Validation gate:
 | --- | --- | --- |
 | 2026-06-12 | Plan created from user-provided guide and current Rile codebase inspection. | `src/app.rs`, `src/main.rs`, `src/terminal/mod.rs`, `Cargo.toml`, and `Makefile` inspected; crate availability checked with `cargo search`. |
 | 2026-06-12 | Phase 1 and visual fixtures started. | Added `--visual-test`, `--test-size`, deterministic visual mode-line rendering, and `fixtures/visual/*`. |
+| 2026-06-12 | PTY harness skeleton and first smoke test added. | Added `tests/support/*`, dev dependencies, and passing `tests/pty_open.rs`. |
 
 ## Decision Log
 

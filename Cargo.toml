@@ -14,3 +14,12 @@ repository = "https://codeberg.org/rch/rile"
 libc = "0.2"
 unicode-segmentation = "1.12"
 unicode-width = "0.2"
+
+[dev-dependencies]
+anyhow = "1"
+assert_cmd = "2"
+expectrl = "0.9"
+insta = "1"
+predicates = "3"
+tempfile = "3"
+vt100 = "0.16"

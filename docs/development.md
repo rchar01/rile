@@ -177,7 +177,7 @@ Current limitations: there is no prompt cursor movement, no file-name or buffer-
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.
 
-Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review.
+Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. The first PTY smoke test lives in `tests/pty_open.rs` and asserts parsed `vt100` screen state instead of raw escape bytes.
 
 ## Line Ending Policy
 
@@ -205,7 +205,9 @@ Maintain `ChangeLog` in GNU-style plain text for file-level maintenance history,
 
 ## Visual Testing
 
-Use `--visual-test` to make terminal output deterministic for integration tests and visual demos. Use `--test-size WIDTHxHEIGHT` to render with a stable terminal size instead of reading the host terminal size. Fixture files for future PTY and VHS work live under `fixtures/visual/`.
+Use `--visual-test` to make terminal output deterministic for integration tests and visual demos. Use `--test-size WIDTHxHEIGHT` to render with a stable terminal size instead of reading the host terminal size. Fixture files for PTY and VHS work live under `fixtures/visual/`.
+
+PTY integration tests use support helpers under `tests/support/`. The harness spawns the compiled `rile` binary through `expectrl`, drains terminal output into `vt100::Parser`, and reports assertion failures with normalized screen dumps and cursor markers.
 
 ## Quality Gate
 
