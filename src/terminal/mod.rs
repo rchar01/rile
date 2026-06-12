@@ -250,8 +250,8 @@ where
 
         self.screen.terminal.move_cursor(size.rows.max(1), 1)?;
         self.screen.terminal.clear_line()?;
-        if let Some(message) = &editor.minibuffer().message {
-            self.screen.terminal.write_text(message)?;
+        if let Some(text) = editor.minibuffer().display_text() {
+            self.screen.terminal.write_text(&text)?;
         }
 
         let cursor = editor.cursor();

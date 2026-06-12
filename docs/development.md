@@ -67,7 +67,19 @@ Milestone 5 adds basic editor commands and keymaps:
 - `editor::Editor` owns interactive editor state and is testable without a terminal;
 - the terminal loop delegates key handling to `Editor` and redraws the current buffer.
 
-Current limitations: there is no scrolling, no robust minibuffer editing beyond the minimal `M-x` prompt, no file-open prompt, no unsaved-changes quit confirmation, and no undo wiring yet.
+Milestone 6 adds minibuffer prompt transitions:
+
+- `minibuffer::MinibufferState` stores either a status/error message or an active prompt;
+- prompt state records prompt kind, label, and editable input;
+- prompt backspace deletes by grapheme cluster;
+- `M-x` uses the shared minibuffer prompt path;
+- `C-x C-f` prompts for a file path and opens existing or missing files;
+- successful operations set status messages;
+- errors use explicit `Error: ...` messages;
+- `C-g` cancels prompts and prefix keys;
+- tests cover prompt editing, command prompts, file prompts, status/error messages, and cancellation.
+
+Current limitations: there is no scrolling, no prompt cursor movement, no file-name completion, no unsaved-changes quit confirmation, and no undo wiring yet.
 
 ## Line Ending Policy
 

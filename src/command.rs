@@ -9,6 +9,7 @@ pub enum Command {
     DeleteChar,
     EndOfLine,
     ExecuteExtendedCommand,
+    FindFile,
     ForwardChar,
     NextLine,
     PreviousLine,
@@ -104,6 +105,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             ExecuteExtendedCommand,
         ),
+        CommandSpec::new("find-file", "Open file by path", true, FindFile),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
@@ -130,6 +132,7 @@ mod tests {
             Some(Command::SaveBuffer)
         );
         assert!(registry.contains("execute-extended-command"));
+        assert!(registry.contains("find-file"));
         assert!(!registry.contains("save"));
     }
 }

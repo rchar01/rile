@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 5 basic editor commands and keymap support are implemented. The editor can insert text, move the cursor, delete text, save, quit, and run exact-name `M-x` commands.
+Milestone 6 minibuffer prompting is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, and open files with `C-x C-f`.
 
 Current binary behavior:
 
@@ -29,8 +29,10 @@ Basic editor keys:
 - Printable UTF-8 text inserts at point.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `C-x C-s` saves the current file.
+- `C-x C-f` prompts for a file path and opens it.
 - `C-x C-c` quits.
 - `M-x` runs an exact command name.
+- `C-g` cancels minibuffer prompts and prefix keys.
 
 ## License
 

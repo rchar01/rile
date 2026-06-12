@@ -86,6 +86,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], "find-file"),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')], "save-buffer"),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('c')],
@@ -120,6 +121,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')]),
             KeyResolution::Command("save-buffer")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')]),
+            KeyResolution::Command("find-file")
         );
     }
 

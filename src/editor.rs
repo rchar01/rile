@@ -6,19 +6,13 @@ use crate::command::{Command, CommandRegistry};
 use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
-use crate::minibuffer::MinibufferState;
+use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
     Continue,
     Quit,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum InputMode {
-    Normal,
-    ExtendedCommand { input: String },
 }
 
 #[derive(Debug, Clone)]
@@ -30,7 +24,6 @@ pub struct Editor {
     keymap: KeyMap,
     commands: CommandRegistry,
     minibuffer: MinibufferState,
-    input_mode: InputMode,
 }
 
 impl Editor {
@@ -43,7 +36,6 @@ impl Editor {
             keymap: KeyMap::default(),
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
-            input_mode: InputMode::Normal,
         }
     }
 
@@ -60,8 +52,14 @@ impl Editor {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
-        if matches!(self.input_mode, InputMode::ExtendedCommand { .. }) {
-            return self.handle_extended_command_key(key);
+        if self.minibuffer.prompt().is_some() {
+            return self.handle_prompt_key(key);
+        }
+
+        if key == KeyEvent::Ctrl('g') {
+            self.clear_key_sequence();
+            self.minibuffer.set_message("Quit");
+            return Ok(EditorOutcome::Continue);
         }
 
         match key {
@@ -114,37 +112,36 @@ impl Editor {
         }
     }
 
-    fn handle_extended_command_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+    fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
         match key {
             KeyEvent::Special(SpecialKey::Enter) => {
-                let InputMode::ExtendedCommand { input } =
-                    std::mem::replace(&mut self.input_mode, InputMode::Normal)
-                else {
-                    unreachable!("extended command mode checked above")
+                let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
+                    return Ok(EditorOutcome::Continue);
                 };
                 self.minibuffer.clear();
-                self.execute_command_by_name(input.trim())
+                self.submit_prompt(kind, input.trim())
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
-                self.input_mode = InputMode::Normal;
-                self.minibuffer.set_message("Quit");
+                self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
-                if let InputMode::ExtendedCommand { input } = &mut self.input_mode {
-                    input.pop();
-                    self.minibuffer.set_message(format!("M-x {input}"));
-                }
+                self.minibuffer.delete_prompt_grapheme_backward();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
-                if let InputMode::ExtendedCommand { input } = &mut self.input_mode {
-                    input.push_str(&text);
-                    self.minibuffer.set_message(format!("M-x {input}"));
-                }
+                self.minibuffer.insert_prompt_text(&text);
                 Ok(EditorOutcome::Continue)
             }
+            KeyEvent::Special(SpecialKey::Tab) => Ok(EditorOutcome::Continue),
             _ => Ok(EditorOutcome::Continue),
+        }
+    }
+
+    fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
+        match kind {
+            PromptKind::ExtendedCommand => self.execute_command_by_name(input),
+            PromptKind::FindFile => self.find_file(input),
         }
     }
 
@@ -158,6 +155,7 @@ impl Editor {
             DeleteChar => self.delete_char(),
             EndOfLine => self.move_end_of_line(),
             ExecuteExtendedCommand => self.start_extended_command(),
+            FindFile => self.start_find_file(),
             ForwardChar => self.move_forward(),
             NextLine => self.move_line(1),
             PreviousLine => self.move_line(-1),
@@ -242,18 +240,43 @@ impl Editor {
 
     fn save_buffer(&mut self) -> Result<()> {
         match self.document.save() {
-            Ok(()) => self.minibuffer.set_message("Wrote file"),
-            Err(error) => self.minibuffer.set_message(format!("Save failed: {error}")),
+            Ok(()) => self
+                .minibuffer
+                .set_message(format!("Wrote {}", self.document.display_name())),
+            Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(())
     }
 
     fn start_extended_command(&mut self) -> Result<()> {
-        self.input_mode = InputMode::ExtendedCommand {
-            input: String::new(),
-        };
-        self.minibuffer.set_message("M-x ");
+        self.minibuffer
+            .start_prompt(PromptKind::ExtendedCommand, "M-x ");
         Ok(())
+    }
+
+    fn start_find_file(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::FindFile, "Find file: ");
+        Ok(())
+    }
+
+    fn find_file(&mut self, path: &str) -> Result<EditorOutcome> {
+        if path.is_empty() {
+            self.minibuffer.set_error("missing file name");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        match Document::open(path) {
+            Ok(document) => {
+                self.document = document;
+                self.cursor = Position::new(0, 0);
+                self.goal_display_column = None;
+                self.minibuffer
+                    .set_message(format!("Opened {}", self.document.display_name()));
+            }
+            Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
+        }
+        Ok(EditorOutcome::Continue)
     }
 
     fn clear_key_sequence(&mut self) {
@@ -408,6 +431,125 @@ mod tests {
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("No such command: missing-command")
+        );
+    }
+
+    #[test]
+    fn edits_and_cancels_m_x_prompt() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should prompt");
+        editor
+            .handle_key(KeyEvent::Text("é".to_owned()))
+            .expect("prompt input should update");
+        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-x é"));
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prompt backspace should edit");
+        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-x "));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+        assert_eq!(editor.minibuffer().prompt(), None);
+    }
+
+    #[test]
+    fn c_g_cancels_key_prefix() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prefix");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert after cancel");
+
+        assert_eq!(editor.minibuffer().message.as_deref(), None);
+        assert_eq!(editor.document().buffer().serialize(), "x");
+    }
+
+    #[test]
+    fn find_file_prompt_opens_existing_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("open.txt");
+        fs::write(&path, "opened").expect("file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Find file: ")
+        );
+        for character in path.to_string_lossy().chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("file prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("file prompt should open file");
+
+        assert_eq!(editor.document().buffer().serialize(), "opened");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("Opened "))
+        );
+    }
+
+    #[test]
+    fn find_file_prompt_creates_missing_named_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("missing.txt");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should prompt");
+        for character in path.to_string_lossy().chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("file prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("missing file should become buffer");
+
+        assert_eq!(editor.document().path(), Some(path.as_path()));
+        assert!(editor.document().missing_on_open());
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn find_file_prompt_reports_empty_input() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty input should be reported");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: missing file name")
         );
     }
 }
