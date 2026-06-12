@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::io::{self, IsTerminal, Read, Write};
-use std::ops::Range;
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
@@ -10,7 +9,7 @@ use crate::buffer::{Buffer, Position};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
-use crate::render::{DecorationProvider, Face, Span};
+use crate::render::{DecorationProvider, Face, Span, clip_spans, merge_spans};
 use crate::window::{Viewport, WindowLayout, WindowRect};
 use crate::{Result, RileError};
 
@@ -242,7 +241,12 @@ where
         self.screen.terminal.move_cursor(size.rows.max(1), 1)?;
         self.screen.terminal.clear_line()?;
         if let Some(text) = editor.minibuffer().display_text() {
-            self.screen.terminal.write_text(&text)?;
+            let face = if text.starts_with("Error:") {
+                Face::Error
+            } else {
+                Face::Minibuffer
+            };
+            write_text_with_face(&mut self.screen.terminal, &text, face)?;
         }
 
         move_cursor_to_current_window(&mut self.screen.terminal, editor, &layouts)?;
@@ -302,7 +306,7 @@ fn draw_window<W: Write>(
         },
         document.mode_line()
     );
-    write_fixed_width_text(terminal, &mode_line, layout.rect.columns)
+    write_fixed_width_text_with_face(terminal, &mode_line, layout.rect.columns, Face::ModeLine)
 }
 
 fn write_buffer_line<W: Write>(
@@ -316,26 +320,13 @@ fn write_buffer_line<W: Write>(
 ) -> Result<()> {
     let range = buffer.visible_range(line_index, viewport.first_visible_column, rect.columns)?;
     let segment = &line[range.clone()];
-    let relative_spans = relative_spans(spans, range);
+    let relative_spans = clip_spans(spans, range);
     write_line_with_spans(terminal, segment, &relative_spans)?;
     let width = Buffer::display_width(segment);
     if width < rect.columns {
         terminal.write_text(&" ".repeat(rect.columns - width))?;
     }
     Ok(())
-}
-
-fn relative_spans(spans: &[Span], range: Range<usize>) -> Vec<Span> {
-    spans
-        .iter()
-        .copied()
-        .filter(|span| span.start_byte >= range.start && span.end_byte <= range.end)
-        .map(|span| Span {
-            start_byte: span.start_byte - range.start,
-            end_byte: span.end_byte - range.start,
-            face: span.face,
-        })
-        .collect()
 }
 
 fn write_fixed_width_text<W: Write>(
@@ -348,6 +339,36 @@ fn write_fixed_width_text<W: Write>(
     let used = clipped.chars().count();
     if used < width {
         terminal.write_text(&" ".repeat(width - used))?;
+    }
+    Ok(())
+}
+
+fn write_fixed_width_text_with_face<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    width: usize,
+    face: Face,
+) -> Result<()> {
+    let clipped: String = text.chars().take(width).collect();
+    write_text_with_face(terminal, &clipped, face)?;
+    let used = clipped.chars().count();
+    if used < width {
+        terminal.write_text(&" ".repeat(width - used))?;
+    }
+    Ok(())
+}
+
+fn write_text_with_face<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    face: Face,
+) -> Result<()> {
+    if let Some(start_code) = face_start_code(face) {
+        terminal.write_text(start_code)?;
+        terminal.write_text(text)?;
+        terminal.write_text("\x1b[0m")?;
+    } else {
+        terminal.write_text(text)?;
     }
     Ok(())
 }
@@ -394,8 +415,9 @@ fn write_line_with_spans<W: Write>(
     line: &str,
     spans: &[Span],
 ) -> Result<()> {
+    let merged_spans = merge_spans(line, spans.iter().copied());
     let mut cursor = 0;
-    for span in spans {
+    for span in &merged_spans {
         if span.start_byte >= span.end_byte
             || span.end_byte > line.len()
             || !line.is_char_boundary(span.start_byte)
@@ -406,13 +428,7 @@ fn write_line_with_spans<W: Write>(
         }
 
         terminal.write_text(&line[cursor..span.start_byte])?;
-        if let Some(start_code) = face_start_code(span.face) {
-            terminal.write_text(start_code)?;
-            terminal.write_text(&line[span.start_byte..span.end_byte])?;
-            terminal.write_text("\x1b[0m")?;
-        } else {
-            terminal.write_text(&line[span.start_byte..span.end_byte])?;
-        }
+        write_text_with_face(terminal, &line[span.start_byte..span.end_byte], span.face)?;
         cursor = span.end_byte;
     }
     terminal.write_text(&line[cursor..])
@@ -423,6 +439,10 @@ fn face_start_code(face: Face) -> Option<&'static str> {
         Face::CurrentSearchMatch => Some("\x1b[7m"),
         Face::SearchMatch => Some("\x1b[4m"),
         Face::Region => Some("\x1b[44m"),
+        Face::Minibuffer => Some("\x1b[36m"),
+        Face::ModeLine => Some("\x1b[7m"),
+        Face::Error => Some("\x1b[31m"),
+        Face::Warning => Some("\x1b[33m"),
         _ => None,
     }
 }
@@ -457,7 +477,7 @@ impl<W: Write> Drop for ScreenGuard<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AnsiTerminal, write_line_with_spans};
+    use super::{AnsiTerminal, write_fixed_width_text_with_face, write_line_with_spans};
     use crate::render::{Face, Span};
 
     #[test]
@@ -496,5 +516,15 @@ mod tests {
             terminal.into_inner(),
             b"\x1b[7mone\x1b[0m \x1b[4mtwo\x1b[0m".to_vec()
         );
+    }
+
+    #[test]
+    fn renders_fixed_width_text_with_faces() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_fixed_width_text_with_face(&mut terminal, "mode", 6, Face::ModeLine)
+            .expect("render should succeed");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[7mmode\x1b[0m  ".to_vec());
     }
 }

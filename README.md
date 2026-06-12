@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 11 query replace support is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, and run interactive query replacement.
+Milestone 12 face/decorator cleanup is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, and run interactive query replacement.
 
 Current binary behavior:
 
@@ -51,6 +51,7 @@ Basic editor keys:
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
+Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces.
 Window splitting currently stores per-window cursor state but does not scroll automatically yet.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
 

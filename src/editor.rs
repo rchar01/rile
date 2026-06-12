@@ -9,7 +9,7 @@ use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
-use crate::render::{DecorationProvider, Face, Span};
+use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
@@ -1160,51 +1160,32 @@ impl Editor {
 
 impl DecorationProvider for Editor {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
-        let mut spans = Vec::new();
-        if let Some(region_span) = self.region_span_for_line(line_index, line) {
-            spans.push(region_span);
-        }
-
-        if let Some(query_replace_span) = self.query_replace_span_for_line(line_index) {
-            spans.push(query_replace_span);
-        }
-
-        let Some(search) = &self.search else {
-            return spans;
+        let region = RegionDecorator {
+            range: self.active_region_range(),
         };
-        let Some(query) = self.minibuffer.prompt_input() else {
-            return spans;
+        let query_replace = QueryReplaceDecorator {
+            current: self.query_replace.as_ref().and_then(|state| state.current),
         };
-        if query.is_empty() {
-            return spans;
-        }
-
-        spans.extend(line.match_indices(query).map(|(start, match_text)| {
-            let end = start + match_text.len();
-            let face = if search.current
-                == Some(TextRange::new(
-                    Position::new(line_index, start),
-                    Position::new(line_index, end),
-                )) {
-                Face::CurrentSearchMatch
-            } else {
-                Face::SearchMatch
-            };
-            Span {
-                start_byte: start,
-                end_byte: end,
-                face,
-            }
-        }));
-        spans
+        let search = SearchDecorator {
+            search: self.search.as_ref(),
+            query: self.minibuffer.prompt_input(),
+        };
+        let providers: [&dyn DecorationProvider; 3] = [&region, &query_replace, &search];
+        collect_spans_for_line(&providers, line_index, line)
     }
 }
 
-impl Editor {
-    fn region_span_for_line(&self, line_index: usize, line: &str) -> Option<Span> {
-        let range = self.active_region_range()?;
+struct RegionDecorator {
+    range: Option<TextRange>,
+}
+
+impl DecorationProvider for RegionDecorator {
+    fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        let Some(range) = self.range else {
+            return Vec::new();
+        };
         if line_index < range.start.line || line_index > range.end.line {
-            return None;
+            return Vec::new();
         }
         let start = if line_index == range.start.line {
             range.start.byte
@@ -1217,25 +1198,64 @@ impl Editor {
             line.len()
         };
         if start == end {
-            return None;
+            return Vec::new();
         }
-        Some(Span {
-            start_byte: start,
-            end_byte: end,
-            face: Face::Region,
-        })
+        vec![Span::new(start, end, Face::Region)]
     }
+}
 
-    fn query_replace_span_for_line(&self, line_index: usize) -> Option<Span> {
-        let range = self.query_replace.as_ref()?.current?;
+struct QueryReplaceDecorator {
+    current: Option<TextRange>,
+}
+
+impl DecorationProvider for QueryReplaceDecorator {
+    fn spans_for_line(&self, line_index: usize, _line: &str) -> Vec<Span> {
+        let Some(range) = self.current else {
+            return Vec::new();
+        };
         if range.start.line != line_index || range.end.line != line_index {
-            return None;
+            return Vec::new();
         }
-        Some(Span {
-            start_byte: range.start.byte,
-            end_byte: range.end.byte,
-            face: Face::CurrentSearchMatch,
-        })
+        vec![Span::new(
+            range.start.byte,
+            range.end.byte,
+            Face::CurrentSearchMatch,
+        )]
+    }
+}
+
+struct SearchDecorator<'a> {
+    search: Option<&'a SearchState>,
+    query: Option<&'a str>,
+}
+
+impl DecorationProvider for SearchDecorator<'_> {
+    fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        let Some(search) = self.search else {
+            return Vec::new();
+        };
+        let Some(query) = self.query else {
+            return Vec::new();
+        };
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        line.match_indices(query)
+            .map(|(start, match_text)| {
+                let end = start + match_text.len();
+                let face = if search.current
+                    == Some(TextRange::new(
+                        Position::new(line_index, start),
+                        Position::new(line_index, end),
+                    )) {
+                    Face::CurrentSearchMatch
+                } else {
+                    Face::SearchMatch
+                };
+                Span::new(start, end, face)
+            })
+            .collect()
     }
 }
 

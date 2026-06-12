@@ -135,6 +135,16 @@ Milestone 11 adds query replace:
 - each replacement records an undo entry so `C-_` can restore replaced text;
 - tests cover UTF-8 replacement, skip/all behavior, missing input, highlighting, and undo.
 
+Milestone 12 cleans up the face and decoration architecture:
+
+- `render::Face` now defines stable priority values for overlapping spans;
+- `render::Span` has shared construction and validation helpers;
+- `render::DecorationProvider` remains the common line-decoration interface;
+- `render::collect_spans_for_line`, `merge_spans`, and `clip_spans` centralize decoration collection, priority merging, and viewport clipping;
+- region, incremental-search, and query-replace highlights are implemented as editor decoration providers instead of one ad hoc span builder;
+- terminal rendering applies mode-line, minibuffer, warning, and error faces through the same face-to-ANSI path;
+- tests cover provider collection, UTF-8 boundary rejection, span priority splitting, clipping, and fixed-width faced terminal output.
+
 Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 ## Line Ending Policy
