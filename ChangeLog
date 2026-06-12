@@ -1,5 +1,9 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* Containerfile.dev: Bump dev-container Rust toolchain to 1.96.0.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* Cargo.toml: Add PTY visual-test dev dependencies.
 	* tests/support/mod.rs, tests/support/keys.rs,
 	tests/support/screen.rs, tests/support/fixtures.rs,
