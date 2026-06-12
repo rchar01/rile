@@ -29,6 +29,8 @@ pub enum Command {
     SplitWindowBelow,
     SplitWindowRight,
     SwitchToBuffer,
+    ToggleLineNumbers,
+    ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
     Undo,
     Yank,
@@ -193,6 +195,18 @@ pub fn default_commands() -> Vec<CommandSpec> {
             SwitchToBuffer,
         ),
         CommandSpec::new(
+            "toggle-line-numbers",
+            "Toggle line numbers",
+            true,
+            ToggleLineNumbers,
+        ),
+        CommandSpec::new(
+            "toggle-search-highlighting",
+            "Toggle search highlighting",
+            true,
+            ToggleSearchHighlighting,
+        ),
+        CommandSpec::new(
             "toggle-syntax-highlighting",
             "Toggle syntax highlighting",
             true,
@@ -228,6 +242,8 @@ mod tests {
         assert!(registry.contains("undo"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("set-mark-command"));
+        assert!(registry.contains("toggle-line-numbers"));
+        assert!(registry.contains("toggle-search-highlighting"));
         assert!(registry.contains("toggle-syntax-highlighting"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));

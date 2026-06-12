@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 13 syntax highlighting is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, and highlight common source/config formats.
+Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
 
 Current binary behavior:
 
@@ -47,6 +47,8 @@ Basic editor keys:
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit.
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
+- `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
+- `M-x toggle-line-numbers` toggles line-number display on and off.
 - `C-x C-c` quits.
 - `M-x` runs an exact command name.
 - `C-g` cancels minibuffer prompts and prefix keys.
@@ -56,6 +58,18 @@ Highlighting now flows through shared face spans and deterministic priority merg
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting currently stores per-window cursor state but does not scroll automatically yet.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
+
+## Configuration
+
+Rile loads a minimal TOML-style config file from `~/.config/rile/config.toml` when it exists. Supported keys:
+
+```toml
+tab_width = 4
+line_numbers = false
+syntax_highlighting = true
+search_highlighting = true
+theme = "default" # or "mono"
+```
 
 ## License
 

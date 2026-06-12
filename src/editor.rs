@@ -5,6 +5,7 @@ use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, TextRange};
 use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
+use crate::config::{Config, ThemeName};
 use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
@@ -38,6 +39,10 @@ pub struct Editor {
     undo_stack: Vec<UndoEntry>,
     grouping_insert: bool,
     syntax_enabled: bool,
+    search_highlighting: bool,
+    line_numbers: bool,
+    tab_width: usize,
+    theme: ThemeName,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -93,6 +98,10 @@ struct SearchState {
 
 impl Editor {
     pub fn new(document: Document) -> Self {
+        Self::with_config(document, Config::default())
+    }
+
+    pub fn with_config(document: Document, config: Config) -> Self {
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
         Self {
@@ -111,7 +120,11 @@ impl Editor {
             kill_ring: Vec::new(),
             undo_stack: Vec::new(),
             grouping_insert: false,
-            syntax_enabled: true,
+            syntax_enabled: config.syntax_highlighting,
+            search_highlighting: config.search_highlighting,
+            line_numbers: config.line_numbers,
+            tab_width: config.tab_width,
+            theme: config.theme,
         }
     }
 
@@ -167,6 +180,22 @@ impl Editor {
         self.syntax_enabled
     }
 
+    pub fn search_highlighting(&self) -> bool {
+        self.search_highlighting
+    }
+
+    pub fn line_numbers(&self) -> bool {
+        self.line_numbers
+    }
+
+    pub fn tab_width(&self) -> usize {
+        self.tab_width
+    }
+
+    pub fn theme(&self) -> ThemeName {
+        self.theme
+    }
+
     pub fn syntax_mode_for_buffer(&self, id: BufferId) -> SyntaxMode {
         self.buffers
             .document(id)
@@ -193,9 +222,11 @@ impl Editor {
             range: self.active_region_range(),
         };
         let query_replace = QueryReplaceDecorator {
+            enabled: self.search_highlighting,
             current: self.query_replace.as_ref().and_then(|state| state.current),
         };
         let search = SearchDecorator {
+            enabled: self.search_highlighting,
             search: self.search.as_ref(),
             query: self.minibuffer.prompt_input(),
         };
@@ -352,6 +383,8 @@ impl Editor {
             SwitchToBuffer => self.start_switch_to_buffer(),
             SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
             SplitWindowRight => self.split_window(SplitAxis::Vertical),
+            ToggleLineNumbers => self.toggle_line_numbers(),
+            ToggleSearchHighlighting => self.toggle_search_highlighting(),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
             Yank => self.yank(),
@@ -1067,6 +1100,30 @@ impl Editor {
         Ok(())
     }
 
+    fn toggle_search_highlighting(&mut self) -> Result<()> {
+        self.search_highlighting = !self.search_highlighting;
+        let status = if self.search_highlighting {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        self.minibuffer
+            .set_message(format!("Search highlighting {status}"));
+        Ok(())
+    }
+
+    fn toggle_line_numbers(&mut self) -> Result<()> {
+        self.line_numbers = !self.line_numbers;
+        let status = if self.line_numbers {
+            "enabled"
+        } else {
+            "disabled"
+        };
+        self.minibuffer
+            .set_message(format!("Line numbers {status}"));
+        Ok(())
+    }
+
     fn clear_key_sequence(&mut self) {
         self.key_sequence.clear();
     }
@@ -1264,11 +1321,15 @@ impl DecorationProvider for RegionDecorator {
 }
 
 struct QueryReplaceDecorator {
+    enabled: bool,
     current: Option<TextRange>,
 }
 
 impl DecorationProvider for QueryReplaceDecorator {
     fn spans_for_line(&self, line_index: usize, _line: &str) -> Vec<Span> {
+        if !self.enabled {
+            return Vec::new();
+        }
         let Some(range) = self.current else {
             return Vec::new();
         };
@@ -1284,12 +1345,16 @@ impl DecorationProvider for QueryReplaceDecorator {
 }
 
 struct SearchDecorator<'a> {
+    enabled: bool,
     search: Option<&'a SearchState>,
     query: Option<&'a str>,
 }
 
 impl DecorationProvider for SearchDecorator<'_> {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        if !self.enabled {
+            return Vec::new();
+        }
         let Some(search) = self.search else {
             return Vec::new();
         };
@@ -1414,6 +1479,7 @@ mod tests {
 
     use super::{Editor, EditorOutcome};
     use crate::buffer::Position;
+    use crate::config::{Config, ThemeName};
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
     use crate::render::{DecorationProvider, Face, Span};
@@ -2017,6 +2083,68 @@ mod tests {
             editor.minibuffer().message.as_deref(),
             Some("Syntax highlighting disabled")
         );
+    }
+
+    #[test]
+    fn editor_applies_config_options_and_toggle_commands() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                tab_width: 2,
+                line_numbers: true,
+                syntax_highlighting: false,
+                search_highlighting: false,
+                theme: ThemeName::Mono,
+            },
+        );
+
+        assert_eq!(editor.tab_width(), 2);
+        assert!(editor.line_numbers());
+        assert!(!editor.syntax_enabled());
+        assert!(!editor.search_highlighting());
+        assert_eq!(editor.theme(), ThemeName::Mono);
+
+        editor
+            .execute_command_by_name("toggle-line-numbers")
+            .expect("line toggle should work");
+        assert!(!editor.line_numbers());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Line numbers disabled")
+        );
+
+        editor
+            .execute_command_by_name("toggle-search-highlighting")
+            .expect("search toggle should work");
+        assert!(editor.search_highlighting());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Search highlighting enabled")
+        );
+    }
+
+    #[test]
+    fn disabling_search_highlighting_keeps_search_motion() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                search_highlighting: false,
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        submit_prompt_text_without_enter(&mut editor, "two");
+
+        assert_eq!(editor.cursor(), Position::new(0, "one ".len()));
+        assert!(editor.spans_for_line(0, "one two").is_empty());
     }
 
     #[test]

@@ -156,6 +156,17 @@ Milestone 13 adds syntax highlighting:
 - the mode line displays the selected syntax mode or `Syntax off`;
 - tests cover mode selection, language span output, syntax/search/region merge priority, and the toggle command.
 
+Milestone 14 adds configuration and polish:
+
+- `config::Config` loads `~/.config/rile/config.toml` when present and otherwise uses defaults;
+- the config parser supports a small TOML subset with `tab_width`, `line_numbers`, `syntax_highlighting`, `search_highlighting`, and `theme` keys;
+- `tab_width` controls terminal tab expansion and cursor column calculation for tabs;
+- optional line numbers render in a left gutter with `Face::LineNumber`;
+- syntax and search highlighting can start disabled from config and can be toggled with `M-x toggle-syntax-highlighting` and `M-x toggle-search-highlighting`;
+- line numbers can be toggled with `M-x toggle-line-numbers`;
+- `theme = "default"` keeps colored faces and `theme = "mono"` uses mostly monochrome ANSI emphasis;
+- tests cover config parsing, invalid config values, editor option application, toggles, tab expansion, and line-number rendering.
+
 Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 ## Line Ending Policy

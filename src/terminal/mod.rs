@@ -6,12 +6,14 @@ use std::os::fd::AsRawFd;
 use std::path::Path;
 
 use crate::buffer::{Buffer, Position};
+use crate::config::{Config, ThemeName};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
 use crate::render::{Face, Span, clip_spans, merge_spans};
-use crate::window::{Viewport, WindowLayout, WindowRect};
+use crate::window::{Viewport, WindowLayout};
 use crate::{Result, RileError};
+use unicode_width::UnicodeWidthChar;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalSize {
@@ -182,7 +184,7 @@ pub fn run_basic_editor(file: Option<&Path>) -> Result<()> {
         Some(path) => Document::open(path)?,
         None => Document::scratch(),
     };
-    let editor = Editor::new(document);
+    let editor = Editor::with_config(document, Config::load()?);
 
     let mut session = TerminalSession::enter(stdin, stdout)?;
     session.draw(&editor)?;
@@ -246,7 +248,7 @@ where
             } else {
                 Face::Minibuffer
             };
-            write_text_with_face(&mut self.screen.terminal, &text, face)?;
+            write_text_with_face(&mut self.screen.terminal, &text, face, editor.theme())?;
         }
 
         move_cursor_to_current_window(&mut self.screen.terminal, editor, &layouts)?;
@@ -275,6 +277,14 @@ fn draw_window<W: Write>(
         let screen_column = layout.rect.column + 1;
         terminal.move_cursor(screen_row as u16, screen_column as u16)?;
         let line_index = viewport.first_visible_line + row;
+        let gutter_width = line_number_gutter_width(editor, document.buffer());
+        if gutter_width > 0 {
+            write_line_number_gutter(terminal, line_index, gutter_width, editor.theme())?;
+        }
+        let text_columns = layout.rect.columns.saturating_sub(gutter_width);
+        if text_columns == 0 {
+            continue;
+        }
         if let Some(line) = document.buffer().line(line_index) {
             let spans = editor.spans_for_buffer_line(viewport.buffer, line_index, line);
             write_buffer_line(
@@ -284,10 +294,14 @@ fn draw_window<W: Write>(
                 line_index,
                 line,
                 &spans,
-                layout.rect,
+                LineRenderOptions {
+                    width: text_columns,
+                    tab_width: editor.tab_width(),
+                    theme: editor.theme(),
+                },
             )?;
         } else {
-            write_fixed_width_text(terminal, "~", layout.rect.columns)?;
+            write_fixed_width_text(terminal, "~", text_columns)?;
         }
     }
 
@@ -307,7 +321,20 @@ fn draw_window<W: Write>(
         },
         document.mode_line()
     );
-    write_fixed_width_text_with_face(terminal, &mode_line, layout.rect.columns, Face::ModeLine)
+    write_fixed_width_text_with_face(
+        terminal,
+        &mode_line,
+        layout.rect.columns,
+        Face::ModeLine,
+        editor.theme(),
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct LineRenderOptions {
+    width: usize,
+    tab_width: usize,
+    theme: ThemeName,
 }
 
 fn write_buffer_line<W: Write>(
@@ -317,15 +344,20 @@ fn write_buffer_line<W: Write>(
     line_index: usize,
     line: &str,
     spans: &[Span],
-    rect: WindowRect,
+    options: LineRenderOptions,
 ) -> Result<()> {
-    let range = buffer.visible_range(line_index, viewport.first_visible_column, rect.columns)?;
+    let range = buffer.visible_range(line_index, viewport.first_visible_column, options.width)?;
     let segment = &line[range.clone()];
     let relative_spans = clip_spans(spans, range);
-    write_line_with_spans(terminal, segment, &relative_spans)?;
-    let width = Buffer::display_width(segment);
-    if width < rect.columns {
-        terminal.write_text(&" ".repeat(rect.columns - width))?;
+    let used_width = write_line_with_spans(
+        terminal,
+        segment,
+        &relative_spans,
+        options.tab_width,
+        options.theme,
+    )?;
+    if used_width < options.width {
+        terminal.write_text(&" ".repeat(options.width - used_width))?;
     }
     Ok(())
 }
@@ -349,10 +381,11 @@ fn write_fixed_width_text_with_face<W: Write>(
     text: &str,
     width: usize,
     face: Face,
+    theme: ThemeName,
 ) -> Result<()> {
     let clipped: String = text.chars().take(width).collect();
-    write_text_with_face(terminal, &clipped, face)?;
     let used = clipped.chars().count();
+    write_text_with_face(terminal, &clipped, face, theme)?;
     if used < width {
         terminal.write_text(&" ".repeat(width - used))?;
     }
@@ -363,8 +396,9 @@ fn write_text_with_face<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     text: &str,
     face: Face,
+    theme: ThemeName,
 ) -> Result<()> {
-    if let Some(start_code) = face_start_code(face) {
+    if let Some(start_code) = face_start_code(face, theme) {
         terminal.write_text(start_code)?;
         terminal.write_text(text)?;
         terminal.write_text("\x1b[0m")?;
@@ -397,17 +431,25 @@ fn move_cursor_to_current_window<W: Write>(
         .line
         .saturating_sub(viewport.first_visible_line)
         .min(text_rows - 1);
-    let cursor_column = cursor_display_column(document.buffer(), viewport, cursor)?
-        .min(layout.rect.columns.saturating_sub(1));
+    let gutter_width = line_number_gutter_width(editor, document.buffer());
+    let cursor_column = (gutter_width
+        + cursor_display_column(document.buffer(), viewport, cursor, editor.tab_width())?)
+    .min(layout.rect.columns.saturating_sub(1));
     terminal.move_cursor(
         (layout.rect.row + cursor_row + 1) as u16,
         (layout.rect.column + cursor_column + 1) as u16,
     )
 }
 
-fn cursor_display_column(buffer: &Buffer, viewport: &Viewport, cursor: Position) -> Result<usize> {
-    Ok(buffer
-        .display_column(cursor)?
+fn cursor_display_column(
+    buffer: &Buffer,
+    viewport: &Viewport,
+    cursor: Position,
+    tab_width: usize,
+) -> Result<usize> {
+    buffer.validate_position(cursor)?;
+    let line = buffer.line(cursor.line).expect("cursor line is valid");
+    Ok(display_width_with_tabs(&line[..cursor.byte], tab_width)
         .saturating_sub(viewport.first_visible_column))
 }
 
@@ -415,9 +457,12 @@ fn write_line_with_spans<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     line: &str,
     spans: &[Span],
-) -> Result<()> {
+    tab_width: usize,
+    theme: ThemeName,
+) -> Result<usize> {
     let merged_spans = merge_spans(line, spans.iter().copied());
     let mut cursor = 0;
+    let mut column = 0;
     for span in &merged_spans {
         if span.start_byte >= span.end_byte
             || span.end_byte > line.len()
@@ -428,26 +473,117 @@ fn write_line_with_spans<W: Write>(
             continue;
         }
 
-        terminal.write_text(&line[cursor..span.start_byte])?;
-        write_text_with_face(terminal, &line[span.start_byte..span.end_byte], span.face)?;
+        column = write_display_text(terminal, &line[cursor..span.start_byte], tab_width, column)?;
+        column = write_text_with_face_expanded(
+            terminal,
+            &line[span.start_byte..span.end_byte],
+            span.face,
+            tab_width,
+            column,
+            theme,
+        )?;
         cursor = span.end_byte;
     }
-    terminal.write_text(&line[cursor..])
+    write_display_text(terminal, &line[cursor..], tab_width, column)
 }
 
-fn face_start_code(face: Face) -> Option<&'static str> {
-    match face {
-        Face::CurrentSearchMatch => Some("\x1b[7m"),
-        Face::SearchMatch => Some("\x1b[4m"),
-        Face::Region => Some("\x1b[44m"),
-        Face::Minibuffer => Some("\x1b[36m"),
-        Face::ModeLine => Some("\x1b[7m"),
-        Face::Error => Some("\x1b[31m"),
-        Face::Warning => Some("\x1b[33m"),
-        Face::SyntaxKeyword => Some("\x1b[34;1m"),
-        Face::SyntaxString => Some("\x1b[32m"),
-        Face::SyntaxComment => Some("\x1b[2m"),
-        _ => None,
+fn write_text_with_face_expanded<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    face: Face,
+    tab_width: usize,
+    column: usize,
+    theme: ThemeName,
+) -> Result<usize> {
+    if let Some(start_code) = face_start_code(face, theme) {
+        terminal.write_text(start_code)?;
+        let column = write_display_text(terminal, text, tab_width, column)?;
+        terminal.write_text("\x1b[0m")?;
+        Ok(column)
+    } else {
+        write_display_text(terminal, text, tab_width, column)
+    }
+}
+
+fn write_display_text<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    tab_width: usize,
+    mut column: usize,
+) -> Result<usize> {
+    for character in text.chars() {
+        if character == '\t' {
+            let spaces = tab_spaces(tab_width, column);
+            terminal.write_text(&" ".repeat(spaces))?;
+            column += spaces;
+        } else {
+            terminal.write_text(&character.to_string())?;
+            column += character.width().unwrap_or(0);
+        }
+    }
+    Ok(column)
+}
+
+fn display_width_with_tabs(text: &str, tab_width: usize) -> usize {
+    text.chars().fold(0, |column, character| {
+        if character == '\t' {
+            column + tab_spaces(tab_width, column)
+        } else {
+            column + character.width().unwrap_or(0)
+        }
+    })
+}
+
+fn tab_spaces(tab_width: usize, column: usize) -> usize {
+    let tab_width = tab_width.max(1);
+    tab_width - (column % tab_width)
+}
+
+fn line_number_gutter_width(editor: &Editor, buffer: &Buffer) -> usize {
+    if editor.line_numbers() {
+        decimal_digits(buffer.line_count()) + 1
+    } else {
+        0
+    }
+}
+
+fn write_line_number_gutter<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    line_index: usize,
+    width: usize,
+    theme: ThemeName,
+) -> Result<()> {
+    let gutter = format!("{:>width$} ", line_index + 1, width = width - 1);
+    write_text_with_face(terminal, &gutter, Face::LineNumber, theme)
+}
+
+fn decimal_digits(value: usize) -> usize {
+    value.max(1).ilog10() as usize + 1
+}
+
+fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
+    match theme {
+        ThemeName::Default => match face {
+            Face::CurrentSearchMatch => Some("\x1b[7m"),
+            Face::SearchMatch => Some("\x1b[4m"),
+            Face::Region => Some("\x1b[44m"),
+            Face::Minibuffer => Some("\x1b[36m"),
+            Face::ModeLine => Some("\x1b[7m"),
+            Face::Error => Some("\x1b[31m"),
+            Face::Warning => Some("\x1b[33m"),
+            Face::LineNumber => Some("\x1b[2m"),
+            Face::SyntaxKeyword => Some("\x1b[34;1m"),
+            Face::SyntaxString => Some("\x1b[32m"),
+            Face::SyntaxComment => Some("\x1b[2m"),
+            _ => None,
+        },
+        ThemeName::Mono => match face {
+            Face::CurrentSearchMatch | Face::Region | Face::ModeLine => Some("\x1b[7m"),
+            Face::SearchMatch => Some("\x1b[4m"),
+            Face::Minibuffer | Face::LineNumber | Face::SyntaxComment => Some("\x1b[2m"),
+            Face::Error | Face::Warning => Some("\x1b[1m"),
+            _ => None,
+        },
     }
 }
 
@@ -481,7 +617,11 @@ impl<W: Write> Drop for ScreenGuard<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::{AnsiTerminal, write_fixed_width_text_with_face, write_line_with_spans};
+    use super::{
+        AnsiTerminal, write_fixed_width_text_with_face, write_line_number_gutter,
+        write_line_with_spans,
+    };
+    use crate::config::ThemeName;
     use crate::render::{Face, Span};
 
     #[test]
@@ -514,7 +654,8 @@ mod tests {
         ];
         let mut terminal = AnsiTerminal::new(Vec::new());
 
-        write_line_with_spans(&mut terminal, "one two", &spans).expect("render should succeed");
+        write_line_with_spans(&mut terminal, "one two", &spans, 4, ThemeName::Default)
+            .expect("render should succeed");
 
         assert_eq!(
             terminal.into_inner(),
@@ -526,9 +667,36 @@ mod tests {
     fn renders_fixed_width_text_with_faces() {
         let mut terminal = AnsiTerminal::new(Vec::new());
 
-        write_fixed_width_text_with_face(&mut terminal, "mode", 6, Face::ModeLine)
-            .expect("render should succeed");
+        write_fixed_width_text_with_face(
+            &mut terminal,
+            "mode",
+            6,
+            Face::ModeLine,
+            ThemeName::Default,
+        )
+        .expect("render should succeed");
 
         assert_eq!(terminal.into_inner(), b"\x1b[7mmode\x1b[0m  ".to_vec());
+    }
+
+    #[test]
+    fn expands_tabs_using_configured_width() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        let width = write_line_with_spans(&mut terminal, "a\tb", &[], 2, ThemeName::Default)
+            .expect("render should succeed");
+
+        assert_eq!(width, 3);
+        assert_eq!(terminal.into_inner(), b"a b".to_vec());
+    }
+
+    #[test]
+    fn renders_line_number_gutter_with_face() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_line_number_gutter(&mut terminal, 8, 3, ThemeName::Default)
+            .expect("gutter should render");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[2m 9 \x1b[0m".to_vec());
     }
 }
