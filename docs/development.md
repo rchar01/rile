@@ -168,7 +168,7 @@ Milestone 14 adds configuration and polish:
 - `theme = "default"` keeps colored faces and `theme = "mono"` uses mostly monochrome ANSI emphasis;
 - tests cover config parsing, invalid config values, editor option application, toggles, tab expansion, and line-number rendering.
 
-Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
+Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 ## Line Ending Policy
 

@@ -184,10 +184,10 @@ pub fn run_basic_editor(file: Option<&Path>) -> Result<()> {
         Some(path) => Document::open(path)?,
         None => Document::scratch(),
     };
-    let editor = Editor::with_config(document, Config::load()?);
+    let mut editor = Editor::with_config(document, Config::load()?);
 
     let mut session = TerminalSession::enter(stdin, stdout)?;
-    session.draw(&editor)?;
+    session.draw(&mut editor)?;
     session.run(editor)
 }
 
@@ -224,18 +224,20 @@ where
         loop {
             match editor.handle_key(self.input.read_key()?)? {
                 EditorOutcome::Quit => return Ok(()),
-                EditorOutcome::Continue => self.draw(&editor)?,
+                EditorOutcome::Continue => self.draw(&mut editor)?,
             }
         }
     }
 
-    fn draw(&mut self, editor: &Editor) -> Result<()> {
+    fn draw(&mut self, editor: &mut Editor) -> Result<()> {
         let size = terminal_size(self.output_fd)?;
+        self.screen.terminal.hide_cursor()?;
         self.screen.terminal.move_cursor(1, 1)?;
         self.screen.terminal.clear_screen()?;
 
         let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
         let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
+        ensure_current_window_visible(editor, &layouts)?;
         for layout in &layouts {
             draw_window(&mut self.screen.terminal, editor, *layout)?;
         }
@@ -252,8 +254,33 @@ where
         }
 
         move_cursor_to_current_window(&mut self.screen.terminal, editor, &layouts)?;
+        self.screen.terminal.show_cursor()?;
         self.screen.terminal.flush()
     }
+}
+
+fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) -> Result<()> {
+    let Some(layout) = layouts
+        .iter()
+        .find(|layout| layout.id == editor.current_window_id())
+    else {
+        return Ok(());
+    };
+    let Some(viewport) = editor.window_viewport(layout.id) else {
+        return Ok(());
+    };
+    let Some(document) = editor.document_for_buffer(viewport.buffer) else {
+        return Ok(());
+    };
+
+    let cursor = viewport.cursor;
+    let gutter_width = line_number_gutter_width(editor, document.buffer());
+    let text_rows = layout.rect.rows.saturating_sub(1);
+    let text_columns = layout.rect.columns.saturating_sub(gutter_width);
+    let cursor_display_column =
+        cursor_absolute_display_column(document.buffer(), cursor, editor.tab_width())?;
+    editor.ensure_current_window_contains_cursor(text_rows, text_columns, cursor_display_column);
+    Ok(())
 }
 
 fn draw_window<W: Write>(
@@ -443,10 +470,18 @@ fn cursor_display_column(
     cursor: Position,
     tab_width: usize,
 ) -> Result<usize> {
+    Ok(cursor_absolute_display_column(buffer, cursor, tab_width)?
+        .saturating_sub(viewport.first_visible_column))
+}
+
+fn cursor_absolute_display_column(
+    buffer: &Buffer,
+    cursor: Position,
+    tab_width: usize,
+) -> Result<usize> {
     buffer.validate_position(cursor)?;
     let line = buffer.line(cursor.line).expect("cursor line is valid");
-    Ok(display_width_with_tabs(&line[..cursor.byte], tab_width)
-        .saturating_sub(viewport.first_visible_column))
+    Ok(display_width_with_tabs(&line[..cursor.byte], tab_width))
 }
 
 fn write_line_with_spans<W: Write>(
@@ -627,10 +662,11 @@ mod tests {
         terminal.move_cursor(2, 3).expect("move should write");
         terminal.clear_line().expect("clear line should write");
         terminal.write_text("status").expect("text should write");
+        terminal.show_cursor().expect("show cursor should write");
 
         assert_eq!(
             terminal.into_inner(),
-            b"\x1b[?25l\x1b[2;3H\x1b[2Kstatus".to_vec()
+            b"\x1b[?25l\x1b[2;3H\x1b[2Kstatus\x1b[?25h".to_vec()
         );
     }
 

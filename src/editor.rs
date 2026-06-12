@@ -164,6 +164,32 @@ impl Editor {
         self.windows.window(id).map(|window| window.viewport())
     }
 
+    pub fn ensure_current_window_contains_cursor(
+        &mut self,
+        text_rows: usize,
+        text_columns: usize,
+        cursor_display_column: usize,
+    ) {
+        self.sync_current_window();
+        let viewport = self.windows.current_mut().viewport_mut();
+
+        if text_rows > 0 {
+            if self.cursor.line < viewport.first_visible_line {
+                viewport.first_visible_line = self.cursor.line;
+            } else if self.cursor.line >= viewport.first_visible_line + text_rows {
+                viewport.first_visible_line = self.cursor.line + 1 - text_rows;
+            }
+        }
+
+        if text_columns > 0 {
+            if cursor_display_column < viewport.first_visible_column {
+                viewport.first_visible_column = cursor_display_column;
+            } else if cursor_display_column >= viewport.first_visible_column + text_columns {
+                viewport.first_visible_column = cursor_display_column + 1 - text_columns;
+            }
+        }
+    }
+
     pub fn document_for_buffer(&self, id: BufferId) -> Option<&Document> {
         self.buffers.document(id)
     }
@@ -2124,6 +2150,72 @@ mod tests {
         assert_eq!(
             unknown_editor.major_mode_for_buffer(unknown_editor.current_buffer_id()),
             MajorMode::Fundamental
+        );
+    }
+
+    #[test]
+    fn viewport_scrolls_vertically_to_keep_cursor_visible() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\nfour")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        for _ in 0..3 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+        }
+        editor.ensure_current_window_contains_cursor(2, 80, 0);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_line,
+            2
+        );
+
+        for _ in 0..2 {
+            editor
+                .handle_key(KeyEvent::Ctrl('p'))
+                .expect("cursor should move up");
+        }
+        editor.ensure_current_window_contains_cursor(2, 80, 0);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_line,
+            1
+        );
+    }
+
+    #[test]
+    fn viewport_scrolls_horizontally_to_keep_cursor_visible() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("abcdef".to_owned()))
+            .expect("text should insert");
+        editor.ensure_current_window_contains_cursor(10, 3, 6);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_column,
+            4
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("cursor should move to beginning");
+        editor.ensure_current_window_contains_cursor(10, 3, 0);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_column,
+            0
         );
     }
 
