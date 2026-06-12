@@ -1,0 +1,6 @@
+000 | ascii text
+001 | café naïve résumé
+002 | Greek: αβγδε
+003 | CJK: 你好世界
+004 | emoji: a🙂b
+005 | mixed: x你y🙂z

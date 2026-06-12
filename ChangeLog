@@ -1,5 +1,20 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* src/app.rs (CliOptions): Add visual_test and test_size options.
+	(parse_args): Parse --visual-test and --test-size.
+	* src/main.rs: Pass terminal runtime options to the editor runner.
+	* src/terminal/mod.rs (RuntimeOptions): New type.
+	(TerminalSession): Store deterministic test size and frame options.
+	(draw_window): Add visual-test mode-line rendering.
+	* fixtures/visual/numbered.txt, fixtures/visual/wide.txt,
+	fixtures/visual/long_lines.txt, fixtures/visual/split_left.txt,
+	fixtures/visual/split_right.txt: New fixtures.
+	* README.md, docs/development.md,
+	docs/pty-vt100-visual-testing-plan.md, NEWS: Document visual testing
+	flags and progress.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* NEWS: New file.
 	* ChangeLog: New file.
 	* Cargo.toml: Add official repository metadata.  Update copyright.

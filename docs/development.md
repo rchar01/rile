@@ -177,6 +177,8 @@ Current limitations: there is no prompt cursor movement, no file-name or buffer-
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.
 
+Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review.
+
 ## Line Ending Policy
 
 The in-memory buffer model uses `\n` as the only line separator. `Buffer::from_text` splits on `\n`, `Buffer::serialize` joins lines with `\n`, and `Buffer::final_newline` records whether the serialized text ends with a final newline.
@@ -200,6 +202,10 @@ Rile is copyrighted by Robert Charusta <rch-public@posteo.net> and licensed as `
 Maintain `NEWS` for user-visible release notes, with newest releases first. Keep entries concise and focused on behavior users need to know about.
 
 Maintain `ChangeLog` in GNU-style plain text for file-level maintenance history, with newest entries first. Git remains the detailed history; `ChangeLog` should summarize coherent changes rather than mechanically duplicating every commit.
+
+## Visual Testing
+
+Use `--visual-test` to make terminal output deterministic for integration tests and visual demos. Use `--test-size WIDTHxHEIGHT` to render with a stable terminal size instead of reading the host terminal size. Fixture files for future PTY and VHS work live under `fixtures/visual/`.
 
 ## Quality Gate
 

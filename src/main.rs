@@ -13,7 +13,15 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             }
             rile::app::RunMode::Edit(options) => {
-                match rile::terminal::run_basic_editor(options.file.as_deref()) {
+                let runtime_options = rile::terminal::RuntimeOptions {
+                    file: options.file.as_deref(),
+                    visual_test: options.visual_test,
+                    test_size: options.test_size.map(|size| rile::terminal::TerminalSize {
+                        rows: size.rows,
+                        columns: size.columns,
+                    }),
+                };
+                match rile::terminal::run_basic_editor(runtime_options) {
                     Ok(()) => ExitCode::SUCCESS,
                     Err(error) => {
                         eprintln!("rile: {error}");

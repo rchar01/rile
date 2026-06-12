@@ -21,6 +21,18 @@ pub struct TerminalSize {
     pub columns: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RuntimeOptions<'a> {
+    pub file: Option<&'a Path>,
+    pub visual_test: bool,
+    pub test_size: Option<TerminalSize>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct FrameOptions {
+    visual_test: bool,
+}
+
 pub struct RawModeGuard {
     fd: libc::c_int,
     original: Option<libc::termios>,
@@ -173,20 +185,25 @@ impl<W: Write> AnsiTerminal<W> {
     }
 }
 
-pub fn run_basic_editor(file: Option<&Path>) -> Result<()> {
+pub fn run_basic_editor(options: RuntimeOptions<'_>) -> Result<()> {
     let stdin = io::stdin();
     let stdout = io::stdout();
     if !stdin.is_terminal() || !stdout.is_terminal() {
         return Err(RileError::NotTerminal);
     }
 
-    let document = match file {
+    let document = match options.file {
         Some(path) => Document::open(path)?,
         None => Document::welcome(),
     };
-    let mut editor = Editor::with_config(document, Config::load()?);
+    let config = if options.visual_test {
+        Config::default()
+    } else {
+        Config::load()?
+    };
+    let mut editor = Editor::with_config(document, config);
 
-    let mut session = TerminalSession::enter(stdin, stdout)?;
+    let mut session = TerminalSession::enter(stdin, stdout, options)?;
     session.draw(&mut editor)?;
     session.run(editor)
 }
@@ -196,6 +213,8 @@ struct TerminalSession<R, W: Write> {
     _raw_mode: RawModeGuard,
     input: KeyReader<R>,
     output_fd: libc::c_int,
+    test_size: Option<TerminalSize>,
+    frame_options: FrameOptions,
 }
 
 impl<R, W> TerminalSession<R, W>
@@ -203,7 +222,7 @@ where
     R: Read + AsRawFd,
     W: Write + AsRawFd,
 {
-    fn enter(input: R, output: W) -> Result<Self> {
+    fn enter(input: R, output: W, options: RuntimeOptions<'_>) -> Result<Self> {
         let input_fd = input.as_raw_fd();
         let output_fd = output.as_raw_fd();
         let raw_mode = RawModeGuard::activate(input_fd)?;
@@ -216,6 +235,10 @@ where
             _raw_mode: raw_mode,
             input: KeyReader::new(input),
             output_fd,
+            test_size: options.test_size,
+            frame_options: FrameOptions {
+                visual_test: options.visual_test,
+            },
         })
     }
 
@@ -229,15 +252,28 @@ where
     }
 
     fn draw(&mut self, editor: &mut Editor) -> Result<()> {
-        let size = terminal_size(self.output_fd)?;
-        draw_editor_frame(&mut self.screen.terminal, editor, size)
+        let size = match self.test_size {
+            Some(size) => size,
+            None => terminal_size(self.output_fd)?,
+        };
+        draw_editor_frame_with_options(&mut self.screen.terminal, editor, size, self.frame_options)
     }
 }
 
+#[cfg(test)]
 fn draw_editor_frame<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     editor: &mut Editor,
     size: TerminalSize,
+) -> Result<()> {
+    draw_editor_frame_with_options(terminal, editor, size, FrameOptions::default())
+}
+
+fn draw_editor_frame_with_options<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &mut Editor,
+    size: TerminalSize,
+    options: FrameOptions,
 ) -> Result<()> {
     terminal.move_cursor(1, 1)?;
     terminal.clear_screen()?;
@@ -246,7 +282,7 @@ fn draw_editor_frame<W: Write>(
     let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
     ensure_current_window_visible(editor, &layouts)?;
     for layout in &layouts {
-        draw_window(terminal, editor, *layout)?;
+        draw_window(terminal, editor, *layout, options)?;
     }
 
     terminal.move_cursor(size.rows.max(1), 1)?;
@@ -292,6 +328,7 @@ fn draw_window<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     editor: &Editor,
     layout: WindowLayout,
+    options: FrameOptions,
 ) -> Result<()> {
     if layout.rect.rows == 0 || layout.rect.columns == 0 {
         return Ok(());
@@ -339,17 +376,22 @@ fn draw_window<W: Write>(
 
     let mode_line_row = layout.rect.row + layout.rect.rows;
     terminal.move_cursor(mode_line_row as u16, (layout.rect.column + 1) as u16)?;
-    let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
-    let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
-    let mode_line = format!(
-        "{}{}   {position}   ({major_mode})",
-        if layout.id == editor.current_window_id() {
-            "* "
-        } else {
-            "  "
-        },
-        document.mode_line()
-    );
+    let mode_line = if options.visual_test {
+        visual_test_mode_line(editor, document, viewport, layout, text_rows)?
+    } else {
+        let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
+        let position =
+            mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
+        format!(
+            "{}{}   {position}   ({major_mode})",
+            if layout.id == editor.current_window_id() {
+                "* "
+            } else {
+                "  "
+            },
+            document.mode_line()
+        )
+    };
     write_fixed_width_text_with_face(
         terminal,
         &mode_line,
@@ -357,6 +399,40 @@ fn draw_window<W: Write>(
         Face::ModeLine,
         editor.theme(),
     )
+}
+
+fn visual_test_mode_line(
+    editor: &Editor,
+    document: &Document,
+    viewport: &Viewport,
+    layout: WindowLayout,
+    text_rows: usize,
+) -> Result<String> {
+    let cursor = viewport.cursor;
+    document.buffer().validate_position(cursor)?;
+    let active = if layout.id == editor.current_window_id() {
+        "ACTIVE"
+    } else {
+        "inactive"
+    };
+    let name = visual_test_document_name(document);
+    let column = cursor_absolute_display_column(document.buffer(), cursor, editor.tab_width())?;
+    let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
+    Ok(format!(
+        "-- Rile VISUAL window {} {active} {name} Ln {:03} Col {:03} modified:{} {position} --",
+        layout.id.0,
+        cursor.line + 1,
+        column,
+        document.is_dirty()
+    ))
+}
+
+fn visual_test_document_name(document: &Document) -> String {
+    document
+        .path()
+        .and_then(Path::file_name)
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| document.display_name())
 }
 
 fn mode_line_position(
@@ -678,8 +754,9 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnsiTerminal, TerminalSize, draw_editor_frame, mode_line_position,
-        write_fixed_width_text_with_face, write_line_number_gutter, write_line_with_spans,
+        AnsiTerminal, FrameOptions, TerminalSize, draw_editor_frame,
+        draw_editor_frame_with_options, mode_line_position, write_fixed_width_text_with_face,
+        write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::config::ThemeName;
@@ -885,6 +962,27 @@ mod tests {
         assert!(rendered_frame(&mut editor, size).contains("Bot (4,0)"));
     }
 
+    #[test]
+    fn visual_test_mode_line_is_deterministic() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "hello\nworld")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 80,
+        };
+
+        let frame =
+            rendered_frame_with_options(&mut editor, size, FrameOptions { visual_test: true });
+
+        assert!(frame.contains("Rile VISUAL window 0 ACTIVE *scratch*"));
+        assert!(frame.contains("Ln 001 Col 000"));
+        assert!(frame.contains("modified:true"));
+    }
+
     fn rendered_cursor_position(editor: &mut Editor, size: TerminalSize) -> Option<(usize, usize)> {
         last_cursor_position(rendered_frame_bytes(editor, size).as_slice())
     }
@@ -896,6 +994,26 @@ mod tests {
     fn rendered_frame_bytes(editor: &mut Editor, size: TerminalSize) -> Vec<u8> {
         let mut terminal = AnsiTerminal::new(Vec::new());
         draw_editor_frame(&mut terminal, editor, size).expect("frame should draw");
+        terminal.into_inner()
+    }
+
+    fn rendered_frame_with_options(
+        editor: &mut Editor,
+        size: TerminalSize,
+        options: FrameOptions,
+    ) -> String {
+        String::from_utf8(rendered_frame_bytes_with_options(editor, size, options))
+            .expect("frame should be UTF-8")
+    }
+
+    fn rendered_frame_bytes_with_options(
+        editor: &mut Editor,
+        size: TerminalSize,
+        options: FrameOptions,
+    ) -> Vec<u8> {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+        draw_editor_frame_with_options(&mut terminal, editor, size, options)
+            .expect("frame should draw");
         terminal.into_inner()
     }
 

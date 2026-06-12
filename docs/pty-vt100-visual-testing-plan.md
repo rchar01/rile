@@ -70,13 +70,13 @@ Goal: Make the real Rile binary deterministic enough for PTY and VHS runs.
 
 Tasks:
 
-- [ ] Extend `app::CliOptions` with `visual_test: bool` and `test_size: Option<TerminalSize>` or a small CLI-owned size type.
-- [ ] Parse `--visual-test` and `--test-size WIDTHxHEIGHT` before the optional file argument.
-- [ ] Update `usage()` and CLI unit tests for the new flags and invalid sizes.
-- [ ] Change `main.rs` and `terminal::run_basic_editor` to pass editor runtime options instead of only `Option<&Path>`.
-- [ ] Add a terminal-size override so `TerminalSession::draw` uses `--test-size` when present and `ioctl` otherwise.
-- [ ] Add a visual-test editor/render option that makes status text deterministic and visibly marks test mode.
-- [ ] Decide whether visual-test mode ignores user config or forces a temporary config-free mode.
+- [x] Extend `app::CliOptions` with `visual_test: bool` and `test_size: Option<TerminalSize>` or a small CLI-owned size type. Evidence: `app::CliOptions` now carries `visual_test` and `test_size`.
+- [x] Parse `--visual-test` and `--test-size WIDTHxHEIGHT` before the optional file argument. Evidence: `app::parse_args` handles `--visual-test`, `--test-size WIDTHxHEIGHT`, and `--test-size=WIDTHxHEIGHT`.
+- [x] Update `usage()` and CLI unit tests for the new flags and invalid sizes. Evidence: app tests cover visual flags, equals-form size parsing, and invalid sizes.
+- [x] Change `main.rs` and `terminal::run_basic_editor` to pass editor runtime options instead of only `Option<&Path>`. Evidence: `terminal::RuntimeOptions` carries file, visual-test, and test-size settings.
+- [x] Add a terminal-size override so `TerminalSession::draw` uses `--test-size` when present and `ioctl` otherwise. Evidence: `TerminalSession` stores `test_size` and falls back to `terminal_size` only when unset.
+- [x] Add a visual-test editor/render option that makes status text deterministic and visibly marks test mode. Evidence: `FrameOptions { visual_test }` renders `Rile VISUAL` mode-line text with window id, active state, file name, line, column, dirty flag, and position.
+- [x] Decide whether visual-test mode ignores user config or forces a temporary config-free mode. Evidence: visual-test startup uses `Config::default()` instead of loading user config.
 
 Validation gate:
 
@@ -90,10 +90,10 @@ Goal: Add stable inputs and a small support API before writing scenario tests.
 
 Tasks:
 
-- [ ] Add `fixtures/visual/numbered.txt` with 20 numbered rows and repeated digit columns.
-- [ ] Add `fixtures/visual/wide.txt` with ASCII, accented, Greek, CJK, emoji, and mixed-width rows.
-- [ ] Add `fixtures/visual/long_lines.txt` for horizontal scrolling and clipping.
-- [ ] Add `fixtures/visual/split_left.txt` and `fixtures/visual/split_right.txt` for split-pane demos and tests.
+- [x] Add `fixtures/visual/numbered.txt` with 20 numbered rows and repeated digit columns. Evidence: fixture file exists.
+- [x] Add `fixtures/visual/wide.txt` with ASCII, accented, Greek, CJK, emoji, and mixed-width rows. Evidence: fixture file exists.
+- [x] Add `fixtures/visual/long_lines.txt` for horizontal scrolling and clipping. Evidence: fixture file exists.
+- [x] Add `fixtures/visual/split_left.txt` and `fixtures/visual/split_right.txt` for split-pane demos and tests. Evidence: fixture files exist.
 - [ ] Add `tests/support/mod.rs` and expose support modules.
 - [ ] Add `tests/support/keys.rs` with common escape sequences and Emacs control-key helpers.
 - [ ] Add `tests/support/screen.rs` with screen dump normalization and caret rendering helpers.
@@ -235,6 +235,7 @@ Validation gate:
 | Date | Update | Evidence |
 | --- | --- | --- |
 | 2026-06-12 | Plan created from user-provided guide and current Rile codebase inspection. | `src/app.rs`, `src/main.rs`, `src/terminal/mod.rs`, `Cargo.toml`, and `Makefile` inspected; crate availability checked with `cargo search`. |
+| 2026-06-12 | Phase 1 and visual fixtures started. | Added `--visual-test`, `--test-size`, deterministic visual mode-line rendering, and `fixtures/visual/*`. |
 
 ## Decision Log
 
@@ -242,3 +243,4 @@ Validation gate:
 | --- | --- | --- |
 | 2026-06-12 | Treat VHS as optional visual review, not a correctness gate. | Structured PTY/VT100 assertions are required for exact behavior. |
 | 2026-06-12 | Add CLI flags before PTY tests. | Current CLI and terminal-size flow cannot produce deterministic PTY snapshots without `--visual-test` and `--test-size`. |
+| 2026-06-12 | Visual-test mode uses default config instead of user config. | PTY and snapshot output should not depend on a developer's `~/.config/rile/config.toml`. |

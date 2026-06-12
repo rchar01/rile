@@ -57,6 +57,8 @@ Hardening and development:
 * Reject invalid UTF-8 and NUL-containing binary files instead of opening
   them lossily.
 * Optionally write sibling file~ backups before saving existing files.
+* Provide deterministic `--visual-test` and `--test-size WIDTHxHEIGHT`
+  developer flags for future PTY, snapshot, and VHS terminal testing.
 * Provide GPL-3.0-or-later licensing, clean-room reference notices,
   containerized development tooling, and a canonical make verify quality
   gate.
