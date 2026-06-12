@@ -55,6 +55,7 @@ Common commands:
 make help
 make shell
 make build
+make fmt
 make test
 make lint
 make audit

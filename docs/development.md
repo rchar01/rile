@@ -148,6 +148,8 @@ One-shot tasks:
 
 ```sh
 make build
+make fmt
+make fmt-check
 make test
 make lint
 make audit
@@ -160,9 +162,11 @@ The Makefile delegates to scripts:
 - `scripts/devshell` opens an interactive shell in the dev container.
 - `scripts/in-container` runs one command in a fresh dev container.
 - `scripts/build` runs `cargo build --locked`.
+- `scripts/fmt` runs `cargo fmt` and updates Rust source formatting.
+- `scripts/fmt-check` runs `cargo fmt --check` without modifying files.
 - `scripts/test` runs `cargo nextest run --locked` when available, otherwise `cargo test --locked`.
 - `scripts/test-cargo` always runs `cargo test --locked`.
-- `scripts/lint` runs `cargo fmt --check` and `cargo clippy --locked --all-targets --all-features -- -D warnings`.
+- `scripts/lint` runs `scripts/fmt-check` and `cargo clippy --locked --all-targets --all-features -- -D warnings`.
 - `scripts/audit` runs `cargo deny check` and `cargo audit`.
 - `scripts/unused-deps` runs `cargo machete`.
 - `scripts/verify` runs build, test, lint, audit, and unused dependency checks.
@@ -176,6 +180,8 @@ Direct host development is supported if the same tools are installed locally. Us
 
 ```sh
 ./scripts/build
+./scripts/fmt
+./scripts/fmt-check
 ./scripts/test-cargo
 ./scripts/lint
 ./scripts/audit

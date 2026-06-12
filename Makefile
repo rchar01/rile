@@ -7,7 +7,7 @@ SHELL := /bin/sh
 IMAGE ?= rile-dev
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo lint audit unused-deps verify run clean
+.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run clean
 
 ## Show available commands
 help:
@@ -43,6 +43,14 @@ test:
 ## Run Cargo's built-in test runner in the dev container
 test-cargo:
 	$(IN_CONTAINER) ./scripts/test-cargo
+
+## Format Rust code in the dev container
+fmt:
+	$(IN_CONTAINER) ./scripts/fmt
+
+## Check Rust formatting in the dev container
+fmt-check:
+	$(IN_CONTAINER) ./scripts/fmt-check
 
 ## Run formatting and lint checks in the dev container
 lint:
