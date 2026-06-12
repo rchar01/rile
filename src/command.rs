@@ -11,6 +11,8 @@ pub enum Command {
     ExecuteExtendedCommand,
     FindFile,
     ForwardChar,
+    IncrementalSearchBackward,
+    IncrementalSearchForward,
     NextLine,
     PreviousLine,
     SaveBuffer,
@@ -107,6 +109,18 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("find-file", "Open file by path", true, FindFile),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar),
+        CommandSpec::new(
+            "isearch-backward",
+            "Search backward incrementally",
+            true,
+            IncrementalSearchBackward,
+        ),
+        CommandSpec::new(
+            "isearch-forward",
+            "Search forward incrementally",
+            true,
+            IncrementalSearchForward,
+        ),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
@@ -133,6 +147,8 @@ mod tests {
         );
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
+        assert!(registry.contains("isearch-forward"));
+        assert!(registry.contains("isearch-backward"));
         assert!(!registry.contains("save"));
     }
 }

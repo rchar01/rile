@@ -79,7 +79,19 @@ Milestone 6 adds minibuffer prompt transitions:
 - `C-g` cancels prompts and prefix keys;
 - tests cover prompt editing, command prompts, file prompts, status/error messages, and cancellation.
 
-Current limitations: there is no scrolling, no prompt cursor movement, no file-name completion, no unsaved-changes quit confirmation, and no undo wiring yet.
+Milestone 7 adds incremental search:
+
+- `C-s` starts forward incremental search;
+- `C-r` starts backward incremental search;
+- typed query text updates the current match live;
+- repeated `C-s` and `C-r` jump to the next or previous match;
+- Enter accepts the current match;
+- `C-g` cancels search and restores the original cursor position;
+- active search uses `render::Face::CurrentSearchMatch` and `render::Face::SearchMatch` spans;
+- the terminal renderer displays active search spans with ANSI highlighting;
+- tests cover UTF-8 matches, repeated search, cancellation, failed search, and ANSI span rendering.
+
+Current limitations: there is no scrolling, no prompt cursor movement, no file-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
 
 ## Line Ending Policy
 

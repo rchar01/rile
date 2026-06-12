@@ -13,6 +13,7 @@ pub struct MinibufferState {
 pub enum PromptKind {
     ExtendedCommand,
     FindFile,
+    IncrementalSearch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,6 +52,12 @@ impl MinibufferState {
 
     pub fn prompt_input(&self) -> Option<&str> {
         self.prompt.as_ref().map(|prompt| prompt.input.as_str())
+    }
+
+    pub fn set_prompt_label(&mut self, label: impl Into<String>) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.label = label.into();
+        }
     }
 
     pub fn insert_prompt_text(&mut self, text: &str) {

@@ -8,6 +8,7 @@ use std::path::Path;
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
+use crate::render::{DecorationProvider, Face, Span};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -233,8 +234,10 @@ where
         for row in 0..text_rows {
             self.screen.terminal.move_cursor(row + 1, 1)?;
             self.screen.terminal.clear_line()?;
-            if let Some(line) = editor.document().buffer().line(usize::from(row)) {
-                self.screen.terminal.write_text(line)?;
+            let line_index = usize::from(row);
+            if let Some(line) = editor.document().buffer().line(line_index) {
+                let spans = editor.spans_for_line(line_index, line);
+                write_line_with_spans(&mut self.screen.terminal, line, &spans)?;
             } else {
                 self.screen.terminal.write_text("~")?;
             }
@@ -261,6 +264,43 @@ where
             .terminal
             .move_cursor(cursor_row.max(1), cursor_column as u16)?;
         self.screen.terminal.flush()
+    }
+}
+
+fn write_line_with_spans<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    line: &str,
+    spans: &[Span],
+) -> Result<()> {
+    let mut cursor = 0;
+    for span in spans {
+        if span.start_byte >= span.end_byte
+            || span.end_byte > line.len()
+            || !line.is_char_boundary(span.start_byte)
+            || !line.is_char_boundary(span.end_byte)
+            || span.start_byte < cursor
+        {
+            continue;
+        }
+
+        terminal.write_text(&line[cursor..span.start_byte])?;
+        if let Some(start_code) = face_start_code(span.face) {
+            terminal.write_text(start_code)?;
+            terminal.write_text(&line[span.start_byte..span.end_byte])?;
+            terminal.write_text("\x1b[0m")?;
+        } else {
+            terminal.write_text(&line[span.start_byte..span.end_byte])?;
+        }
+        cursor = span.end_byte;
+    }
+    terminal.write_text(&line[cursor..])
+}
+
+fn face_start_code(face: Face) -> Option<&'static str> {
+    match face {
+        Face::CurrentSearchMatch => Some("\x1b[7m"),
+        Face::SearchMatch => Some("\x1b[4m"),
+        _ => None,
     }
 }
 
@@ -294,7 +334,8 @@ impl<W: Write> Drop for ScreenGuard<W> {
 
 #[cfg(test)]
 mod tests {
-    use super::AnsiTerminal;
+    use super::{AnsiTerminal, write_line_with_spans};
+    use crate::render::{Face, Span};
 
     #[test]
     fn writes_buffered_ansi_sequences() {
@@ -307,6 +348,30 @@ mod tests {
         assert_eq!(
             terminal.into_inner(),
             b"\x1b[?25l\x1b[2;3H\x1b[2Kstatus".to_vec()
+        );
+    }
+
+    #[test]
+    fn renders_search_spans_with_ansi_faces() {
+        let spans = [
+            Span {
+                start_byte: 0,
+                end_byte: 3,
+                face: Face::CurrentSearchMatch,
+            },
+            Span {
+                start_byte: 4,
+                end_byte: 7,
+                face: Face::SearchMatch,
+            },
+        ];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_line_with_spans(&mut terminal, "one two", &spans).expect("render should succeed");
+
+        assert_eq!(
+            terminal.into_inner(),
+            b"\x1b[7mone\x1b[0m \x1b[4mtwo\x1b[0m".to_vec()
         );
     }
 }

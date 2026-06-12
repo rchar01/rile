@@ -7,6 +7,7 @@ use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
+use crate::render::{DecorationProvider, Face, Span};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,6 +25,36 @@ pub struct Editor {
     keymap: KeyMap,
     commands: CommandRegistry,
     minibuffer: MinibufferState,
+    search: Option<SearchState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SearchDirection {
+    Forward,
+    Backward,
+}
+
+impl SearchDirection {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Forward => "I-search: ",
+            Self::Backward => "I-search backward: ",
+        }
+    }
+
+    fn failing_label(self) -> &'static str {
+        match self {
+            Self::Forward => "Failing I-search: ",
+            Self::Backward => "Failing I-search backward: ",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SearchState {
+    direction: SearchDirection,
+    origin: Position,
+    current: Option<TextRange>,
 }
 
 impl Editor {
@@ -36,6 +67,7 @@ impl Editor {
             keymap: KeyMap::default(),
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
+            search: None,
         }
     }
 
@@ -113,6 +145,10 @@ impl Editor {
     }
 
     fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        if self.minibuffer.prompt_kind() == Some(PromptKind::IncrementalSearch) {
+            return self.handle_search_prompt_key(key);
+        }
+
         match key {
             KeyEvent::Special(SpecialKey::Enter) => {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
@@ -142,6 +178,7 @@ impl Editor {
         match kind {
             PromptKind::ExtendedCommand => self.execute_command_by_name(input),
             PromptKind::FindFile => self.find_file(input),
+            PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
         }
     }
 
@@ -157,6 +194,8 @@ impl Editor {
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
             ForwardChar => self.move_forward(),
+            IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
+            IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             NextLine => self.move_line(1),
             PreviousLine => self.move_line(-1),
             SaveBuffer => self.save_buffer(),
@@ -279,9 +318,254 @@ impl Editor {
         Ok(EditorOutcome::Continue)
     }
 
+    fn start_incremental_search(&mut self, direction: SearchDirection) -> Result<()> {
+        self.search = Some(SearchState {
+            direction,
+            origin: self.cursor,
+            current: None,
+        });
+        self.minibuffer
+            .start_prompt(PromptKind::IncrementalSearch, direction.label());
+        Ok(())
+    }
+
+    fn handle_search_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        match key {
+            KeyEvent::Special(SpecialKey::Enter) => {
+                self.minibuffer.clear();
+                self.search = None;
+            }
+            KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                if let Some(search) = self.search.take() {
+                    self.cursor = search.origin;
+                    self.goal_display_column = None;
+                }
+                self.minibuffer.cancel_prompt();
+            }
+            KeyEvent::Special(SpecialKey::Backspace) => {
+                self.minibuffer.delete_prompt_grapheme_backward();
+                self.update_incremental_search()?;
+            }
+            KeyEvent::Ctrl('s') => self.repeat_incremental_search(SearchDirection::Forward)?,
+            KeyEvent::Ctrl('r') => self.repeat_incremental_search(SearchDirection::Backward)?,
+            KeyEvent::Text(text) => {
+                self.minibuffer.insert_prompt_text(&text);
+                self.update_incremental_search()?;
+            }
+            KeyEvent::Special(SpecialKey::Tab) => {}
+            _ => {}
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn update_incremental_search(&mut self) -> Result<()> {
+        let Some(query) = self.minibuffer.prompt_input().map(str::to_owned) else {
+            return Ok(());
+        };
+        let Some(search) = self.search.as_ref() else {
+            return Ok(());
+        };
+
+        let origin = search.origin;
+        let direction = search.direction;
+        if query.is_empty() {
+            if let Some(search) = &mut self.search {
+                search.current = None;
+            }
+            self.cursor = origin;
+            self.goal_display_column = None;
+            self.minibuffer.set_prompt_label(direction.label());
+            return Ok(());
+        }
+
+        let found = find_match(self.document.buffer(), &query, origin, direction)?;
+        if let Some(range) = found {
+            if let Some(search) = &mut self.search {
+                search.current = Some(range);
+            }
+            self.cursor = range.start;
+            self.goal_display_column = None;
+            self.minibuffer.set_prompt_label(direction.label());
+        } else {
+            if let Some(search) = &mut self.search {
+                search.current = None;
+            }
+            self.cursor = origin;
+            self.goal_display_column = None;
+            self.minibuffer.set_prompt_label(direction.failing_label());
+        }
+        Ok(())
+    }
+
+    fn repeat_incremental_search(&mut self, direction: SearchDirection) -> Result<()> {
+        let Some(query) = self.minibuffer.prompt_input().map(str::to_owned) else {
+            return Ok(());
+        };
+        let Some(search) = self.search.as_ref() else {
+            return Ok(());
+        };
+
+        let previous_cursor = self.cursor;
+        let start = match (direction, search.current) {
+            (SearchDirection::Forward, Some(range)) => {
+                search_start_after(self.document.buffer(), range.start)?
+            }
+            (SearchDirection::Backward, Some(range)) => range.start,
+            (_, None) => search.origin,
+        };
+
+        if let Some(search) = &mut self.search {
+            search.direction = direction;
+        }
+
+        if query.is_empty() {
+            self.minibuffer.set_prompt_label(direction.label());
+            return Ok(());
+        }
+
+        let found = find_match(self.document.buffer(), &query, start, direction)?;
+        if let Some(range) = found {
+            if let Some(search) = &mut self.search {
+                search.current = Some(range);
+            }
+            self.cursor = range.start;
+            self.goal_display_column = None;
+            self.minibuffer.set_prompt_label(direction.label());
+        } else {
+            if let Some(search) = &mut self.search {
+                search.current = None;
+            }
+            self.cursor = previous_cursor;
+            self.minibuffer.set_prompt_label(direction.failing_label());
+        }
+        Ok(())
+    }
+
     fn clear_key_sequence(&mut self) {
         self.key_sequence.clear();
     }
+}
+
+impl DecorationProvider for Editor {
+    fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        let Some(search) = &self.search else {
+            return Vec::new();
+        };
+        let Some(query) = self.minibuffer.prompt_input() else {
+            return Vec::new();
+        };
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        line.match_indices(query)
+            .map(|(start, match_text)| {
+                let end = start + match_text.len();
+                let face = if search.current
+                    == Some(TextRange::new(
+                        Position::new(line_index, start),
+                        Position::new(line_index, end),
+                    )) {
+                    Face::CurrentSearchMatch
+                } else {
+                    Face::SearchMatch
+                };
+                Span {
+                    start_byte: start,
+                    end_byte: end,
+                    face,
+                }
+            })
+            .collect()
+    }
+}
+
+fn find_match(
+    buffer: &crate::buffer::Buffer,
+    query: &str,
+    start: Position,
+    direction: SearchDirection,
+) -> Result<Option<TextRange>> {
+    buffer.validate_position(start)?;
+    if query.is_empty() {
+        return Ok(None);
+    }
+
+    match direction {
+        SearchDirection::Forward => find_forward(buffer, query, start),
+        SearchDirection::Backward => find_backward(buffer, query, start),
+    }
+}
+
+fn find_forward(
+    buffer: &crate::buffer::Buffer,
+    query: &str,
+    start: Position,
+) -> Result<Option<TextRange>> {
+    for line_index in start.line..buffer.line_count() {
+        let line = buffer.line(line_index).expect("line index is in range");
+        let minimum_byte = if line_index == start.line {
+            start.byte
+        } else {
+            0
+        };
+        if let Some((match_start, match_text)) = line
+            .match_indices(query)
+            .find(|(match_start, _)| *match_start >= minimum_byte)
+        {
+            return Ok(Some(TextRange::new(
+                Position::new(line_index, match_start),
+                Position::new(line_index, match_start + match_text.len()),
+            )));
+        }
+    }
+    Ok(None)
+}
+
+fn find_backward(
+    buffer: &crate::buffer::Buffer,
+    query: &str,
+    start: Position,
+) -> Result<Option<TextRange>> {
+    for line_index in (0..=start.line).rev() {
+        let line = buffer.line(line_index).expect("line index is in range");
+        let maximum_byte = if line_index == start.line {
+            start.byte
+        } else {
+            line.len()
+        };
+        if let Some((match_start, match_text)) = line
+            .match_indices(query)
+            .filter(|(match_start, _)| *match_start < maximum_byte)
+            .last()
+        {
+            return Ok(Some(TextRange::new(
+                Position::new(line_index, match_start),
+                Position::new(line_index, match_start + match_text.len()),
+            )));
+        }
+    }
+    Ok(None)
+}
+
+fn search_start_after(buffer: &crate::buffer::Buffer, position: Position) -> Result<Position> {
+    buffer.validate_position(position)?;
+    let line = buffer.line(position.line).expect("line index is in range");
+    if position.byte < line.len() {
+        let character_width = line[position.byte..]
+            .chars()
+            .next()
+            .expect("position before line end has a character")
+            .len_utf8();
+        return Ok(Position::new(
+            position.line,
+            position.byte + character_width,
+        ));
+    }
+    if position.line + 1 < buffer.line_count() {
+        return Ok(Position::new(position.line + 1, 0));
+    }
+    Ok(buffer.end_position())
 }
 
 #[cfg(test)]
@@ -294,6 +578,7 @@ mod tests {
     use crate::buffer::Position;
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
+    use crate::render::{DecorationProvider, Face};
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -550,6 +835,123 @@ mod tests {
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Error: missing file name")
+        );
+    }
+
+    #[test]
+    fn incremental_search_forward_updates_live_with_utf8_highlights() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\nécho écho")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("é".to_owned()))
+            .expect("search input should update");
+
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("I-search: é")
+        );
+
+        let spans = editor.spans_for_line(1, "écho écho");
+        assert_eq!(spans.len(), 2);
+        assert_eq!(spans[0].start_byte, 0);
+        assert_eq!(spans[0].end_byte, "é".len());
+        assert_eq!(spans[0].face, Face::CurrentSearchMatch);
+        assert_eq!(spans[1].face, Face::SearchMatch);
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("search accept should keep match");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert_eq!(editor.minibuffer().prompt(), None);
+    }
+
+    #[test]
+    fn incremental_search_repeats_forward_and_backward() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo bar foo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        for character in "foo".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should move");
+        assert_eq!(editor.cursor(), Position::new(0, "foo bar ".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("repeat backward should move");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn incremental_search_cancel_restores_original_cursor() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        for character in "two".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+        assert_eq!(editor.cursor(), Position::new(0, "one ".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("cancel should restore point");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+        assert_eq!(editor.minibuffer().prompt(), None);
+    }
+
+    #[test]
+    fn incremental_search_reports_failing_query() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("query should update");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing I-search: z")
         );
     }
 }

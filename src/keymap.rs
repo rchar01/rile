@@ -80,6 +80,8 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('e')], "end-of-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::End)], "end-of-line"),
         KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
+        KeyBinding::new([KeyEvent::Ctrl('s')], "isearch-forward"),
+        KeyBinding::new([KeyEvent::Ctrl('r')], "isearch-backward"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::Delete)], "delete-char"),
         KeyBinding::new(
             [KeyEvent::Special(SpecialKey::Backspace)],
@@ -107,6 +109,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('f')]),
             KeyResolution::Command("forward-char")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('s')]),
+            KeyResolution::Command("isearch-forward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('r')]),
+            KeyResolution::Command("isearch-backward")
         );
     }
 
