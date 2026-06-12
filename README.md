@@ -19,7 +19,7 @@ Current binary behavior:
 cargo run -- [file]
 ```
 
-Editing mode requires an interactive terminal. `--help` and `--version` work without one. When a file path is provided, Rile opens it as UTF-8 before entering raw mode and shows basic file/dirty state in the mode line.
+Editing mode requires an interactive terminal. `--help` and `--version` work without one. When no file is provided, Rile opens a clean `*Rile*` welcome buffer. When a file path is provided, Rile opens it as UTF-8 before entering raw mode and shows file/dirty state, position, and major mode in the mode line.
 
 Basic editor keys:
 
@@ -57,7 +57,7 @@ Basic editor keys:
 Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
-Window splitting stores per-window cursor state and scrolls automatically to keep point visible.
+Window splitting stores per-window cursor state and scrolls automatically to keep point visible. Empty rows are left blank rather than filled with marker characters.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
 
 ## Configuration

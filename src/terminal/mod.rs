@@ -182,7 +182,7 @@ pub fn run_basic_editor(file: Option<&Path>) -> Result<()> {
 
     let document = match file {
         Some(path) => Document::open(path)?,
-        None => Document::scratch(),
+        None => Document::welcome(),
     };
     let mut editor = Editor::with_config(document, Config::load()?);
 
@@ -333,15 +333,16 @@ fn draw_window<W: Write>(
                 },
             )?;
         } else {
-            write_fixed_width_text(terminal, "~", text_columns)?;
+            write_fixed_width_text(terminal, "", text_columns)?;
         }
     }
 
     let mode_line_row = layout.rect.row + layout.rect.rows;
     terminal.move_cursor(mode_line_row as u16, (layout.rect.column + 1) as u16)?;
     let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
+    let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
     let mode_line = format!(
-        "{}{} | ({major_mode}) | C-x C-s save | C-x C-c quit | M-x",
+        "{}{}   {position}   ({major_mode})",
         if layout.id == editor.current_window_id() {
             "* "
         } else {
@@ -356,6 +357,29 @@ fn draw_window<W: Write>(
         Face::ModeLine,
         editor.theme(),
     )
+}
+
+fn mode_line_position(
+    buffer: &Buffer,
+    viewport: &Viewport,
+    text_rows: usize,
+    tab_width: usize,
+) -> Result<String> {
+    let cursor = viewport.cursor;
+    buffer.validate_position(cursor)?;
+    let line_count = buffer.line_count();
+    let visible_end = viewport.first_visible_line.saturating_add(text_rows);
+    let location = if viewport.first_visible_line == 0 && visible_end >= line_count {
+        "All".to_owned()
+    } else if viewport.first_visible_line == 0 {
+        "Top".to_owned()
+    } else if visible_end >= line_count {
+        "Bot".to_owned()
+    } else {
+        format!("{}%", ((cursor.line + 1) * 100 / line_count).clamp(1, 99))
+    };
+    let column = cursor_absolute_display_column(buffer, cursor, tab_width)?;
+    Ok(format!("{location} ({},{column})", cursor.line + 1))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -654,15 +678,16 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnsiTerminal, TerminalSize, draw_editor_frame, write_fixed_width_text_with_face,
-        write_line_number_gutter, write_line_with_spans,
+        AnsiTerminal, TerminalSize, draw_editor_frame, mode_line_position,
+        write_fixed_width_text_with_face, write_line_number_gutter, write_line_with_spans,
     };
-    use crate::buffer::Position;
+    use crate::buffer::{Buffer, BufferId, Position};
     use crate::config::ThemeName;
     use crate::editor::Editor;
     use crate::file::Document;
     use crate::input::KeyEvent;
     use crate::render::{Face, Span};
+    use crate::window::Viewport;
 
     #[test]
     fn writes_buffered_ansi_sequences() {
@@ -739,6 +764,30 @@ mod tests {
             .expect("gutter should render");
 
         assert_eq!(terminal.into_inner(), b"\x1b[2m 9 \x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn formats_mode_line_position_like_emacs() {
+        let buffer = Buffer::from_text("one\ntwo\nthree\nfour\nfive");
+        let mut viewport = Viewport::new(BufferId(0));
+
+        assert_eq!(
+            mode_line_position(&buffer, &viewport, 10, 4).expect("position should format"),
+            "All (1,0)"
+        );
+
+        viewport.cursor = Position::new(2, 0);
+        assert_eq!(
+            mode_line_position(&buffer, &viewport, 2, 4).expect("position should format"),
+            "Top (3,0)"
+        );
+
+        viewport.first_visible_line = 3;
+        viewport.cursor = Position::new(4, 0);
+        assert_eq!(
+            mode_line_position(&buffer, &viewport, 2, 4).expect("position should format"),
+            "Bot (5,0)"
+        );
     }
 
     #[test]

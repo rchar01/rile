@@ -15,6 +15,7 @@ static SAVE_COUNTER: AtomicU64 = AtomicU64::new(0);
 pub struct Document {
     buffer: Buffer,
     path: Option<PathBuf>,
+    name: Option<String>,
     missing_on_open: bool,
 }
 
@@ -23,6 +24,21 @@ impl Document {
         Self {
             buffer: Buffer::new(),
             path: None,
+            name: None,
+            missing_on_open: false,
+        }
+    }
+
+    pub fn welcome() -> Self {
+        Self {
+            buffer: Buffer::from_text(
+                "Welcome to Rile.\n\n\
+C-x C-f  Find file    C-x C-s  Save buffer    C-x C-c  Quit\n\
+C-s      Search       M-%      Query replace  M-x      Command\n\n\
+Rile is free software under GPL-3.0-or-later.\n",
+            ),
+            path: None,
+            name: Some("*Rile*".to_owned()),
             missing_on_open: false,
         }
     }
@@ -41,12 +57,14 @@ impl Document {
                 Ok(Self {
                     buffer: Buffer::from_text(&text),
                     path: Some(path),
+                    name: None,
                     missing_on_open: false,
                 })
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 buffer: Buffer::new(),
                 path: Some(path),
+                name: None,
                 missing_on_open: true,
             }),
             Err(error) => Err(error.into()),
@@ -66,10 +84,12 @@ impl Document {
     }
 
     pub fn display_name(&self) -> String {
-        self.path
-            .as_ref()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "*scratch*".to_owned())
+        self.name.clone().unwrap_or_else(|| {
+            self.path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "*scratch*".to_owned())
+        })
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -93,6 +113,7 @@ impl Document {
         let path = path.as_ref().to_path_buf();
         self.write_to_path(&path)?;
         self.path = Some(path);
+        self.name = None;
         self.missing_on_open = false;
         Ok(())
     }
@@ -224,6 +245,23 @@ mod tests {
         assert_eq!(document.buffer().serialize(), "");
         assert!(!document.is_dirty());
         assert!(document.missing_on_open());
+    }
+
+    #[test]
+    fn welcome_document_is_named_and_clean() {
+        let directory = TestDir::new();
+        let path = directory.path().join("welcome.txt");
+        let mut document = Document::welcome();
+
+        assert_eq!(document.display_name(), "*Rile*");
+        assert!(document.buffer().serialize().contains("Welcome to Rile."));
+        assert!(!document.is_dirty());
+
+        document
+            .save_as(&path)
+            .expect("welcome should save as file");
+        assert_eq!(document.path(), Some(path.as_path()));
+        assert_eq!(document.display_name(), path.display().to_string());
     }
 
     #[test]

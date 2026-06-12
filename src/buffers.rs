@@ -142,7 +142,7 @@ impl BufferManager {
             .path()
             .and_then(Path::file_name)
             .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "*scratch*".to_owned());
+            .unwrap_or_else(|| document.display_name());
         if self.entries.iter().any(|entry| entry.name == base) {
             format!("{base}<{}>", id.0)
         } else {
