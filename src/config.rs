@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Rile contributors
+// SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::fs;
@@ -27,6 +27,7 @@ pub struct Config {
     pub line_numbers: bool,
     pub syntax_highlighting: bool,
     pub search_highlighting: bool,
+    pub backup_on_save: bool,
     pub theme: ThemeName,
 }
 
@@ -37,6 +38,7 @@ impl Default for Config {
             line_numbers: false,
             syntax_highlighting: true,
             search_highlighting: true,
+            backup_on_save: false,
             theme: ThemeName::Default,
         }
     }
@@ -80,6 +82,7 @@ impl Config {
                 "search_highlighting" => {
                     config.search_highlighting = parse_bool(value, line_number)?;
                 }
+                "backup_on_save" => config.backup_on_save = parse_bool(value, line_number)?,
                 "theme" => config.theme = parse_theme(value, line_number)?,
                 _ => return Err(config_error(line_number, format!("unknown key `{key}`"))),
             }
@@ -169,6 +172,7 @@ mod tests {
             line_numbers = true
             syntax_highlighting = false
             search_highlighting = false
+            backup_on_save = true
             theme = "mono"
             "#,
         )
@@ -178,6 +182,7 @@ mod tests {
         assert!(config.line_numbers);
         assert!(!config.syntax_highlighting);
         assert!(!config.search_highlighting);
+        assert!(config.backup_on_save);
         assert_eq!(config.theme, ThemeName::Mono);
     }
 
@@ -185,6 +190,7 @@ mod tests {
     fn rejects_invalid_config_values() {
         assert!(Config::parse("tab_width = 0").is_err());
         assert!(Config::parse("line_numbers = yes").is_err());
+        assert!(Config::parse("backup_on_save = sometimes").is_err());
         assert!(Config::parse("theme = \"solarized\"").is_err());
         assert!(Config::parse("unknown = true").is_err());
     }

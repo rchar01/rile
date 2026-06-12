@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Rile contributors
+SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
@@ -8,6 +8,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 ## Repository Scope
 
 `rile/` is the implementation project and intended distributable repository. The parent `rile-lab/` workspace is private research context and is not part of the Rile crate.
+
+The official repository is <https://codeberg.org/rch/rile>. Rile is copyrighted by Robert Charusta <rch-public@posteo.net>.
 
 ## Current Scope
 
@@ -173,6 +175,7 @@ Post-Milestone 14 UX polish adds a clean `*Rile*` welcome buffer for no-file lau
 Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
+The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.
 
 ## Line Ending Policy
 
@@ -190,7 +193,13 @@ Rile currently uses direct Unix termios and ANSI escape sequences with only the 
 
 ## License
 
-Rile is licensed as `GPL-3.0-or-later`. Keep `COPYING` as the canonical GPLv3 license text and add SPDX identifiers to new source and documentation files.
+Rile is copyrighted by Robert Charusta <rch-public@posteo.net> and licensed as `GPL-3.0-or-later`. Keep `COPYING` as the canonical GPLv3 license text and add SPDX identifiers to new source and documentation files.
+
+## Release History Files
+
+Maintain `NEWS` for user-visible release notes, with newest releases first. Keep entries concise and focused on behavior users need to know about.
+
+Maintain `ChangeLog` in GNU-style plain text for file-level maintenance history, with newest entries first. Git remains the detailed history; `ChangeLog` should summarize coherent changes rather than mechanically duplicating every commit.
 
 ## Quality Gate
 
@@ -285,4 +294,4 @@ On this host, only `./scripts/build` and `./scripts/test-cargo` are expected to 
 
 ## CI Status
 
-CI is deferred until `rile/` is initialized as a hosted Git repository. Milestone 1 inspection could not read Git status or remotes from `rile/` in this workspace. Future CI should call the same scripts used by `make verify`; it should not call `scripts/devshell`.
+CI is deferred until it is configured for the official repository. Future CI should call the same scripts used by `make verify`; it should not call `scripts/devshell`.

@@ -1,0 +1,61 @@
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* NEWS: New file.
+	* ChangeLog: New file.
+	* Cargo.toml: Add official repository metadata.  Update copyright.
+	* README.md: Document official repository, copyright, NEWS, and
+	ChangeLog.
+	* NOTICE.md: Document official repository and copyright holder.
+	* docs/development.md: Document release-history file policy and update
+	copyright guidance.
+	* Containerfile.dev, Makefile, deny.toml, .containerignore, scripts/*,
+	src/*.rs, src/buffer/*.rs, src/render/*.rs, src/terminal/*.rs: Update
+	SPDX copyright holder.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* src/config.rs (Config): Add backup_on_save option.
+	* src/file.rs (Document): Store backup_on_save and write sibling file~
+	backups before saving existing files when enabled.
+	* src/buffers.rs (BufferManager::open_path_with_backup): Open new
+	buffers with the configured backup policy.
+	* src/editor.rs (Editor): Apply backup policy to startup and newly
+	opened buffers.
+	* README.md, docs/development.md: Document backup_on_save.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* src/file.rs (Document::open): Reject NUL-containing binary files
+	before UTF-8 decoding.
+	* src/terminal/mod.rs: Add regression coverage for repeated C-p redraws
+	while scrolling.
+	* README.md, docs/development.md: Document binary-file detection.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* src/file.rs (Document::welcome): Add *Rile* welcome document.
+	* src/buffers.rs (BufferManager::unique_name): Use document display
+	names for unnamed special buffers.
+	* src/terminal/mod.rs: Use the welcome buffer for no-file startup,
+	leave unused rows blank, and show compact mode-line position text.
+	* README.md, docs/development.md: Document welcome buffer, blank rows,
+	and mode-line position display.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
+	* src/buffer/mod.rs: Add UTF-8-safe buffer operations, grapheme and word
+	motion, display-width helpers, dirty tracking, and final-newline
+	tracking.
+	* src/file.rs: Add strict UTF-8 open, missing-file buffers, safe save,
+	and save-as behavior.
+	* src/editor.rs, src/command.rs, src/keymap.rs: Add core Emacs-style
+	commands, key bindings, minibuffer workflows, search, query replace,
+	region editing, kill/yank, undo, buffer management, window management,
+	configuration, and toggles.
+	* src/render/mod.rs, src/syntax.rs, src/terminal/mod.rs: Add face spans,
+	decoration merging, terminal rendering, syntax highlighting, mode-line
+	faces, viewport scrolling, and cursor redraw coverage.
+	* Containerfile.dev, Makefile, scripts/*, deny.toml: Add containerized
+	build, format, test, lint, audit, unused-dependency, and verify tasks.
+	* COPYING, NOTICE.md, README.md, docs/development.md: Add GPL licensing,
+	clean-room reference notices, user documentation, and development notes.

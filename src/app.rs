@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Rile contributors
+// SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::ffi::{OsStr, OsString};

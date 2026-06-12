@@ -1,11 +1,15 @@
 <!--
-SPDX-FileCopyrightText: 2026 Rile contributors
+SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
 # Rile Notice
 
 Rile is free software licensed under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+
+Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
+
+The official Rile repository is <https://codeberg.org/rch/rile>.
 
 See `COPYING` for the full GPLv3 license text.
 

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Rile contributors
+// SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::path::Path;
@@ -86,6 +86,14 @@ impl BufferManager {
     }
 
     pub fn open_path(&mut self, path: impl AsRef<Path>) -> Result<OpenBufferResult> {
+        self.open_path_with_backup(path, false)
+    }
+
+    pub fn open_path_with_backup(
+        &mut self,
+        path: impl AsRef<Path>,
+        backup_on_save: bool,
+    ) -> Result<OpenBufferResult> {
         let path = path.as_ref();
         if let Some(entry) = self
             .entries
@@ -98,7 +106,9 @@ impl BufferManager {
             });
         }
 
-        let id = self.push(Document::open(path)?);
+        let mut document = Document::open(path)?;
+        document.set_backup_on_save(backup_on_save);
+        let id = self.push(document);
         Ok(OpenBufferResult { id, created: true })
     }
 

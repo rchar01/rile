@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2026 Rile contributors
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 [package]
@@ -8,6 +8,7 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 description = "A small UTF-8-capable terminal Emacs-style editor."
 readme = "README.md"
+repository = "https://codeberg.org/rch/rile"
 
 [dependencies]
 libc = "0.2"

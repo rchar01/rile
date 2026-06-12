@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Rile contributors
+// SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use crate::buffer::undo::UndoRecord;
@@ -42,6 +42,7 @@ pub struct Editor {
     search_highlighting: bool,
     line_numbers: bool,
     tab_width: usize,
+    backup_on_save: bool,
     theme: ThemeName,
 }
 
@@ -101,7 +102,8 @@ impl Editor {
         Self::with_config(document, Config::default())
     }
 
-    pub fn with_config(document: Document, config: Config) -> Self {
+    pub fn with_config(mut document: Document, config: Config) -> Self {
+        document.set_backup_on_save(config.backup_on_save);
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
         Self {
@@ -124,6 +126,7 @@ impl Editor {
             search_highlighting: config.search_highlighting,
             line_numbers: config.line_numbers,
             tab_width: config.tab_width,
+            backup_on_save: config.backup_on_save,
             theme: config.theme,
         }
     }
@@ -723,7 +726,10 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         }
 
-        match self.buffers.open_path(path) {
+        match self
+            .buffers
+            .open_path_with_backup(path, self.backup_on_save)
+        {
             Ok(opened) => {
                 self.current_buffer = opened.id;
                 self.cursor = Position::new(0, 0);
@@ -2276,6 +2282,7 @@ mod tests {
                 line_numbers: true,
                 syntax_highlighting: false,
                 search_highlighting: false,
+                backup_on_save: true,
                 theme: ThemeName::Mono,
             },
         );
@@ -2284,6 +2291,7 @@ mod tests {
         assert!(editor.line_numbers());
         assert!(!editor.syntax_enabled());
         assert!(!editor.search_highlighting());
+        assert!(editor.document().backup_on_save());
         assert_eq!(editor.theme(), ThemeName::Mono);
 
         editor

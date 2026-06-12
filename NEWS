@@ -1,0 +1,62 @@
+Rile NEWS -- user-visible changes.
+
+Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>
+SPDX-License-Identifier: GPL-3.0-or-later
+
+
+Rile 0.1.0 (unreleased)
+=========================
+
+This is the first planned Rile release.  Rile is a small,
+terminal-native, UTF-8-capable Emacs-style editor written in Rust.
+
+Editing features:
+
+* Open existing UTF-8 files and create missing files from the terminal.
+* Save through a same-directory temporary file and rename.
+* Insert printable UTF-8 text, tabs, and new lines.
+* Move by character, line, beginning/end of line, and word.
+* Delete characters, kill lines, set a mark, kill/copy regions, and yank.
+* Undo current-buffer edits with grouped normal typing.
+* Run exact-name commands through M-x.
+
+Interface features:
+
+* Start with a clean *Rile* welcome buffer when no file is given.
+* Display Emacs-style mode lines with buffer state, position, and major
+  mode.
+* Use blank unused rows instead of marker characters.
+* Manage multiple buffers with C-x b and C-x k.
+* Split, delete, and select windows with common Emacs key bindings.
+* Scroll viewports automatically to keep point visible.
+* Use minibuffer prompts for commands, file names, buffers, search, and
+  query replace.
+
+Search and replacement:
+
+* Incremental forward and backward search with visible matches.
+* Interactive query replace with y, n, !, q, Escape, and C-g choices.
+* Search and query replace are exact UTF-8 substring matching within
+  individual lines.  They do not wrap around the buffer or match across
+  line breaks yet.
+
+Display and configuration:
+
+* Highlight Rust, C, shell, Markdown, and TOML using simple line-local
+  highlighters.
+* Select Emacs-style major-mode names from file extensions.
+* Configure tab width, line numbers, syntax highlighting, search
+  highlighting, theme, and optional save backups in
+  ~/.config/rile/config.toml.
+* Toggle line numbers, syntax highlighting, and search highlighting from
+  M-x.
+* Use either the default colored theme or a mostly monochrome theme.
+
+Hardening and development:
+
+* Reject invalid UTF-8 and NUL-containing binary files instead of opening
+  them lossily.
+* Optionally write sibling file~ backups before saving existing files.
+* Provide GPL-3.0-or-later licensing, clean-room reference notices,
+  containerized development tooling, and a canonical make verify quality
+  gate.

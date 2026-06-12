@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2026 Rile contributors
+// SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::fs::{self, OpenOptions};
@@ -17,6 +17,7 @@ pub struct Document {
     path: Option<PathBuf>,
     name: Option<String>,
     missing_on_open: bool,
+    backup_on_save: bool,
 }
 
 impl Document {
@@ -26,6 +27,7 @@ impl Document {
             path: None,
             name: None,
             missing_on_open: false,
+            backup_on_save: false,
         }
     }
 
@@ -40,6 +42,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Rile*".to_owned()),
             missing_on_open: false,
+            backup_on_save: false,
         }
     }
 
@@ -66,6 +69,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                     path: Some(path),
                     name: None,
                     missing_on_open: false,
+                    backup_on_save: false,
                 })
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
@@ -73,6 +77,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                 path: Some(path),
                 name: None,
                 missing_on_open: true,
+                backup_on_save: false,
             }),
             Err(error) => Err(error.into()),
         }
@@ -107,6 +112,14 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.missing_on_open
     }
 
+    pub fn backup_on_save(&self) -> bool {
+        self.backup_on_save
+    }
+
+    pub fn set_backup_on_save(&mut self, enabled: bool) {
+        self.backup_on_save = enabled;
+    }
+
     pub fn save(&mut self) -> Result<()> {
         let Some(path) = self.path.clone() else {
             return Err(RileError::InvalidInput(
@@ -137,6 +150,9 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     fn write_to_path(&mut self, path: &Path) -> Result<()> {
+        if self.backup_on_save {
+            write_backup(path)?;
+        }
         safe_write(path, self.buffer.serialize().as_bytes())?;
         self.buffer.mark_clean();
         self.missing_on_open = false;
@@ -151,6 +167,29 @@ pub fn safe_write(path: &Path, bytes: &[u8]) -> Result<()> {
         let _ = fs::remove_file(&temporary);
     }
     write_result
+}
+
+fn write_backup(path: &Path) -> Result<()> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => {
+            let bytes = fs::read(path)?;
+            safe_write(&backup_path(path), &bytes)
+        }
+        Ok(_) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn backup_path(path: &Path) -> PathBuf {
+    let mut backup = PathBuf::from(path);
+    let mut file_name = path
+        .file_name()
+        .map(|name| name.to_os_string())
+        .unwrap_or_else(|| "rile-buffer".into());
+    file_name.push("~");
+    backup.set_file_name(file_name);
+    backup
 }
 
 fn write_temporary_then_rename(temporary: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
@@ -306,6 +345,49 @@ mod tests {
         );
         assert!(!document.is_dirty());
         assert!(!document.missing_on_open());
+    }
+
+    #[test]
+    fn save_writes_backup_when_enabled() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), "\nnew")
+            .expect("insert should succeed");
+
+        document.save().expect("save should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old\nnew"
+        );
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+        assert!(!document.is_dirty());
+    }
+
+    #[test]
+    fn save_does_not_write_backup_by_default() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), "\nnew")
+            .expect("insert should succeed");
+
+        document.save().expect("save should succeed");
+
+        assert!(!backup.exists());
     }
 
     #[test]

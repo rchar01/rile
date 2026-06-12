@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 Rile contributors
+SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
@@ -8,6 +8,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 Rile Is Lightweight Emacs.
 
 Rile is planned as a small, fast, terminal-native, Emacs-style text editor written in Rust. The v1 goal is practical daily editing of source files, config files, Markdown, and normal UTF-8 text.
+
+Official repository: <https://codeberg.org/rch/rile>
 
 ## Status
 
@@ -69,6 +71,7 @@ tab_width = 4
 line_numbers = false
 syntax_highlighting = true
 search_highlighting = true
+backup_on_save = false # when true, save previous contents to file~
 theme = "default" # or "mono"
 ```
 
@@ -77,6 +80,8 @@ theme = "default" # or "mono"
 Rile is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 Rile is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See `COPYING` for details.
+
+Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 
 ## Development
 
@@ -102,7 +107,9 @@ make verify
 
 For direct host development, install the same Rust tools locally and run the scripts under `scripts/` directly.
 
-CI is deferred until this project is initialized as a hosted Git repository. In this workspace, `git` did not recognize `rile/` as a repository during Milestone 1 inspection.
+Release notes are maintained in `NEWS`. GNU-style file-level maintenance history is maintained in `ChangeLog`; Git remains the detailed development history.
+
+CI is deferred until it is configured for the official repository.
 
 ## Clean-Room Reference Policy
 
