@@ -4,6 +4,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
     BackwardChar,
+    BackwardWord,
     BeginningOfLine,
     CopyRegionAsKill,
     DeleteBackwardChar,
@@ -14,6 +15,7 @@ pub enum Command {
     ExecuteExtendedCommand,
     FindFile,
     ForwardChar,
+    ForwardWord,
     IncrementalSearchBackward,
     IncrementalSearchForward,
     KillLine,
@@ -100,6 +102,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("backward-char", "Move cursor left", true, BackwardChar),
         CommandSpec::new(
+            "backward-word",
+            "Move cursor backward by word",
+            true,
+            BackwardWord,
+        ),
+        CommandSpec::new(
             "beginning-of-line",
             "Move cursor to beginning of line",
             true,
@@ -139,6 +147,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("find-file", "Open file by path", true, FindFile),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar),
+        CommandSpec::new(
+            "forward-word",
+            "Move cursor forward by word",
+            true,
+            ForwardWord,
+        ),
         CommandSpec::new(
             "isearch-backward",
             "Search backward incrementally",
@@ -229,8 +243,10 @@ mod tests {
             registry.get("save-buffer").map(|spec| spec.command),
             Some(Command::SaveBuffer)
         );
+        assert!(registry.contains("backward-word"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
+        assert!(registry.contains("forward-word"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("switch-to-buffer"));

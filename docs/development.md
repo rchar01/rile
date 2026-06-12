@@ -60,7 +60,7 @@ Milestone 5 adds basic editor commands and keymaps:
 - `command::CommandRegistry` maps exact command names to internal commands;
 - `keymap::KeyMap` resolves single-key and prefix key sequences;
 - `C-x` prefix handling supports `C-x C-s` save and `C-x C-c` quit;
-- movement commands support character, line, beginning-of-line, and end-of-line motion;
+- movement commands support character, word, line, beginning-of-line, and end-of-line motion;
 - printable UTF-8 text, Enter, and Tab insert into the current buffer;
 - Backspace, Delete, and `C-d` delete text around point;
 - minimal `M-x` accepts an exact command name and executes it;

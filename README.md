@@ -24,6 +24,7 @@ Editing mode requires an interactive terminal. `--help` and `--version` work wit
 Basic editor keys:
 
 - `C-f`/right arrow and `C-b`/left arrow move horizontally.
+- `M-f` and `M-b` move forward and backward by word.
 - `C-n`/down arrow and `C-p`/up arrow move vertically.
 - `C-a`/Home and `C-e`/End move within the current line.
 - Printable UTF-8 text inserts at point.
@@ -56,7 +57,7 @@ Basic editor keys:
 Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
-Window splitting currently stores per-window cursor state but does not scroll automatically yet.
+Window splitting stores per-window cursor state and scrolls automatically to keep point visible.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
 
 ## Configuration

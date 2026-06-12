@@ -388,6 +388,7 @@ impl Editor {
 
         match command {
             BackwardChar => self.move_backward(),
+            BackwardWord => self.move_word_backward(),
             BeginningOfLine => self.move_beginning_of_line(),
             CopyRegionAsKill => self.copy_region_as_kill(),
             DeleteBackwardChar => self.delete_backward_char(),
@@ -398,6 +399,7 @@ impl Editor {
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
             ForwardChar => self.move_forward(),
+            ForwardWord => self.move_word_forward(),
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             KillLine => self.kill_line(),
@@ -451,6 +453,22 @@ impl Editor {
             .document()
             .buffer()
             .move_grapheme_forward(self.cursor)?;
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_word_backward(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = self.document().buffer().move_word_backward(self.cursor)?;
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_word_forward(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = self.document().buffer().move_word_forward(self.cursor)?;
         self.goal_display_column = None;
         self.sync_current_window();
         Ok(())
@@ -1580,6 +1598,36 @@ mod tests {
 
         assert_eq!(editor.document().buffer().serialize(), "a");
         assert_eq!(editor.cursor(), Position::new(0, 1));
+    }
+
+    #[test]
+    fn moves_by_words_with_meta_bindings() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('f'))
+            .expect("M-f should move forward by word");
+        assert_eq!(editor.cursor(), Position::new(0, "one".len()));
+
+        editor
+            .handle_key(KeyEvent::Meta('f'))
+            .expect("M-f should move forward by next word");
+        assert_eq!(editor.cursor(), Position::new(0, "one two".len()));
+
+        editor
+            .handle_key(KeyEvent::Meta('b'))
+            .expect("M-b should move backward by word");
+        assert_eq!(editor.cursor(), Position::new(0, "one ".len()));
+
+        editor
+            .handle_key(KeyEvent::Meta('b'))
+            .expect("M-b should move backward by previous word");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
     }
 
     #[test]
