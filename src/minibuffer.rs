@@ -14,6 +14,8 @@ pub enum PromptKind {
     ExtendedCommand,
     FindFile,
     IncrementalSearch,
+    KillBuffer,
+    SwitchToBuffer,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 7 incremental search is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, and search with active highlights.
+Milestone 8 multiple-buffer editing is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, and search with active highlights.
 
 Current binary behavior:
 
@@ -30,6 +30,8 @@ Basic editor keys:
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `C-x C-s` saves the current file.
 - `C-x C-f` prompts for a file path and opens it.
+- `C-x b` prompts for a buffer name and switches to it.
+- `C-x k` prompts for a buffer name and kills it; empty input kills the current buffer.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `C-x C-c` quits.

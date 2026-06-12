@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Rile contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use crate::buffer::{Position, TextRange};
+use crate::buffer::{BufferId, Position, TextRange};
+use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
 use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
@@ -18,7 +19,8 @@ pub enum EditorOutcome {
 
 #[derive(Debug, Clone)]
 pub struct Editor {
-    document: Document,
+    buffers: BufferManager,
+    current_buffer: BufferId,
     cursor: Position,
     goal_display_column: Option<usize>,
     key_sequence: Vec<KeyEvent>,
@@ -59,8 +61,11 @@ struct SearchState {
 
 impl Editor {
     pub fn new(document: Document) -> Self {
+        let buffers = BufferManager::new(document);
+        let current_buffer = buffers.entries()[0].id();
         Self {
-            document,
+            buffers,
+            current_buffer,
             cursor: Position::new(0, 0),
             goal_display_column: None,
             key_sequence: Vec::new(),
@@ -72,7 +77,23 @@ impl Editor {
     }
 
     pub fn document(&self) -> &Document {
-        &self.document
+        self.buffers
+            .document(self.current_buffer)
+            .expect("current buffer must exist")
+    }
+
+    pub fn current_buffer_id(&self) -> BufferId {
+        self.current_buffer
+    }
+
+    pub fn current_buffer_name(&self) -> &str {
+        self.buffers
+            .name(self.current_buffer)
+            .expect("current buffer must exist")
+    }
+
+    pub fn buffer_count(&self) -> usize {
+        self.buffers.len()
     }
 
     pub fn cursor(&self) -> Position {
@@ -92,6 +113,10 @@ impl Editor {
             self.clear_key_sequence();
             self.minibuffer.set_message("Quit");
             return Ok(EditorOutcome::Continue);
+        }
+
+        if !self.key_sequence.is_empty() {
+            return self.handle_bound_key(key);
         }
 
         match key {
@@ -179,6 +204,8 @@ impl Editor {
             PromptKind::ExtendedCommand => self.execute_command_by_name(input),
             PromptKind::FindFile => self.find_file(input),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
+            PromptKind::KillBuffer => self.kill_buffer(input),
+            PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
         }
     }
 
@@ -200,33 +227,42 @@ impl Editor {
             PreviousLine => self.move_line(-1),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
+            KillBuffer => self.start_kill_buffer(),
+            SwitchToBuffer => self.start_switch_to_buffer(),
         }?;
 
         Ok(EditorOutcome::Continue)
     }
 
     fn insert_text(&mut self, text: &str) -> Result<()> {
-        self.cursor = self.document.buffer_mut().insert(self.cursor, text)?;
+        let cursor = self.cursor;
+        self.cursor = self.document_mut().buffer_mut().insert(cursor, text)?;
         self.goal_display_column = None;
         self.minibuffer.clear();
         Ok(())
     }
 
     fn move_backward(&mut self) -> Result<()> {
-        self.cursor = self.document.buffer().move_grapheme_backward(self.cursor)?;
+        self.cursor = self
+            .document()
+            .buffer()
+            .move_grapheme_backward(self.cursor)?;
         self.goal_display_column = None;
         Ok(())
     }
 
     fn move_forward(&mut self) -> Result<()> {
-        self.cursor = self.document.buffer().move_grapheme_forward(self.cursor)?;
+        self.cursor = self
+            .document()
+            .buffer()
+            .move_grapheme_forward(self.cursor)?;
         self.goal_display_column = None;
         Ok(())
     }
 
     fn move_line(&mut self, delta: isize) -> Result<()> {
         let (position, goal) =
-            self.document
+            self.document()
                 .buffer()
                 .move_line(self.cursor, delta, self.goal_display_column)?;
         self.cursor = position;
@@ -241,7 +277,7 @@ impl Editor {
     }
 
     fn move_end_of_line(&mut self) -> Result<()> {
-        let Some(line) = self.document.buffer().line(self.cursor.line) else {
+        let Some(line) = self.document().buffer().line(self.cursor.line) else {
             return Err(RileError::InvalidPosition(format!(
                 "line {} is outside buffer",
                 self.cursor.line
@@ -253,35 +289,43 @@ impl Editor {
     }
 
     fn delete_backward_char(&mut self) -> Result<()> {
-        let start = self.document.buffer().move_grapheme_backward(self.cursor)?;
+        let start = self
+            .document()
+            .buffer()
+            .move_grapheme_backward(self.cursor)?;
         if start == self.cursor {
             return Ok(());
         }
-        self.document
+        let cursor = self.cursor;
+        self.document_mut()
             .buffer_mut()
-            .delete_range(TextRange::new(start, self.cursor))?;
+            .delete_range(TextRange::new(start, cursor))?;
         self.cursor = start;
         self.goal_display_column = None;
         Ok(())
     }
 
     fn delete_char(&mut self) -> Result<()> {
-        let end = self.document.buffer().move_grapheme_forward(self.cursor)?;
+        let end = self
+            .document()
+            .buffer()
+            .move_grapheme_forward(self.cursor)?;
         if end == self.cursor {
             return Ok(());
         }
-        self.document
+        let cursor = self.cursor;
+        self.document_mut()
             .buffer_mut()
-            .delete_range(TextRange::new(self.cursor, end))?;
+            .delete_range(TextRange::new(cursor, end))?;
         self.goal_display_column = None;
         Ok(())
     }
 
     fn save_buffer(&mut self) -> Result<()> {
-        match self.document.save() {
+        match self.document_mut().save() {
             Ok(()) => self
                 .minibuffer
-                .set_message(format!("Wrote {}", self.document.display_name())),
+                .set_message(format!("Wrote {}", self.document().display_name())),
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(())
@@ -299,21 +343,85 @@ impl Editor {
         Ok(())
     }
 
+    fn start_switch_to_buffer(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::SwitchToBuffer, "Switch to buffer: ");
+        Ok(())
+    }
+
+    fn start_kill_buffer(&mut self) -> Result<()> {
+        let label = format!("Kill buffer (default {}): ", self.current_buffer_name());
+        self.minibuffer.start_prompt(PromptKind::KillBuffer, label);
+        Ok(())
+    }
+
     fn find_file(&mut self, path: &str) -> Result<EditorOutcome> {
         if path.is_empty() {
             self.minibuffer.set_error("missing file name");
             return Ok(EditorOutcome::Continue);
         }
 
-        match Document::open(path) {
-            Ok(document) => {
-                self.document = document;
+        match self.buffers.open_path(path) {
+            Ok(opened) => {
+                self.current_buffer = opened.id;
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
+                self.search = None;
                 self.minibuffer
-                    .set_message(format!("Opened {}", self.document.display_name()));
+                    .set_message(format!("Opened {}", self.document().display_name()));
             }
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn switch_to_buffer(&mut self, name: &str) -> Result<EditorOutcome> {
+        if name.is_empty() {
+            self.minibuffer.set_error("missing buffer name");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        match self.buffers.find_by_name(name) {
+            Some(id) => {
+                self.current_buffer = id;
+                self.cursor = Position::new(0, 0);
+                self.goal_display_column = None;
+                self.search = None;
+                self.minibuffer
+                    .set_message(format!("Switched to buffer {name}"));
+            }
+            None => self.minibuffer.set_error(format!("no such buffer: {name}")),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn kill_buffer(&mut self, name: &str) -> Result<EditorOutcome> {
+        let target = if name.is_empty() {
+            self.current_buffer
+        } else if let Some(id) = self.buffers.find_by_name(name) {
+            id
+        } else {
+            self.minibuffer.set_error(format!("no such buffer: {name}"));
+            return Ok(EditorOutcome::Continue);
+        };
+        let target_name = self
+            .buffers
+            .name(target)
+            .expect("target buffer must exist")
+            .to_owned();
+
+        match self.buffers.kill(target) {
+            Ok(next_current) => {
+                if target == self.current_buffer {
+                    self.current_buffer = next_current;
+                    self.cursor = Position::new(0, 0);
+                    self.goal_display_column = None;
+                    self.search = None;
+                }
+                self.minibuffer
+                    .set_message(format!("Killed buffer {target_name}"));
+            }
+            Err(error) => self.minibuffer.set_error(format!("kill failed: {error}")),
         }
         Ok(EditorOutcome::Continue)
     }
@@ -378,7 +486,7 @@ impl Editor {
             return Ok(());
         }
 
-        let found = find_match(self.document.buffer(), &query, origin, direction)?;
+        let found = find_match(self.document().buffer(), &query, origin, direction)?;
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
@@ -408,7 +516,7 @@ impl Editor {
         let previous_cursor = self.cursor;
         let start = match (direction, search.current) {
             (SearchDirection::Forward, Some(range)) => {
-                search_start_after(self.document.buffer(), range.start)?
+                search_start_after(self.document().buffer(), range.start)?
             }
             (SearchDirection::Backward, Some(range)) => range.start,
             (_, None) => search.origin,
@@ -423,7 +531,7 @@ impl Editor {
             return Ok(());
         }
 
-        let found = find_match(self.document.buffer(), &query, start, direction)?;
+        let found = find_match(self.document().buffer(), &query, start, direction)?;
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
@@ -443,6 +551,14 @@ impl Editor {
 
     fn clear_key_sequence(&mut self) {
         self.key_sequence.clear();
+    }
+}
+
+impl Editor {
+    fn document_mut(&mut self) -> &mut Document {
+        self.buffers
+            .document_mut(self.current_buffer)
+            .expect("current buffer must exist")
     }
 }
 
@@ -835,6 +951,126 @@ mod tests {
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Error: missing file name")
+        );
+    }
+
+    #[test]
+    fn find_file_reuses_existing_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("same.txt");
+        fs::write(&path, "same").expect("file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should prompt");
+        for character in path.to_string_lossy().chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("file prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("file should open");
+        let first_id = editor.current_buffer_id();
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should prompt again");
+        for character in path.to_string_lossy().chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("file prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("existing file buffer should be reused");
+
+        assert_eq!(editor.current_buffer_id(), first_id);
+        assert_eq!(editor.buffer_count(), 2);
+    }
+
+    #[test]
+    fn switch_buffer_prompt_changes_current_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        fs::write(&path, "notes").expect("file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .find_file(path.to_str().expect("path should be utf-8"))
+            .expect("file should open");
+        assert_eq!(editor.current_buffer_name(), "notes.txt");
+
+        editor
+            .execute_command_by_name("switch-to-buffer")
+            .expect("switch should prompt");
+        for character in "*scratch*".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("buffer prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("switch should complete");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Switched to buffer *scratch*")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_removes_clean_current_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("killme.txt");
+        fs::write(&path, "kill me").expect("file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .find_file(path.to_str().expect("path should be utf-8"))
+            .expect("file should open");
+        assert_eq!(editor.buffer_count(), 2);
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("default kill should complete");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Killed buffer killme.txt")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_refuses_dirty_current_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("dirty kill should be reported");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(editor.document().is_dirty());
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("unsaved changes"))
         );
     }
 

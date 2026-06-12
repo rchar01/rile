@@ -91,7 +91,18 @@ Milestone 7 adds incremental search:
 - the terminal renderer displays active search spans with ANSI highlighting;
 - tests cover UTF-8 matches, repeated search, cancellation, failed search, and ANSI span rendering.
 
-Current limitations: there is no scrolling, no prompt cursor movement, no file-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
+Milestone 8 adds multiple buffers:
+
+- `buffers::BufferManager` owns stable `BufferId` values and buffer entries;
+- each buffer entry records a user-facing name and a file-backed `Document`;
+- `find-file` reuses an existing buffer for the same path instead of opening duplicates;
+- `C-x b` and `switch-to-buffer` prompt for an existing buffer name;
+- `C-x k` and `kill-buffer` prompt for a buffer name, with empty input killing the current buffer;
+- dirty buffers cannot be killed until saved or made clean by later explicit workflows;
+- switching or killing the current buffer resets point to the start of the selected buffer;
+- tests cover buffer reuse, switching, killing, and dirty-buffer protection.
+
+Current limitations: there is no scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
 
 ## Line Ending Policy
 

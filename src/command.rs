@@ -13,10 +13,12 @@ pub enum Command {
     ForwardChar,
     IncrementalSearchBackward,
     IncrementalSearchForward,
+    KillBuffer,
     NextLine,
     PreviousLine,
     SaveBuffer,
     SaveBuffersKillTerminal,
+    SwitchToBuffer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -121,6 +123,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             IncrementalSearchForward,
         ),
+        CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
@@ -129,6 +132,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Quit Rile",
             true,
             SaveBuffersKillTerminal,
+        ),
+        CommandSpec::new(
+            "switch-to-buffer",
+            "Switch to a buffer by name",
+            true,
+            SwitchToBuffer,
         ),
     ]
 }
@@ -149,6 +158,8 @@ mod tests {
         assert!(registry.contains("find-file"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
+        assert!(registry.contains("switch-to-buffer"));
+        assert!(registry.contains("kill-buffer"));
         assert!(!registry.contains("save"));
     }
 }
