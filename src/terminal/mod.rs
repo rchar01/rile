@@ -422,6 +422,7 @@ fn face_start_code(face: Face) -> Option<&'static str> {
     match face {
         Face::CurrentSearchMatch => Some("\x1b[7m"),
         Face::SearchMatch => Some("\x1b[4m"),
+        Face::Region => Some("\x1b[44m"),
         _ => None,
     }
 }

@@ -80,14 +80,20 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('e')], "end-of-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::End)], "end-of-line"),
         KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
+        KeyBinding::new([KeyEvent::Ctrl('@')], "set-mark-command"),
+        KeyBinding::new([KeyEvent::Ctrl('_')], "undo"),
+        KeyBinding::new([KeyEvent::Ctrl('k')], "kill-line"),
         KeyBinding::new([KeyEvent::Ctrl('s')], "isearch-forward"),
+        KeyBinding::new([KeyEvent::Ctrl('w')], "kill-region"),
         KeyBinding::new([KeyEvent::Ctrl('r')], "isearch-backward"),
+        KeyBinding::new([KeyEvent::Ctrl('y')], "yank"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::Delete)], "delete-char"),
         KeyBinding::new(
             [KeyEvent::Special(SpecialKey::Backspace)],
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
+        KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())],
             "delete-window",
@@ -145,6 +151,30 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('r')]),
             KeyResolution::Command("isearch-backward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('k')]),
+            KeyResolution::Command("kill-line")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('w')]),
+            KeyResolution::Command("kill-region")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('y')]),
+            KeyResolution::Command("yank")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('_')]),
+            KeyResolution::Command("undo")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('@')]),
+            KeyResolution::Command("set-mark-command")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('w')]),
+            KeyResolution::Command("copy-region-as-kill")
         );
     }
 

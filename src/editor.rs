@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Rile contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, TextRange};
 use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
@@ -30,6 +31,23 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     search: Option<SearchState>,
+    region: Option<RegionState>,
+    kill_ring: Vec<String>,
+    undo_stack: Vec<UndoEntry>,
+    grouping_insert: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RegionState {
+    buffer: BufferId,
+    mark: Position,
+    active: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UndoEntry {
+    buffer: BufferId,
+    record: UndoRecord,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,6 +94,10 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             search: None,
+            region: None,
+            kill_ring: Vec::new(),
+            undo_stack: Vec::new(),
+            grouping_insert: false,
         }
     }
 
@@ -134,6 +156,8 @@ impl Editor {
 
         if key == KeyEvent::Ctrl('g') {
             self.clear_key_sequence();
+            self.deactivate_region();
+            self.clear_insert_group();
             self.minibuffer.set_message("Quit");
             return Ok(EditorOutcome::Continue);
         }
@@ -145,17 +169,17 @@ impl Editor {
         match key {
             KeyEvent::Text(text) => {
                 self.clear_key_sequence();
-                self.insert_text(&text)?;
+                self.insert_text(&text, true)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Enter) => {
                 self.clear_key_sequence();
-                self.insert_text("\n")?;
+                self.insert_text("\n", false)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.clear_key_sequence();
-                self.insert_text("\t")?;
+                self.insert_text("\t", false)?;
                 Ok(EditorOutcome::Continue)
             }
             key => self.handle_bound_key(key),
@@ -238,6 +262,7 @@ impl Editor {
         match command {
             BackwardChar => self.move_backward(),
             BeginningOfLine => self.move_beginning_of_line(),
+            CopyRegionAsKill => self.copy_region_as_kill(),
             DeleteBackwardChar => self.delete_backward_char(),
             DeleteChar => self.delete_char(),
             DeleteOtherWindows => self.delete_other_windows(),
@@ -248,30 +273,38 @@ impl Editor {
             ForwardChar => self.move_forward(),
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
+            KillLine => self.kill_line(),
+            KillRegion => self.kill_region(),
             NextLine => self.move_line(1),
             PreviousLine => self.move_line(-1),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
+            SetMarkCommand => self.set_mark_command(),
             KillBuffer => self.start_kill_buffer(),
             OtherWindow => self.other_window(),
             SwitchToBuffer => self.start_switch_to_buffer(),
             SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
             SplitWindowRight => self.split_window(SplitAxis::Vertical),
+            Undo => self.undo(),
+            Yank => self.yank(),
         }?;
 
         Ok(EditorOutcome::Continue)
     }
 
-    fn insert_text(&mut self, text: &str) -> Result<()> {
+    fn insert_text(&mut self, text: &str, group_with_previous: bool) -> Result<()> {
         let cursor = self.cursor;
         self.cursor = self.document_mut().buffer_mut().insert(cursor, text)?;
+        self.record_insert(cursor, self.cursor, text, group_with_previous);
         self.goal_display_column = None;
         self.minibuffer.clear();
+        self.deactivate_region();
         self.sync_current_window();
         Ok(())
     }
 
     fn move_backward(&mut self) -> Result<()> {
+        self.clear_insert_group();
         self.cursor = self
             .document()
             .buffer()
@@ -282,6 +315,7 @@ impl Editor {
     }
 
     fn move_forward(&mut self) -> Result<()> {
+        self.clear_insert_group();
         self.cursor = self
             .document()
             .buffer()
@@ -292,6 +326,7 @@ impl Editor {
     }
 
     fn move_line(&mut self, delta: isize) -> Result<()> {
+        self.clear_insert_group();
         let (position, goal) =
             self.document()
                 .buffer()
@@ -303,6 +338,7 @@ impl Editor {
     }
 
     fn move_beginning_of_line(&mut self) -> Result<()> {
+        self.clear_insert_group();
         self.cursor = Position::new(self.cursor.line, 0);
         self.goal_display_column = None;
         self.sync_current_window();
@@ -310,6 +346,7 @@ impl Editor {
     }
 
     fn move_end_of_line(&mut self) -> Result<()> {
+        self.clear_insert_group();
         let Some(line) = self.document().buffer().line(self.cursor.line) else {
             return Err(RileError::InvalidPosition(format!(
                 "line {} is outside buffer",
@@ -323,6 +360,7 @@ impl Editor {
     }
 
     fn delete_backward_char(&mut self) -> Result<()> {
+        self.clear_insert_group();
         let start = self
             .document()
             .buffer()
@@ -331,16 +369,18 @@ impl Editor {
             return Ok(());
         }
         let cursor = self.cursor;
-        self.document_mut()
-            .buffer_mut()
-            .delete_range(TextRange::new(start, cursor))?;
+        let range = TextRange::new(start, cursor);
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.record_delete(range, text, cursor, start);
         self.cursor = start;
         self.goal_display_column = None;
+        self.deactivate_region();
         self.sync_current_window();
         Ok(())
     }
 
     fn delete_char(&mut self) -> Result<()> {
+        self.clear_insert_group();
         let end = self
             .document()
             .buffer()
@@ -349,11 +389,148 @@ impl Editor {
             return Ok(());
         }
         let cursor = self.cursor;
-        self.document_mut()
-            .buffer_mut()
-            .delete_range(TextRange::new(cursor, end))?;
+        let range = TextRange::new(cursor, end);
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.record_delete(range, text, cursor, cursor);
         self.goal_display_column = None;
+        self.deactivate_region();
         self.sync_current_window();
+        Ok(())
+    }
+
+    fn set_mark_command(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.region = Some(RegionState {
+            buffer: self.current_buffer,
+            mark: self.cursor,
+            active: true,
+        });
+        self.minibuffer.set_message("Mark set");
+        Ok(())
+    }
+
+    fn copy_region_as_kill(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(range) = self.active_region_range() else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        let text = self.document().buffer().text_in_range(range)?;
+        self.push_kill(text);
+        self.deactivate_region();
+        self.minibuffer.set_message("Copied region");
+        Ok(())
+    }
+
+    fn kill_region(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(range) = self.active_region_range() else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.push_kill(text.clone());
+        self.cursor = range.start;
+        self.goal_display_column = None;
+        self.record_delete(range, text, cursor_before, self.cursor);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Killed region");
+        Ok(())
+    }
+
+    fn yank(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(text) = self.kill_ring.last().cloned() else {
+            self.minibuffer.set_error("kill ring is empty");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        self.cursor = self
+            .document_mut()
+            .buffer_mut()
+            .insert(cursor_before, &text)?;
+        self.record_insert(cursor_before, self.cursor, &text, false);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Yanked");
+        Ok(())
+    }
+
+    fn kill_line(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        let Some(line) = self.document().buffer().line(self.cursor.line) else {
+            return Ok(());
+        };
+        let end = if self.cursor.byte < line.len() {
+            Position::new(self.cursor.line, line.len())
+        } else if self.cursor.line + 1 < self.document().buffer().line_count() {
+            Position::new(self.cursor.line + 1, 0)
+        } else {
+            return Ok(());
+        };
+        let range = TextRange::new(self.cursor, end);
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.push_kill(text.clone());
+        self.record_delete(range, text, cursor_before, self.cursor);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Killed line");
+        Ok(())
+    }
+
+    fn undo(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(index) = self
+            .undo_stack
+            .iter()
+            .rposition(|entry| entry.buffer == self.current_buffer)
+        else {
+            self.minibuffer.set_message("No undo information");
+            return Ok(());
+        };
+        let entry = self.undo_stack.remove(index);
+        match entry.record {
+            UndoRecord::Insert {
+                range,
+                cursor_before,
+                ..
+            } => {
+                self.document_mut().buffer_mut().delete_range(range)?;
+                self.cursor = cursor_before;
+            }
+            UndoRecord::Delete {
+                range,
+                text,
+                cursor_before,
+                ..
+            } => {
+                self.document_mut()
+                    .buffer_mut()
+                    .insert(range.start, &text)?;
+                self.cursor = cursor_before;
+            }
+            UndoRecord::Replace {
+                range,
+                old_text,
+                cursor_before,
+                ..
+            } => {
+                self.document_mut().buffer_mut().delete_range(range)?;
+                self.document_mut()
+                    .buffer_mut()
+                    .insert(range.start, &old_text)?;
+                self.cursor = cursor_before;
+            }
+        }
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Undone");
         Ok(())
     }
 
@@ -403,6 +580,8 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.deactivate_region();
+                self.clear_insert_group();
                 self.sync_current_window();
                 self.minibuffer
                     .set_message(format!("Opened {}", self.document().display_name()));
@@ -424,6 +603,8 @@ impl Editor {
                 self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
+                self.deactivate_region();
+                self.clear_insert_group();
                 self.sync_current_window();
                 self.minibuffer
                     .set_message(format!("Switched to buffer {name}"));
@@ -456,6 +637,8 @@ impl Editor {
                     self.cursor = Position::new(0, 0);
                     self.goal_display_column = None;
                     self.search = None;
+                    self.deactivate_region();
+                    self.clear_insert_group();
                     self.sync_current_window();
                 }
                 self.minibuffer
@@ -647,6 +830,100 @@ impl Editor {
             .expect("current buffer must exist")
     }
 
+    fn active_region_range(&self) -> Option<TextRange> {
+        let region = self.region?;
+        if !region.active || region.buffer != self.current_buffer || region.mark == self.cursor {
+            return None;
+        }
+        let (start, end) = if region.mark < self.cursor {
+            (region.mark, self.cursor)
+        } else {
+            (self.cursor, region.mark)
+        };
+        Some(TextRange::new(start, end))
+    }
+
+    fn deactivate_region(&mut self) {
+        if let Some(region) = &mut self.region {
+            region.active = false;
+        }
+    }
+
+    fn push_kill(&mut self, text: String) {
+        if !text.is_empty() {
+            self.kill_ring.push(text);
+        }
+    }
+
+    fn record_insert(
+        &mut self,
+        start: Position,
+        end: Position,
+        text: &str,
+        group_with_previous: bool,
+    ) {
+        if text.is_empty() {
+            return;
+        }
+        let can_group = group_with_previous && self.grouping_insert && !text.contains('\n');
+        if can_group
+            && let Some(UndoEntry {
+                buffer,
+                record:
+                    UndoRecord::Insert {
+                        range,
+                        text: existing_text,
+                        cursor_after,
+                        ..
+                    },
+            }) = self.undo_stack.last_mut()
+            && *buffer == self.current_buffer
+            && *cursor_after == start
+        {
+            range.end = end;
+            existing_text.push_str(text);
+            *cursor_after = end;
+            self.grouping_insert = true;
+            return;
+        }
+        self.undo_stack.push(UndoEntry {
+            buffer: self.current_buffer,
+            record: UndoRecord::Insert {
+                range: TextRange::new(start, end),
+                text: text.to_owned(),
+                cursor_before: start,
+                cursor_after: end,
+            },
+        });
+        self.grouping_insert = group_with_previous && !text.contains('\n');
+    }
+
+    fn record_delete(
+        &mut self,
+        range: TextRange,
+        text: String,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) {
+        if text.is_empty() {
+            return;
+        }
+        self.undo_stack.push(UndoEntry {
+            buffer: self.current_buffer,
+            record: UndoRecord::Delete {
+                range,
+                text,
+                cursor_before,
+                cursor_after,
+            },
+        });
+        self.clear_insert_group();
+    }
+
+    fn clear_insert_group(&mut self) {
+        self.grouping_insert = false;
+    }
+
     fn sync_current_window(&mut self) {
         let viewport = self.windows.current_mut().viewport_mut();
         viewport.buffer = self.current_buffer;
@@ -659,40 +936,72 @@ impl Editor {
         self.cursor = viewport.cursor;
         self.goal_display_column = None;
         self.search = None;
+        self.clear_insert_group();
     }
 }
 
 impl DecorationProvider for Editor {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
-        let Some(search) = &self.search else {
-            return Vec::new();
-        };
-        let Some(query) = self.minibuffer.prompt_input() else {
-            return Vec::new();
-        };
-        if query.is_empty() {
-            return Vec::new();
+        let mut spans = Vec::new();
+        if let Some(region_span) = self.region_span_for_line(line_index, line) {
+            spans.push(region_span);
         }
 
-        line.match_indices(query)
-            .map(|(start, match_text)| {
-                let end = start + match_text.len();
-                let face = if search.current
-                    == Some(TextRange::new(
-                        Position::new(line_index, start),
-                        Position::new(line_index, end),
-                    )) {
-                    Face::CurrentSearchMatch
-                } else {
-                    Face::SearchMatch
-                };
-                Span {
-                    start_byte: start,
-                    end_byte: end,
-                    face,
-                }
-            })
-            .collect()
+        let Some(search) = &self.search else {
+            return spans;
+        };
+        let Some(query) = self.minibuffer.prompt_input() else {
+            return spans;
+        };
+        if query.is_empty() {
+            return spans;
+        }
+
+        spans.extend(line.match_indices(query).map(|(start, match_text)| {
+            let end = start + match_text.len();
+            let face = if search.current
+                == Some(TextRange::new(
+                    Position::new(line_index, start),
+                    Position::new(line_index, end),
+                )) {
+                Face::CurrentSearchMatch
+            } else {
+                Face::SearchMatch
+            };
+            Span {
+                start_byte: start,
+                end_byte: end,
+                face,
+            }
+        }));
+        spans
+    }
+}
+
+impl Editor {
+    fn region_span_for_line(&self, line_index: usize, line: &str) -> Option<Span> {
+        let range = self.active_region_range()?;
+        if line_index < range.start.line || line_index > range.end.line {
+            return None;
+        }
+        let start = if line_index == range.start.line {
+            range.start.byte
+        } else {
+            0
+        };
+        let end = if line_index == range.end.line {
+            range.end.byte
+        } else {
+            line.len()
+        };
+        if start == end {
+            return None;
+        }
+        Some(Span {
+            start_byte: start,
+            end_byte: end,
+            face: Face::Region,
+        })
     }
 }
 
@@ -1237,6 +1546,130 @@ mod tests {
             editor.minibuffer().message.as_deref(),
             Some("Only one window")
         );
+    }
+
+    #[test]
+    fn mark_region_highlights_selected_text() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "éx")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move by grapheme");
+
+        let spans = editor.spans_for_line(0, "éx");
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_byte, 0);
+        assert_eq!(spans[0].end_byte, "é".len());
+        assert_eq!(spans[0].face, Face::Region);
+    }
+
+    #[test]
+    fn kill_region_yank_and_undo_are_unicode_safe() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "éx")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move by grapheme");
+        editor
+            .handle_key(KeyEvent::Ctrl('w'))
+            .expect("region should kill");
+        assert_eq!(editor.document().buffer().serialize(), "x");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert latest kill");
+        assert_eq!(editor.document().buffer().serialize(), "éx");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove yank");
+        assert_eq!(editor.document().buffer().serialize(), "x");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore killed text");
+        assert_eq!(editor.document().buffer().serialize(), "éx");
+    }
+
+    #[test]
+    fn copy_region_yanks_without_deleting() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "ab")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Meta('w'))
+            .expect("copy should populate kill ring");
+        assert_eq!(editor.document().buffer().serialize(), "ab");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('e'))
+            .expect("cursor should move to end");
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert copied text");
+        assert_eq!(editor.document().buffer().serialize(), "aba");
+    }
+
+    #[test]
+    fn kill_line_and_undo_restore_text() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc\ndef")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("kill-line should delete to end of line");
+        assert_eq!(editor.document().buffer().serialize(), "\ndef");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore line");
+        assert_eq!(editor.document().buffer().serialize(), "abc\ndef");
+    }
+
+    #[test]
+    fn undo_groups_normal_typing() {
+        let mut editor = Editor::new(Document::scratch());
+        for text in ["a", "b", "c"] {
+            editor
+                .handle_key(KeyEvent::Text(text.to_owned()))
+                .expect("text should insert");
+        }
+        assert_eq!(editor.document().buffer().serialize(), "abc");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove grouped typing");
+        assert_eq!(editor.document().buffer().serialize(), "");
     }
 
     #[test]

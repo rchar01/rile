@@ -113,7 +113,19 @@ Milestone 9 adds windows and splits:
 - terminal drawing lays out all windows, draws one mode line per window, and places point in the selected window;
 - layout tests cover horizontal and vertical splitting, deletion, cycling, and per-window viewport state.
 
-Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no undo wiring yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
+Milestone 10 adds region, kill/yank, and undo:
+
+- `C-@` and `set-mark-command` set an active mark at point;
+- active regions render through `render::Face::Region` and terminal ANSI highlighting;
+- `C-w` and `kill-region` delete the active region into the kill ring;
+- `M-w` and `copy-region-as-kill` copy the active region without deleting it;
+- `C-y` and `yank` insert the latest kill-ring entry;
+- `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
+- `C-_` and `undo` reverse current-buffer insert/delete/yank/kill operations;
+- normal printable typing is grouped into a single undo record until another command interrupts it;
+- tests cover Unicode-safe region highlighting, kill/yank, kill-line, grouped typing undo, and new control-key parsing.
+
+Current limitations: there is no automatic scrolling, no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search is exact line-local substring matching; it does not wrap around the buffer and does not match across line breaks.
 
 ## Line Ending Policy
 

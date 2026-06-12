@@ -5,6 +5,7 @@
 pub enum Command {
     BackwardChar,
     BeginningOfLine,
+    CopyRegionAsKill,
     DeleteBackwardChar,
     DeleteChar,
     DeleteOtherWindows,
@@ -15,15 +16,20 @@ pub enum Command {
     ForwardChar,
     IncrementalSearchBackward,
     IncrementalSearchForward,
+    KillLine,
     KillBuffer,
+    KillRegion,
     NextLine,
     PreviousLine,
     SaveBuffer,
     SaveBuffersKillTerminal,
+    SetMarkCommand,
     OtherWindow,
     SplitWindowBelow,
     SplitWindowRight,
     SwitchToBuffer,
+    Undo,
+    Yank,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -96,6 +102,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             BeginningOfLine,
         ),
         CommandSpec::new(
+            "copy-region-as-kill",
+            "Copy active region to kill ring",
+            true,
+            CopyRegionAsKill,
+        ),
+        CommandSpec::new(
             "delete-backward-char",
             "Delete character before cursor",
             true,
@@ -136,6 +148,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             IncrementalSearchForward,
         ),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
+        CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
+        CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
@@ -145,6 +159,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Quit Rile",
             true,
             SaveBuffersKillTerminal,
+        ),
+        CommandSpec::new(
+            "set-mark-command",
+            "Set mark at point",
+            true,
+            SetMarkCommand,
         ),
         CommandSpec::new(
             "split-window-below",
@@ -164,6 +184,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             SwitchToBuffer,
         ),
+        CommandSpec::new("undo", "Undo last edit", true, Undo),
+        CommandSpec::new("yank", "Insert latest kill", true, Yank),
     ]
 }
 
@@ -185,6 +207,12 @@ mod tests {
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));
+        assert!(registry.contains("kill-line"));
+        assert!(registry.contains("kill-region"));
+        assert!(registry.contains("copy-region-as-kill"));
+        assert!(registry.contains("yank"));
+        assert!(registry.contains("undo"));
+        assert!(registry.contains("set-mark-command"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
         assert!(registry.contains("delete-window"));
