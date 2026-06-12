@@ -230,31 +230,39 @@ where
 
     fn draw(&mut self, editor: &mut Editor) -> Result<()> {
         let size = terminal_size(self.output_fd)?;
-        self.screen.terminal.move_cursor(1, 1)?;
-        self.screen.terminal.clear_screen()?;
-
-        let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
-        let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
-        ensure_current_window_visible(editor, &layouts)?;
-        for layout in &layouts {
-            draw_window(&mut self.screen.terminal, editor, *layout)?;
-        }
-
-        self.screen.terminal.move_cursor(size.rows.max(1), 1)?;
-        self.screen.terminal.clear_line()?;
-        if let Some(text) = editor.minibuffer().display_text() {
-            let face = if text.starts_with("Error:") {
-                Face::Error
-            } else {
-                Face::Minibuffer
-            };
-            write_text_with_face(&mut self.screen.terminal, &text, face, editor.theme())?;
-        }
-
-        move_cursor_to_current_window(&mut self.screen.terminal, editor, &layouts)?;
-        self.screen.terminal.show_cursor()?;
-        self.screen.terminal.flush()
+        draw_editor_frame(&mut self.screen.terminal, editor, size)
     }
+}
+
+fn draw_editor_frame<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &mut Editor,
+    size: TerminalSize,
+) -> Result<()> {
+    terminal.move_cursor(1, 1)?;
+    terminal.clear_screen()?;
+
+    let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
+    let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
+    ensure_current_window_visible(editor, &layouts)?;
+    for layout in &layouts {
+        draw_window(terminal, editor, *layout)?;
+    }
+
+    terminal.move_cursor(size.rows.max(1), 1)?;
+    terminal.clear_line()?;
+    if let Some(text) = editor.minibuffer().display_text() {
+        let face = if text.starts_with("Error:") {
+            Face::Error
+        } else {
+            Face::Minibuffer
+        };
+        write_text_with_face(terminal, &text, face, editor.theme())?;
+    }
+
+    move_cursor_to_current_window(terminal, editor, &layouts)?;
+    terminal.show_cursor()?;
+    terminal.flush()
 }
 
 fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) -> Result<()> {
@@ -646,10 +654,14 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnsiTerminal, write_fixed_width_text_with_face, write_line_number_gutter,
-        write_line_with_spans,
+        AnsiTerminal, TerminalSize, draw_editor_frame, write_fixed_width_text_with_face,
+        write_line_number_gutter, write_line_with_spans,
     };
+    use crate::buffer::Position;
     use crate::config::ThemeName;
+    use crate::editor::Editor;
+    use crate::file::Document;
+    use crate::input::KeyEvent;
     use crate::render::{Face, Span};
 
     #[test]
@@ -727,5 +739,110 @@ mod tests {
             .expect("gutter should render");
 
         assert_eq!(terminal.into_inner(), b"\x1b[2m 9 \x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn redraw_moves_cursor_up_on_each_previous_line() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\nfour\nfive")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 6,
+            columns: 40,
+        };
+
+        for _ in 0..3 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+        }
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((4, 1)));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up");
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((3, 1)));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up again");
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((2, 1)));
+    }
+
+    #[test]
+    fn redraw_moves_cursor_up_after_viewport_scrolled_down() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\nfour\nfive\nsix")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 40,
+        };
+
+        for _ in 0..4 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+            rendered_cursor_position(&mut editor, size);
+        }
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((3, 1)));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up");
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((2, 1)));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("cursor should move up again");
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((1, 1)));
+    }
+
+    fn rendered_cursor_position(editor: &mut Editor, size: TerminalSize) -> Option<(usize, usize)> {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+        draw_editor_frame(&mut terminal, editor, size).expect("frame should draw");
+        last_cursor_position(&terminal.into_inner())
+    }
+
+    fn last_cursor_position(output: &[u8]) -> Option<(usize, usize)> {
+        let mut position = None;
+        let mut index = 0;
+        while index < output.len() {
+            if output[index] != 0x1b || output.get(index + 1) != Some(&b'[') {
+                index += 1;
+                continue;
+            }
+            let mut cursor = index + 2;
+            let row_start = cursor;
+            while output.get(cursor).is_some_and(u8::is_ascii_digit) {
+                cursor += 1;
+            }
+            if output.get(cursor) != Some(&b';') || row_start == cursor {
+                index += 1;
+                continue;
+            }
+            let row = std::str::from_utf8(&output[row_start..cursor])
+                .ok()
+                .and_then(|text| text.parse().ok())?;
+            cursor += 1;
+            let column_start = cursor;
+            while output.get(cursor).is_some_and(u8::is_ascii_digit) {
+                cursor += 1;
+            }
+            if output.get(cursor) == Some(&b'H') && column_start != cursor {
+                let column = std::str::from_utf8(&output[column_start..cursor])
+                    .ok()
+                    .and_then(|text| text.parse().ok())?;
+                position = Some((row, column));
+            }
+            index = cursor + 1;
+        }
+        position
     }
 }
