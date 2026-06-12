@@ -11,7 +11,7 @@ Rile is planned as a small, fast, terminal-native, Emacs-style text editor writt
 
 ## Status
 
-Milestone 4 file open/save support is implemented. The editor has a terminal shell, a tested UTF-8 text model, and file-backed document APIs, but interactive text editing and save commands are not wired into the UI yet.
+Milestone 5 basic editor commands and keymap support are implemented. The editor can insert text, move the cursor, delete text, save, quit, and run exact-name `M-x` commands.
 
 Current binary behavior:
 
@@ -20,6 +20,17 @@ cargo run -- [file]
 ```
 
 Editing mode requires an interactive terminal. `--help` and `--version` work without one. When a file path is provided, Rile opens it as UTF-8 before entering raw mode and shows basic file/dirty state in the mode line.
+
+Basic editor keys:
+
+- `C-f`/right arrow and `C-b`/left arrow move horizontally.
+- `C-n`/down arrow and `C-p`/up arrow move vertically.
+- `C-a`/Home and `C-e`/End move within the current line.
+- Printable UTF-8 text inserts at point.
+- Backspace deletes before point; `C-d`/Delete deletes at point.
+- `C-x C-s` saves the current file.
+- `C-x C-c` quits.
+- `M-x` runs an exact command name.
 
 ## License
 

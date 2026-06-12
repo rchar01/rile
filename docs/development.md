@@ -55,7 +55,19 @@ Milestone 4 adds file-backed documents:
 - failed saves leave the buffer dirty;
 - the terminal shell opens the requested document and displays a basic mode line.
 
-It does not implement command registry wiring, interactive text editing, or save keybindings yet.
+Milestone 5 adds basic editor commands and keymaps:
+
+- `command::CommandRegistry` maps exact command names to internal commands;
+- `keymap::KeyMap` resolves single-key and prefix key sequences;
+- `C-x` prefix handling supports `C-x C-s` save and `C-x C-c` quit;
+- movement commands support character, line, beginning-of-line, and end-of-line motion;
+- printable UTF-8 text, Enter, and Tab insert into the current buffer;
+- Backspace, Delete, and `C-d` delete text around point;
+- minimal `M-x` accepts an exact command name and executes it;
+- `editor::Editor` owns interactive editor state and is testable without a terminal;
+- the terminal loop delegates key handling to `Editor` and redraws the current buffer.
+
+Current limitations: there is no scrolling, no robust minibuffer editing beyond the minimal `M-x` prompt, no file-open prompt, no unsaved-changes quit confirmation, and no undo wiring yet.
 
 ## Line Ending Policy
 

@@ -5,8 +5,9 @@ use std::io::{self, IsTerminal, Read, Write};
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
+use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
-use crate::input::{KeyEvent, KeyReader};
+use crate::input::KeyReader;
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -178,10 +179,11 @@ pub fn run_basic_editor(file: Option<&Path>) -> Result<()> {
         Some(path) => Document::open(path)?,
         None => Document::scratch(),
     };
+    let editor = Editor::new(document);
 
     let mut session = TerminalSession::enter(stdin, stdout)?;
-    session.draw(&document)?;
-    session.run(&document)
+    session.draw(&editor)?;
+    session.run(editor)
 }
 
 struct TerminalSession<R, W: Write> {
@@ -213,39 +215,51 @@ where
         })
     }
 
-    fn run(&mut self, document: &Document) -> Result<()> {
+    fn run(&mut self, mut editor: Editor) -> Result<()> {
         loop {
-            match self.input.read_key()? {
-                KeyEvent::Ctrl('q') => return Ok(()),
-                _ => self.draw(document)?,
+            match editor.handle_key(self.input.read_key()?)? {
+                EditorOutcome::Quit => return Ok(()),
+                EditorOutcome::Continue => self.draw(&editor)?,
             }
         }
     }
 
-    fn draw(&mut self, document: &Document) -> Result<()> {
+    fn draw(&mut self, editor: &Editor) -> Result<()> {
         let size = terminal_size(self.output_fd)?;
         self.screen.terminal.move_cursor(1, 1)?;
         self.screen.terminal.clear_screen()?;
-        self.screen.terminal.write_text("Rile")?;
-        self.screen.terminal.move_cursor(3, 1)?;
 
-        self.screen
-            .terminal
-            .write_text(&format!("Buffer: {}", document.display_name()))?;
-
-        self.screen.terminal.move_cursor(5, 1)?;
-        match document.buffer().line(0) {
-            Some(line) if !line.is_empty() => self.screen.terminal.write_text(line)?,
-            _ => self.screen.terminal.write_text("[empty buffer]")?,
+        let text_rows = size.rows.saturating_sub(2).max(1);
+        for row in 0..text_rows {
+            self.screen.terminal.move_cursor(row + 1, 1)?;
+            self.screen.terminal.clear_line()?;
+            if let Some(line) = editor.document().buffer().line(usize::from(row)) {
+                self.screen.terminal.write_text(line)?;
+            } else {
+                self.screen.terminal.write_text("~")?;
+            }
         }
 
-        let status_row = size.rows.max(1);
+        let status_row = size.rows.saturating_sub(1).max(1);
         self.screen.terminal.move_cursor(status_row, 1)?;
         self.screen.terminal.clear_line()?;
+        self.screen.terminal.write_text(&format!(
+            "{} | C-x C-s save | C-x C-c quit | M-x",
+            editor.document().mode_line()
+        ))?;
+
+        self.screen.terminal.move_cursor(size.rows.max(1), 1)?;
+        self.screen.terminal.clear_line()?;
+        if let Some(message) = &editor.minibuffer().message {
+            self.screen.terminal.write_text(message)?;
+        }
+
+        let cursor = editor.cursor();
+        let cursor_row = (cursor.line + 1).min(usize::from(text_rows)) as u16;
+        let cursor_column = editor.document().buffer().display_column(cursor)? + 1;
         self.screen
             .terminal
-            .write_text(&format!("{} | Press C-q to quit.", document.mode_line()))?;
-        self.screen.terminal.move_cursor(1, 1)?;
+            .move_cursor(cursor_row.max(1), cursor_column as u16)?;
         self.screen.terminal.flush()
     }
 }
