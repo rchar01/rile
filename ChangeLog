@@ -1,5 +1,16 @@
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
+	* demos/movement.tape, demos/split-pane.tape: New optional VHS
+	visual demo recordings.
+	* scripts/visual-demos: New helper for generating demo GIFs when VHS
+	is installed.
+	* Makefile (visual-demos): New optional visual demo target.
+	* .gitignore: Ignore generated visual artifacts.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	VHS workflow and review-only status.
+
+2026-06-12  Robert Charusta  <rch-public@posteo.net>
+
 	* Containerfile.dev: Bump dev-container Rust toolchain to 1.96.0.
 
 2026-06-12  Robert Charusta  <rch-public@posteo.net>

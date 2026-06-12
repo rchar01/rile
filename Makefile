@@ -7,7 +7,7 @@ SHELL := /bin/sh
 IMAGE ?= rile-dev
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run clean
+.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run visual-demos clean
 
 ## Show available commands
 help:
@@ -71,6 +71,10 @@ verify:
 ## Run the Rile binary in the dev container; pass ARGS='--help'
 run:
 	$(IN_CONTAINER) ./scripts/run $(ARGS)
+
+## Generate optional VHS visual demo GIFs; pass ARGS='demos/name.tape'
+visual-demos:
+	./scripts/visual-demos $(ARGS)
 
 ## Remove Cargo build artifacts
 clean:

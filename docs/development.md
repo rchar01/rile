@@ -209,6 +209,8 @@ Use `--visual-test` to make terminal output deterministic for integration tests 
 
 PTY integration tests use support helpers under `tests/support/`. The harness spawns the compiled `rile` binary through `expectrl`, drains terminal output into `vt100::Parser`, and reports assertion failures with normalized screen dumps and cursor markers.
 
+Optional VHS demos live under `demos/` and write generated GIFs under ignored `artifacts/`. Run `make visual-demos` to generate every demo, or pass one or more tapes with `make visual-demos ARGS='demos/movement.tape'`. VHS output is review evidence for humans and multimodal tools; it is not a pass/fail oracle and is intentionally outside `make verify`.
+
 ## Quality Gate
 
 The preferred quality gate is:
@@ -265,6 +267,7 @@ make lint
 make audit
 make unused-deps
 make verify
+make visual-demos
 ```
 
 The Makefile delegates to scripts:

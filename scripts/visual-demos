@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+
+if ! command -v vhs >/dev/null 2>&1; then
+    printf '%s\n' "vhs not found; install Charm VHS to generate visual demo GIFs" >&2
+    printf '%s\n' "see: https://github.com/charmbracelet/vhs" >&2
+    exit 127
+fi
+
+cd "$root"
+mkdir -p artifacts
+
+if (($# == 0)); then
+    shopt -s nullglob
+    tapes=(demos/*.tape)
+    shopt -u nullglob
+else
+    tapes=("$@")
+fi
+
+if ((${#tapes[@]} == 0)); then
+    printf '%s\n' "no VHS tapes found under demos/" >&2
+    exit 1
+fi
+
+for tape in "${tapes[@]}"; do
+    if [[ ! -f "$tape" ]]; then
+        printf 'VHS tape not found: %s\n' "$tape" >&2
+        exit 1
+    fi
+
+    vhs "$tape"
+done

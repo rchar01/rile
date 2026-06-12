@@ -183,12 +183,21 @@ Goal: Add optional reproducible demos for humans and multimodal LLMs.
 
 Tasks:
 
-- [ ] Add `demos/movement.tape` using `--visual-test --test-size 80x24 fixtures/visual/numbered.txt`.
-- [ ] Add `demos/split-pane.tape` using split and pane-switching commands.
+- [x] Add `demos/movement.tape` using `--visual-test --test-size 80x24 fixtures/visual/numbered.txt`.
+- [x] Add `demos/split-pane.tape` using split and pane-switching commands.
 - [ ] Add `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` after the core demos work.
-- [ ] Add `artifacts/` to `.gitignore` unless artifacts are explicitly requested for distribution.
-- [ ] Add documentation that VHS output is review evidence only, not the pass/fail oracle.
-- [ ] Add a visual review checklist covering cursor visibility, status-line consistency, split separators, active pane clarity, scrolling, minibuffer readability, and clean quit.
+- [x] Add `artifacts/` to `.gitignore` unless artifacts are explicitly requested for distribution.
+- [x] Add documentation that VHS output is review evidence only, not the pass/fail oracle.
+- [x] Add a visual review checklist covering cursor visibility, status-line consistency, split separators, active pane clarity, scrolling, minibuffer readability, and clean quit.
+
+Visual review checklist:
+
+- The cursor remains visible after movement, split changes, prompts, and clean quit.
+- Mode lines show stable visual-test state, buffer names, active-window state, position, and dirty marker.
+- Split separators are drawn consistently and do not overwrite buffer text.
+- The active pane is clear after `C-x o`.
+- Scrolling and horizontal clipping avoid stale text.
+- Minibuffer prompts are readable while opening files and quitting.
 
 Validation gate:
 
@@ -203,14 +212,14 @@ Tasks:
 
 - [ ] Add PTY tests to normal `cargo test` and `make test` once stable.
 - [ ] Add `cargo insta test` to `make verify` only after snapshot churn is low and snapshots are committed.
-- [ ] Keep VHS out of default `make verify`.
-- [ ] Add optional `make demos` or `make visual-demos` target that checks for `vhs` and writes to `artifacts/`.
+- [x] Keep VHS out of default `make verify`.
+- [x] Add optional `make demos` or `make visual-demos` target that checks for `vhs` and writes to `artifacts/`.
 - [ ] Document optional CI artifact generation for hosted CI after Codeberg CI is configured.
 
 Validation gate:
 
-- [ ] `make verify` passes on the dev container without requiring VHS.
-- [ ] Optional visual demo generation fails clearly when VHS is missing.
+- [x] `make verify` passes on the dev container without requiring VHS.
+- [x] Optional visual demo generation fails clearly when VHS is missing.
 
 ## Risks
 
@@ -223,9 +232,9 @@ Validation gate:
 
 ## Validation Summary
 
-- [ ] `make fmt` passes.
+- [x] `make fmt` passes.
 - [ ] `make test` passes with PTY tests enabled.
-- [ ] `make verify` passes without requiring VHS.
+- [x] `make verify` passes without requiring VHS.
 - [ ] `cargo insta test` passes after snapshots are committed.
 - [ ] At least one deliberately failed PTY assertion produces a readable screen dump during local harness validation.
 - [ ] At least one VHS movement GIF is generated manually under `artifacts/`.
@@ -237,6 +246,7 @@ Validation gate:
 | 2026-06-12 | Plan created from user-provided guide and current Rile codebase inspection. | `src/app.rs`, `src/main.rs`, `src/terminal/mod.rs`, `Cargo.toml`, and `Makefile` inspected; crate availability checked with `cargo search`. |
 | 2026-06-12 | Phase 1 and visual fixtures started. | Added `--visual-test`, `--test-size`, deterministic visual mode-line rendering, and `fixtures/visual/*`. |
 | 2026-06-12 | PTY harness skeleton and first smoke test added. | Added `tests/support/*`, dev dependencies, and passing `tests/pty_open.rs`. |
+| 2026-06-12 | Optional VHS demo infrastructure added. | Added `demos/movement.tape`, `demos/split-pane.tape`, `scripts/visual-demos`, `make visual-demos`, and ignored `artifacts/`. |
 
 ## Decision Log
 
