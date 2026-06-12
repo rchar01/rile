@@ -307,13 +307,9 @@ fn draw_window<W: Write>(
 
     let mode_line_row = layout.rect.row + layout.rect.rows;
     terminal.move_cursor(mode_line_row as u16, (layout.rect.column + 1) as u16)?;
-    let syntax_mode = if editor.syntax_enabled() {
-        editor.syntax_mode_for_buffer(viewport.buffer).name()
-    } else {
-        "Syntax off"
-    };
+    let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
     let mode_line = format!(
-        "{}{} | {syntax_mode} | C-x C-s save | C-x C-c quit | M-x",
+        "{}{} | ({major_mode}) | C-x C-s save | C-x C-c quit | M-x",
         if layout.id == editor.current_window_id() {
             "* "
         } else {

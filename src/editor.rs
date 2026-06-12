@@ -11,7 +11,7 @@ use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
-use crate::syntax::{Highlighter, SyntaxHighlighter, SyntaxMode};
+use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
@@ -197,10 +197,14 @@ impl Editor {
     }
 
     pub fn syntax_mode_for_buffer(&self, id: BufferId) -> SyntaxMode {
+        self.major_mode_for_buffer(id).syntax_mode()
+    }
+
+    pub fn major_mode_for_buffer(&self, id: BufferId) -> MajorMode {
         self.buffers
             .document(id)
-            .map(|document| SyntaxMode::for_path(document.path()))
-            .unwrap_or(SyntaxMode::PlainText)
+            .map(|document| MajorMode::for_path(document.path()))
+            .unwrap_or(MajorMode::Fundamental)
     }
 
     pub fn spans_for_buffer_line(
@@ -1483,7 +1487,7 @@ mod tests {
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
     use crate::render::{DecorationProvider, Face, Span};
-    use crate::syntax::SyntaxMode;
+    use crate::syntax::{MajorMode, SyntaxMode};
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -2067,6 +2071,10 @@ mod tests {
             editor.syntax_mode_for_buffer(editor.current_buffer_id()),
             SyntaxMode::Rust
         );
+        assert_eq!(
+            editor.major_mode_for_buffer(editor.current_buffer_id()),
+            MajorMode::Rust
+        );
         assert!(editor.syntax_enabled());
         assert!(editor.spans_for_line(0, "fn main()").contains(&Span::new(
             0,
@@ -2080,8 +2088,42 @@ mod tests {
         assert!(!editor.syntax_enabled());
         assert!(editor.spans_for_line(0, "fn main()").is_empty());
         assert_eq!(
+            editor.major_mode_for_buffer(editor.current_buffer_id()),
+            MajorMode::Rust
+        );
+        assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Syntax highlighting disabled")
+        );
+    }
+
+    #[test]
+    fn major_mode_distinguishes_text_from_fundamental() {
+        let scratch = Editor::new(Document::scratch());
+        assert_eq!(
+            scratch.major_mode_for_buffer(scratch.current_buffer_id()),
+            MajorMode::Fundamental
+        );
+
+        let directory = TestDir::new();
+        let text_path = directory.path().join("notes.txt");
+        let unknown_path = directory.path().join("notes.unknown");
+
+        let text_editor = Editor::new(Document::open(&text_path).expect("missing text opens"));
+        assert_eq!(
+            text_editor.major_mode_for_buffer(text_editor.current_buffer_id()),
+            MajorMode::Text
+        );
+        assert_eq!(
+            text_editor.syntax_mode_for_buffer(text_editor.current_buffer_id()),
+            SyntaxMode::PlainText
+        );
+
+        let unknown_editor =
+            Editor::new(Document::open(&unknown_path).expect("missing file opens"));
+        assert_eq!(
+            unknown_editor.major_mode_for_buffer(unknown_editor.current_buffer_id()),
+            MajorMode::Fundamental
         );
     }
 

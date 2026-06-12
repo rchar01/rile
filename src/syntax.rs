@@ -6,6 +6,61 @@ use std::path::Path;
 use crate::render::{Face, Span};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MajorMode {
+    Fundamental,
+    Text,
+    Rust,
+    C,
+    Shell,
+    Markdown,
+    Toml,
+}
+
+impl MajorMode {
+    pub fn for_path(path: Option<&Path>) -> Self {
+        let Some(path) = path else {
+            return Self::Fundamental;
+        };
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase);
+        match extension.as_deref() {
+            Some("txt" | "text") => Self::Text,
+            Some("rs") => Self::Rust,
+            Some("c" | "h") => Self::C,
+            Some("sh" | "bash" | "zsh") => Self::Shell,
+            Some("md" | "markdown") => Self::Markdown,
+            Some("toml") => Self::Toml,
+            _ => Self::Fundamental,
+        }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Fundamental => "Fundamental",
+            Self::Text => "Text",
+            Self::Rust => "Rust",
+            Self::C => "C",
+            Self::Shell => "Shell",
+            Self::Markdown => "Markdown",
+            Self::Toml => "TOML",
+        }
+    }
+
+    pub const fn syntax_mode(self) -> SyntaxMode {
+        match self {
+            Self::Fundamental | Self::Text => SyntaxMode::PlainText,
+            Self::Rust => SyntaxMode::Rust,
+            Self::C => SyntaxMode::C,
+            Self::Shell => SyntaxMode::Shell,
+            Self::Markdown => SyntaxMode::Markdown,
+            Self::Toml => SyntaxMode::Toml,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SyntaxMode {
     PlainText,
     Rust,
@@ -17,21 +72,7 @@ pub enum SyntaxMode {
 
 impl SyntaxMode {
     pub fn for_path(path: Option<&Path>) -> Self {
-        let Some(path) = path else {
-            return Self::PlainText;
-        };
-        let extension = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_ascii_lowercase);
-        match extension.as_deref() {
-            Some("rs") => Self::Rust,
-            Some("c" | "h") => Self::C,
-            Some("sh" | "bash" | "zsh") => Self::Shell,
-            Some("md" | "markdown") => Self::Markdown,
-            Some("toml") => Self::Toml,
-            _ => Self::PlainText,
-        }
+        MajorMode::for_path(path).syntax_mode()
     }
 
     pub const fn name(self) -> &'static str {
@@ -262,7 +303,7 @@ fn is_word_character(character: char) -> bool {
 mod tests {
     use std::path::Path;
 
-    use super::{Highlighter, SyntaxHighlighter, SyntaxMode};
+    use super::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
     use crate::render::{Face, Span};
 
     #[test]
@@ -292,6 +333,27 @@ mod tests {
             SyntaxMode::PlainText
         );
         assert_eq!(SyntaxMode::for_path(None), SyntaxMode::PlainText);
+    }
+
+    #[test]
+    fn selects_emacs_style_major_modes_from_extensions() {
+        assert_eq!(MajorMode::for_path(None), MajorMode::Fundamental);
+        assert_eq!(
+            MajorMode::for_path(Some(Path::new("unknown.data"))),
+            MajorMode::Fundamental
+        );
+        assert_eq!(
+            MajorMode::for_path(Some(Path::new("notes.txt"))),
+            MajorMode::Text
+        );
+        assert_eq!(
+            MajorMode::for_path(Some(Path::new("main.rs"))),
+            MajorMode::Rust
+        );
+        assert_eq!(
+            MajorMode::for_path(Some(Path::new("README.md"))),
+            MajorMode::Markdown
+        );
     }
 
     #[test]
