@@ -146,6 +146,34 @@ fn goto_line_prefix_help_opens_help_buffer() -> Result<()> {
 }
 
 #[test]
+fn read_only_help_message_clears_on_movement() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("M-g", keys::meta('g'))?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.assert_screen_contains("Global Bindings Starting With M-g:")?;
+
+    rile.send("insert in help", b"x")?;
+    rile.assert_screen_contains("Buffer is read-only: *Help*")?;
+
+    rile.send("Down", keys::DOWN)?;
+    if rile.snapshot_text().contains("Buffer is read-only: *Help*") {
+        anyhow::bail!(
+            "read-only message did not clear after movement\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn buffer_start_and_end_scroll_the_viewport() -> Result<()> {
     let text = (1..=20)
         .map(|line| format!("line {line:03}"))

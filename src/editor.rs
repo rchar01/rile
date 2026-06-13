@@ -274,6 +274,8 @@ impl Editor {
             return self.handle_prompt_key(key);
         }
 
+        self.clear_transient_message();
+
         if self.query_replace.is_some() {
             return self.handle_query_replace_key(key);
         }
@@ -295,6 +297,11 @@ impl Editor {
         }
 
         match key {
+            KeyEvent::Special(SpecialKey::Escape) => {
+                self.clear_key_sequence();
+                self.clear_insert_group();
+                Ok(EditorOutcome::Continue)
+            }
             KeyEvent::Text(text) => {
                 self.clear_key_sequence();
                 self.insert_text(&text, true)?;
@@ -1486,9 +1493,17 @@ impl Editor {
         self.grouping_insert = false;
     }
 
+    fn clear_transient_message(&mut self) {
+        if self.minibuffer.prompt().is_none() {
+            self.minibuffer.clear();
+        }
+    }
+
     fn ensure_buffer_editable(&mut self) -> bool {
         if self.document().is_read_only() {
-            self.minibuffer.set_error("buffer is read-only");
+            let name = self.current_buffer_name().to_owned();
+            self.minibuffer
+                .set_message(format!("Buffer is read-only: {name}"));
             false
         } else {
             true
@@ -2154,8 +2169,31 @@ M-g g           goto-line\n"
         assert!(!welcome.document().buffer().serialize().starts_with('x'));
         assert_eq!(
             welcome.minibuffer().message.as_deref(),
-            Some("Error: buffer is read-only")
+            Some("Buffer is read-only: *Rile*")
         );
+
+        welcome
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should replace read-only message");
+        assert_eq!(welcome.minibuffer().message.as_deref(), Some("Quit"));
+
+        welcome
+            .handle_key(KeyEvent::Special(SpecialKey::Escape))
+            .expect("Escape should quietly clear message");
+        assert_eq!(welcome.minibuffer().message.as_deref(), None);
+
+        welcome
+            .handle_key(KeyEvent::Text("y".to_owned()))
+            .expect("second read-only insert should not error");
+        assert_eq!(
+            welcome.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *Rile*")
+        );
+        welcome
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("movement should clear read-only message");
+        assert_eq!(welcome.minibuffer().message.as_deref(), None);
+        assert_eq!(welcome.cursor(), Position::new(0, 1));
 
         let mut normal = Editor::new(Document::scratch());
         normal

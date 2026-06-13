@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Make editor messages transient across non-prompt commands,
+	report read-only special buffers as Buffer is read-only: <buffer>, and make
+	top-level Escape clear messages quietly.
+	* tests/pty_movement.rs: Cover read-only *Help* messages clearing after
+	movement.
+	* docs/development.md: Document transient read-only message behavior.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
 	write-file command with C-x C-w and Write file: prompt.
 	* tests/pty_save.rs: Cover writing the current buffer to a new path.

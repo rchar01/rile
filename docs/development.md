@@ -179,7 +179,10 @@ buffer bounds. It also adds `M-<` and `M->` for moving to the beginning and end
 of the current buffer. Pending key prefixes echo the current sequence with a
 `C-h` help hint, and `C-h` opens a generated read-only `*Help*` buffer for that
 prefix. Help buffers display `Type q in help window to restore previous buffer.`
-and `q` restores the previous buffer in the current window.
+and `q` restores the previous buffer in the current window. Attempts to edit a
+read-only special buffer report `Buffer is read-only: <buffer>`, and transient
+messages clear on the next non-prompt command unless that command writes a new
+message.
 
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
