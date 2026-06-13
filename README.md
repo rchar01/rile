@@ -45,6 +45,7 @@ Basic editor keys:
 - `C-k` kills to the end of the line, or the line break at end of line.
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
+- `C-x C-w` prompts for a file path and writes the current buffer there.
 - `C-x C-f` prompts for a file path and opens it.
 - `C-x b` prompts for a buffer name and switches to it.
 - `C-x k` prompts for a buffer name and kills it; empty input kills the current buffer.

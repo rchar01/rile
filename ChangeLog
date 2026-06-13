@@ -1,5 +1,12 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
+	write-file command with C-x C-w and Write file: prompt.
+	* tests/pty_save.rs: Cover writing the current buffer to a new path.
+	* README.md, docs/development.md: Document write-file behavior.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs, src/keymap.rs, src/buffers.rs, src/file.rs: Add prefix
 	help for pending key sequences, make *Rile* and *Help* read-only special
 	buffers, and restore the previous buffer with q in help.

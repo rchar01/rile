@@ -19,6 +19,7 @@ pub enum PromptKind {
     QueryReplaceReplacement,
     QueryReplaceSearch,
     SwitchToBuffer,
+    WriteFile,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -39,6 +39,7 @@ pub enum Command {
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
     Undo,
+    WriteFile,
     Yank,
 }
 
@@ -245,6 +246,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ToggleSyntaxHighlighting,
         ),
         CommandSpec::new("undo", "Undo last edit", true, Undo),
+        CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
         CommandSpec::new("yank", "Insert latest kill", true, Yank),
     ]
 }
@@ -282,6 +284,7 @@ mod tests {
         assert!(registry.contains("toggle-line-numbers"));
         assert!(registry.contains("toggle-search-highlighting"));
         assert!(registry.contains("toggle-syntax-highlighting"));
+        assert!(registry.contains("write-file"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
         assert!(registry.contains("delete-window"));

@@ -445,6 +445,7 @@ impl Editor {
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
             PromptKind::SwitchToBuffer => self.switch_to_buffer(input.trim()),
+            PromptKind::WriteFile => self.write_file(input.trim()),
         }
     }
 
@@ -488,6 +489,7 @@ impl Editor {
             ToggleSearchHighlighting => self.toggle_search_highlighting(),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
+            WriteFile => self.start_write_file(),
             Yank => self.yank(),
         }?;
 
@@ -818,6 +820,12 @@ impl Editor {
         Ok(())
     }
 
+    fn start_write_file(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::WriteFile, "Write file: ");
+        Ok(())
+    }
+
     fn start_extended_command(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::ExtendedCommand, "M-x ");
@@ -871,6 +879,21 @@ impl Editor {
                     .set_message(format!("Opened {}", self.document().display_name()));
             }
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn write_file(&mut self, path: &str) -> Result<EditorOutcome> {
+        if path.is_empty() {
+            self.minibuffer.set_error("missing file name");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        match self.document_mut().save_as(path) {
+            Ok(()) => self
+                .minibuffer
+                .set_message(format!("Wrote {}", self.document().display_name())),
+            Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(EditorOutcome::Continue)
     }
@@ -2217,6 +2240,60 @@ M-g g           goto-line\n"
             editor.minibuffer().message.as_deref(),
             Some("Error: missing file name")
         );
+    }
+
+    #[test]
+    fn write_file_prompt_saves_to_new_path() {
+        let directory = TestDir::new();
+        let path = directory.path().join("written.txt");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("saved".to_owned()))
+            .expect("text should insert");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('w'))
+            .expect("write-file should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Write file: ")
+        );
+        submit_prompt_text(&mut editor, path.to_str().expect("path should be utf-8"));
+
+        assert_eq!(editor.document().path(), Some(path.as_path()));
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "saved"
+        );
+        let expected_message = format!("Wrote {}", path.display());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some(expected_message.as_str())
+        );
+    }
+
+    #[test]
+    fn write_file_prompt_reports_empty_input() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("write-file")
+            .expect("write-file should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty input should be reported");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: missing file name")
+        );
+        assert_eq!(editor.document().path(), None);
     }
 
     #[test]

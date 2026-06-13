@@ -181,6 +181,10 @@ of the current buffer. Pending key prefixes echo the current sequence with a
 prefix. Help buffers display `Type q in help window to restore previous buffer.`
 and `q` restores the previous buffer in the current window.
 
+Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
+`Write file: `, saving the current buffer to the entered path, and making that
+path the visited file. Empty input reports `Error: missing file name`.
+
 Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
