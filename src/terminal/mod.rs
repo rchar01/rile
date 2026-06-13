@@ -31,6 +31,7 @@ pub struct RuntimeOptions<'a> {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 struct FrameOptions {
     visual_test: bool,
+    clear_screen: bool,
 }
 
 pub struct RawModeGuard {
@@ -182,6 +183,11 @@ impl<W: Write> AnsiTerminal<W> {
         Ok(())
     }
 
+    pub fn write_bytes(&mut self, bytes: &[u8]) -> Result<()> {
+        self.writer.write_all(bytes)?;
+        Ok(())
+    }
+
     pub fn flush(&mut self) -> Result<()> {
         self.writer.flush()?;
         Ok(())
@@ -223,6 +229,7 @@ struct TerminalSession<R, W: Write> {
     output_fd: libc::c_int,
     test_size: Option<TerminalSize>,
     frame_options: FrameOptions,
+    last_size: Option<TerminalSize>,
 }
 
 impl<R, W> TerminalSession<R, W>
@@ -249,7 +256,9 @@ where
             test_size: options.test_size,
             frame_options: FrameOptions {
                 visual_test: options.visual_test,
+                clear_screen: false,
             },
+            last_size: None,
         })
     }
 
@@ -267,7 +276,16 @@ where
             Some(size) => size,
             None => terminal_size(self.output_fd)?,
         };
-        draw_editor_frame_with_options(&mut self.screen.terminal, editor, size, self.frame_options)
+        let mut frame_options = self.frame_options;
+        frame_options.clear_screen = self.last_size.is_some_and(|last_size| last_size != size);
+        self.last_size = Some(size);
+
+        let mut frame_terminal = AnsiTerminal::new(Vec::new());
+        draw_editor_frame_with_options(&mut frame_terminal, editor, size, frame_options)?;
+        self.screen
+            .terminal
+            .write_bytes(&frame_terminal.into_inner())?;
+        self.screen.terminal.flush()
     }
 }
 
@@ -287,8 +305,10 @@ fn draw_editor_frame_with_options<W: Write>(
     options: FrameOptions,
 ) -> Result<()> {
     terminal.hide_cursor()?;
-    terminal.move_cursor(1, 1)?;
-    terminal.clear_screen()?;
+    if options.clear_screen {
+        terminal.move_cursor(1, 1)?;
+        terminal.clear_screen()?;
+    }
 
     let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
     let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
@@ -309,8 +329,7 @@ fn draw_editor_frame_with_options<W: Write>(
     }
 
     move_cursor_to_current_window(terminal, editor, &layouts)?;
-    terminal.show_cursor()?;
-    terminal.flush()
+    terminal.show_cursor()
 }
 
 fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) -> Result<()> {
@@ -958,6 +977,55 @@ mod tests {
     }
 
     #[test]
+    fn normal_redraw_does_not_clear_screen() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 40,
+        };
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(
+            !contains_bytes(&frame, b"\x1b[2J"),
+            "normal redraw should not clear the whole screen"
+        );
+    }
+
+    #[test]
+    fn resize_redraw_can_clear_screen_while_cursor_hidden() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 40,
+        };
+
+        let frame = rendered_frame_bytes_with_options(
+            &mut editor,
+            size,
+            FrameOptions {
+                clear_screen: true,
+                ..FrameOptions::default()
+            },
+        );
+
+        assert!(
+            frame.starts_with(b"\x1b[?25l\x1b[1;1H\x1b[2J"),
+            "resize redraw should hide cursor before clearing"
+        );
+    }
+
+    #[test]
     fn redraw_moves_cursor_up_after_viewport_scrolled_down() {
         let mut document = Document::scratch();
         document
@@ -1034,8 +1102,14 @@ mod tests {
             columns: 80,
         };
 
-        let frame =
-            rendered_frame_with_options(&mut editor, size, FrameOptions { visual_test: true });
+        let frame = rendered_frame_with_options(
+            &mut editor,
+            size,
+            FrameOptions {
+                visual_test: true,
+                ..FrameOptions::default()
+            },
+        );
 
         assert!(frame.contains("Rile VISUAL window 0 ACTIVE *scratch*"));
         assert!(frame.contains("Ln 001 Col 000"));
@@ -1074,6 +1148,12 @@ mod tests {
         draw_editor_frame_with_options(&mut terminal, editor, size, options)
             .expect("frame should draw");
         terminal.into_inner()
+    }
+
+    fn contains_bytes(haystack: &[u8], needle: &[u8]) -> bool {
+        haystack
+            .windows(needle.len())
+            .any(|window| window == needle)
     }
 
     fn last_cursor_position(output: &[u8]) -> Option<(usize, usize)> {

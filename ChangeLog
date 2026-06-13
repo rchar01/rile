@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/terminal/mod.rs (TerminalSession::draw): Render each frame into an
+	intermediate buffer and write it once.
+	(draw_editor_frame_with_options): Stop clearing the whole screen during
+	normal redraws; keep clear support for resize frames.
+	(normal_redraw_does_not_clear_screen): New regression test.
+	(resize_redraw_can_clear_screen_while_cursor_hidden): New regression test.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/terminal/mod.rs (draw_editor_frame_with_options): Hide the cursor
 	while repainting and show it only after moving to the final point.
 	(redraw_hides_cursor_until_final_cursor_move): New regression test.
