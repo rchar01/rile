@@ -150,18 +150,18 @@ Goal: Cover the areas most likely to regress visually in terminal use.
 
 Tasks:
 
-- [ ] Add `tests/pty_scrolling.rs` with vertical cursor visibility after repeated `C-n` and `C-p`.
-- [ ] Add horizontal scrolling tests using `long_lines.txt` and a narrow test size.
-- [ ] Add `tests/pty_resize.rs` using `--test-size` for small and narrow terminal snapshots.
+- [x] Add `tests/pty_scrolling.rs` with vertical cursor visibility after repeated `C-n` and `C-p`.
+- [x] Add horizontal scrolling tests using `long_lines.txt` and a narrow test size.
+- [x] Add `tests/pty_resize.rs` using `--test-size` for small and narrow parsed-screen assertions.
 - [x] Add `tests/pty_split_pane.rs` coverage for the split-pane VHS demo flow.
-- [ ] Add broader split PTY coverage for `C-x 3`, `C-x 2`, `C-x o`, active pane marker, cursor-in-active-pane, and separator rendering.
+- [x] Add broader split PTY coverage for `C-x 3`, `C-x 2`, `C-x o`, active pane marker, cursor-in-active-pane, and separator rendering.
 - [ ] Add split snapshot tests only after visual-test pane labels are deterministic.
 
 Validation gate:
 
-- [ ] Cursor remains inside the parsed VT100 screen after scrolling and split navigation.
-- [ ] Mode-line/status text remains visible in small terminal sizes.
-- [ ] Split separators do not corrupt buffer text in snapshots.
+- [x] Cursor remains inside the parsed VT100 screen after scrolling and split navigation.
+- [x] Mode-line/status text remains visible in small terminal sizes.
+- [x] Split separators do not corrupt buffer text in parsed PTY screen assertions.
 
 ## Phase 6: Snapshot Workflow
 
@@ -260,6 +260,7 @@ Validation gate:
 | 2026-06-12 | Visual tooling container and named frames added. | Added `Containerfile.visual`, containerized `make visual-demos`, and `make visual-frames` for named PNG review screenshots. |
 | 2026-06-12 | Split visual demo flow fixed. | `a9dd1ec` fixed C-x o input, screenshot timing, and split selection behavior; regenerated frames showed the right file opening in the right pane. |
 | 2026-06-13 | Insert, save, and status-line PTY coverage added. | `tests/pty_insert.rs` covers ASCII, UTF-8, Enter, Backspace, and Delete; `tests/pty_save.rs` covers C-x C-s, clean/dirty state, and saved disk contents; `tests/pty_statusline.rs` covers visual state, line/column updates, save state, and minibuffer errors. |
+| 2026-06-13 | Scrolling, resize, and broader split PTY coverage added. | `tests/pty_scrolling.rs` covers vertical and horizontal scrolling; `tests/pty_resize.rs` covers small and narrow deterministic sizes; `tests/pty_split_pane.rs` covers C-x 2, C-x 3, C-x o, C-x 0, and C-x 1. |
 
 ## Decision Log
 

@@ -1,5 +1,16 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* tests/pty_scrolling.rs: New PTY coverage for vertical scrolling and
+	horizontal scrolling on long lines.
+	* tests/pty_resize.rs: New PTY coverage for small and narrow deterministic
+	test sizes.
+	* tests/pty_split_pane.rs (split_commands_preserve_active_pane_and_buffer_text):
+	New broader split-window command coverage.
+	* docs/pty-vt100-visual-testing-plan.md: Mark Phase 5 PTY coverage
+	complete except split snapshot tests.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tests/pty_insert.rs: New PTY coverage for ASCII insertion, UTF-8
 	insertion, Enter, Backspace, Delete, cursor position, and dirty state.
 	* tests/pty_save.rs: New PTY coverage for C-x C-s, saved disk

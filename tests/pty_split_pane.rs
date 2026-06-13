@@ -7,6 +7,12 @@ use anyhow::Result;
 
 use support::{fixtures, keys, pty::RilePty};
 
+fn control_x_text(text: &str) -> Vec<u8> {
+    let mut sequence = keys::control('x').to_vec();
+    sequence.extend_from_slice(text.as_bytes());
+    sequence
+}
+
 #[test]
 fn split_pane_demo_flow_opens_file_in_other_window() -> Result<()> {
     let left = fixtures::fixture_path("split_left.txt");
@@ -41,6 +47,53 @@ fn split_pane_demo_flow_opens_file_in_other_window() -> Result<()> {
 
     rile.send("C-n", keys::control('n'))?;
     rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 003 Col 00")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn split_commands_preserve_active_pane_and_buffer_text() -> Result<()> {
+    let file = fixtures::fixture_path("split_left.txt");
+    let mut rile = RilePty::spawn(&file, 14, 120)?;
+
+    rile.wait_for_screen_contains("split_left.txt")?;
+
+    rile.send("C-x 2", control_x_text("2"))?;
+    rile.assert_screen_contains("window 0 ACTIVE split_left.txt")?;
+    rile.assert_screen_contains("window 1 inactive split_left.txt")?;
+    rile.assert_screen_contains("left 000 | alpha")?;
+
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_screen_contains("window 0 inactive split_left.txt")?;
+    rile.assert_screen_contains("window 1 ACTIVE split_left.txt")?;
+    let (row, _) = rile.cursor_position();
+    assert!(
+        row > 5,
+        "active cursor was not in lower pane\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-x 0", control_x_text("0"))?;
+    rile.assert_screen_contains("window 0 ACTIVE split_left.txt")?;
+    assert!(
+        !rile.snapshot_text().contains("inactive split_left.txt"),
+        "deleted window still rendered\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-x 3", control_x_text("3"))?;
+    rile.assert_screen_contains("window 0 ACTIVE split_left.txt")?;
+    rile.assert_screen_contains("window 2 inactive split_left.txt")?;
+    rile.assert_screen_contains("left 000 | alpha")?;
+
+    rile.send("C-x 1", control_x_text("1"))?;
+    rile.assert_screen_contains("window 0 ACTIVE split_left.txt")?;
+    assert!(
+        !rile.snapshot_text().contains("inactive split_left.txt"),
+        "other windows still rendered\n{}",
+        rile.screen_dump()
+    );
 
     rile.quit()?;
     Ok(())
