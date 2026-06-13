@@ -37,6 +37,7 @@ Basic editor keys:
   type `q` in the help buffer to restore the previous buffer.
 - Printable UTF-8 text inserts at point.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
+- `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
 - `C-x C-x` exchanges point and mark.

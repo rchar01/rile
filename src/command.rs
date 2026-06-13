@@ -4,6 +4,7 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
     BackwardChar,
+    BackwardKillWord,
     BackwardWord,
     BeginningOfBuffer,
     BeginningOfLine,
@@ -25,6 +26,7 @@ pub enum Command {
     KillLine,
     KillBuffer,
     KillRegion,
+    KillWord,
     NextLine,
     OpenLine,
     PreviousLine,
@@ -107,6 +109,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
 
     vec![
         CommandSpec::new("backward-char", "Move cursor left", true, BackwardChar),
+        CommandSpec::new(
+            "backward-kill-word",
+            "Kill word before cursor",
+            true,
+            BackwardKillWord,
+        ),
         CommandSpec::new(
             "backward-word",
             "Move cursor backward by word",
@@ -193,6 +201,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
+        CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
@@ -271,6 +280,7 @@ mod tests {
             Some(Command::SaveBuffer)
         );
         assert!(registry.contains("beginning-of-buffer"));
+        assert!(registry.contains("backward-kill-word"));
         assert!(registry.contains("backward-word"));
         assert!(registry.contains("end-of-buffer"));
         assert!(registry.contains("exchange-point-and-mark"));
@@ -284,6 +294,7 @@ mod tests {
         assert!(registry.contains("kill-buffer"));
         assert!(registry.contains("kill-line"));
         assert!(registry.contains("kill-region"));
+        assert!(registry.contains("kill-word"));
         assert!(registry.contains("copy-region-as-kill"));
         assert!(registry.contains("yank"));
         assert!(registry.contains("undo"));

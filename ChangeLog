@@ -1,5 +1,13 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/input.rs, src/command.rs, src/keymap.rs, src/editor.rs: Add
+	kill-word on M-d and backward-kill-word on M-Backspace.
+	* tests/pty_insert.rs, tests/support/keys.rs: Cover word-kill commands in a
+	real PTY.
+	* README.md, docs/development.md, NEWS: Document word-kill behavior.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add
 	exchange-point-and-mark with C-x C-x, active region restoration, and No mark
 	set in this buffer message when the current buffer has no mark.

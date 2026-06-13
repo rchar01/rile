@@ -9,6 +9,7 @@ use crate::{Result, RileError};
 pub enum KeyEvent {
     Ctrl(char),
     Meta(char),
+    MetaSpecial(SpecialKey),
     Text(String),
     Special(SpecialKey),
 }
@@ -112,7 +113,7 @@ fn parse_escape_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
         let key = match second {
             b'\r' | b'\n' => KeyEvent::Special(SpecialKey::Enter),
             b'\t' => KeyEvent::Special(SpecialKey::Tab),
-            0x7f | 0x08 => KeyEvent::Special(SpecialKey::Backspace),
+            0x7f | 0x08 => KeyEvent::MetaSpecial(SpecialKey::Backspace),
             0x01..=0x1a => KeyEvent::Ctrl((b'a' + second - 1) as char),
             0x20..=0x7e => KeyEvent::Meta(char::from(second)),
             _ => KeyEvent::Special(SpecialKey::Escape),
@@ -259,6 +260,14 @@ mod tests {
     fn parses_meta_key() {
         assert_eq!(parse(b"\x1bf").event, KeyEvent::Meta('f'));
         assert_eq!(parse("\u{1b}é".as_bytes()).event, KeyEvent::Meta('é'));
+        assert_eq!(
+            parse(b"\x1b\x7f").event,
+            KeyEvent::MetaSpecial(SpecialKey::Backspace)
+        );
+        assert_eq!(
+            parse(b"\x1b\x08").event,
+            KeyEvent::MetaSpecial(SpecialKey::Backspace)
+        );
     }
 
     #[test]

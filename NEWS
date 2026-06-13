@@ -16,7 +16,8 @@ Editing features:
 * Save through a same-directory temporary file and rename.
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, beginning/end of line, and word.
-* Delete characters, kill lines, set a mark, kill/copy regions, and yank.
+* Delete characters, kill words and lines, set a mark, kill/copy regions,
+  and yank.
 * Undo current-buffer edits with grouped normal typing.
 * Run exact-name commands through M-x.
 

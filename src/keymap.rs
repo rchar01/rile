@@ -82,6 +82,11 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], "forward-char"),
         KeyBinding::new([KeyEvent::Meta('b')], "backward-word"),
         KeyBinding::new([KeyEvent::Meta('f')], "forward-word"),
+        KeyBinding::new([KeyEvent::Meta('d')], "kill-word"),
+        KeyBinding::new(
+            [KeyEvent::MetaSpecial(SpecialKey::Backspace)],
+            "backward-kill-word",
+        ),
         KeyBinding::new([KeyEvent::Meta('<')], "beginning-of-buffer"),
         KeyBinding::new([KeyEvent::Meta('>')], "end-of-buffer"),
         KeyBinding::new([KeyEvent::Ctrl('p')], "previous-line"),
@@ -158,7 +163,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
 #[cfg(test)]
 mod tests {
     use super::{KeyMap, KeyResolution};
-    use crate::input::KeyEvent;
+    use crate::input::{KeyEvent, SpecialKey};
 
     #[test]
     fn resolves_single_key_bindings() {
@@ -175,6 +180,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('b')]),
             KeyResolution::Command("backward-word")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('d')]),
+            KeyResolution::Command("kill-word")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::MetaSpecial(SpecialKey::Backspace)]),
+            KeyResolution::Command("backward-kill-word")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('<')]),

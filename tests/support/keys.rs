@@ -22,3 +22,7 @@ pub fn meta(letter: char) -> Vec<u8> {
     assert!(letter.is_ascii());
     vec![b'\x1b', letter as u8]
 }
+
+pub fn meta_backspace() -> Vec<u8> {
+    vec![b'\x1b', b'\x7f']
+}

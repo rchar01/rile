@@ -188,6 +188,11 @@ Post-Milestone 14 region polish adds `exchange-point-and-mark` on `C-x C-x`.
 It swaps point with the current buffer's mark, reactivates the region, and
 reports `No mark set in this buffer` when no mark exists for the current buffer.
 
+Post-Milestone 14 word-kill polish adds `kill-word` on `M-d` and
+`backward-kill-word` on `M-Backspace`, using the same Unicode-aware word
+boundaries as `M-f` and `M-b`. Word kills use the existing kill-ring behavior:
+each kill is a separate entry, and consecutive kill coalescing remains deferred.
+
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.

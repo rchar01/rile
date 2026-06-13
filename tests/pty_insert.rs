@@ -90,3 +90,24 @@ fn exchange_point_and_mark_keeps_region_active() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn kill_word_and_backward_kill_word_edit_visible_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("one two three")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one two three")?;
+    rile.send("M-d", keys::meta('d'))?;
+    rile.assert_screen_contains("two three")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.send("M->", keys::meta('>'))?;
+    rile.assert_cursor(0, 10)?;
+    rile.send("M-Backspace", keys::meta_backspace())?;
+    rile.assert_screen_contains("two")?;
+    assert!(!rile.snapshot_text().contains("three"));
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}

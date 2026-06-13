@@ -461,6 +461,7 @@ impl Editor {
 
         match command {
             BackwardChar => self.move_backward(),
+            BackwardKillWord => self.backward_kill_word(),
             BackwardWord => self.move_word_backward(),
             BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
@@ -481,6 +482,7 @@ impl Editor {
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
+            KillWord => self.kill_word(),
             NextLine => self.move_line(1),
             OpenLine => self.open_line(),
             PreviousLine => self.move_line(-1),
@@ -760,6 +762,51 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed line");
+        Ok(())
+    }
+
+    fn kill_word(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        let end = self.document().buffer().move_word_forward(self.cursor)?;
+        if end == self.cursor {
+            return Ok(());
+        }
+
+        let range = TextRange::new(self.cursor, end);
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.push_kill(text.clone());
+        self.record_delete(range, text, cursor_before, self.cursor);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Killed word");
+        Ok(())
+    }
+
+    fn backward_kill_word(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        let start = self.document().buffer().move_word_backward(self.cursor)?;
+        if start == self.cursor {
+            return Ok(());
+        }
+
+        let range = TextRange::new(start, self.cursor);
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        self.push_kill(text.clone());
+        self.cursor = start;
+        self.record_delete(range, text, cursor_before, self.cursor);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Killed word");
         Ok(())
     }
 
@@ -1613,20 +1660,27 @@ fn format_key_event(key: &KeyEvent) -> String {
     match key {
         KeyEvent::Ctrl(character) => format!("C-{character}"),
         KeyEvent::Meta(character) => format!("M-{character}"),
+        KeyEvent::MetaSpecial(special) => format!("M-{}", format_special_key(*special)),
         KeyEvent::Text(text) => text.clone(),
-        KeyEvent::Special(SpecialKey::Backspace) => "Backspace".to_owned(),
-        KeyEvent::Special(SpecialKey::Delete) => "Delete".to_owned(),
-        KeyEvent::Special(SpecialKey::Enter) => "Enter".to_owned(),
-        KeyEvent::Special(SpecialKey::Tab) => "Tab".to_owned(),
-        KeyEvent::Special(SpecialKey::Escape) => "Esc".to_owned(),
-        KeyEvent::Special(SpecialKey::ArrowUp) => "Up".to_owned(),
-        KeyEvent::Special(SpecialKey::ArrowDown) => "Down".to_owned(),
-        KeyEvent::Special(SpecialKey::ArrowLeft) => "Left".to_owned(),
-        KeyEvent::Special(SpecialKey::ArrowRight) => "Right".to_owned(),
-        KeyEvent::Special(SpecialKey::Home) => "Home".to_owned(),
-        KeyEvent::Special(SpecialKey::End) => "End".to_owned(),
-        KeyEvent::Special(SpecialKey::PageUp) => "PageUp".to_owned(),
-        KeyEvent::Special(SpecialKey::PageDown) => "PageDown".to_owned(),
+        KeyEvent::Special(special) => format_special_key(*special),
+    }
+}
+
+fn format_special_key(key: SpecialKey) -> String {
+    match key {
+        SpecialKey::Backspace => "Backspace".to_owned(),
+        SpecialKey::Delete => "Delete".to_owned(),
+        SpecialKey::Enter => "Enter".to_owned(),
+        SpecialKey::Tab => "Tab".to_owned(),
+        SpecialKey::Escape => "Esc".to_owned(),
+        SpecialKey::ArrowUp => "Up".to_owned(),
+        SpecialKey::ArrowDown => "Down".to_owned(),
+        SpecialKey::ArrowLeft => "Left".to_owned(),
+        SpecialKey::ArrowRight => "Right".to_owned(),
+        SpecialKey::Home => "Home".to_owned(),
+        SpecialKey::End => "End".to_owned(),
+        SpecialKey::PageUp => "PageUp".to_owned(),
+        SpecialKey::PageDown => "PageDown".to_owned(),
     }
 }
 
@@ -2794,6 +2848,44 @@ M-g g           goto-line\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should restore line");
         assert_eq!(editor.document().buffer().serialize(), "abc\ndef");
+    }
+
+    #[test]
+    fn kill_word_and_backward_kill_word_update_kill_ring_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two three")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('d'))
+            .expect("M-d should kill word forward");
+        assert_eq!(editor.document().buffer().serialize(), " two three");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Meta('>'))
+            .expect("M-> should move to end");
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Backspace))
+            .expect("M-Backspace should kill word backward");
+        assert_eq!(editor.document().buffer().serialize(), " two ");
+        assert_eq!(editor.cursor(), Position::new(0, " two ".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert latest kill");
+        assert_eq!(editor.document().buffer().serialize(), " two three");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove yank");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore backward kill");
+        assert_eq!(editor.document().buffer().serialize(), " two three");
     }
 
     #[test]
