@@ -107,7 +107,7 @@ fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
 
     rile.wait_for_screen_contains("line 001")?;
     rile.send("M-g", keys::meta('g'))?;
-    rile.assert_screen_contains("M-g")?;
+    rile.assert_screen_contains("M-g- (C-h for help)")?;
     rile.send("g", b"g")?;
     rile.assert_screen_contains("Goto line:")?;
 
@@ -116,6 +116,30 @@ fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
 
     rile.assert_cursor(4, 4)?;
     rile.assert_status_contains("Ln 005 Col 004")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn goto_line_prefix_help_opens_help_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("M-g", keys::meta('g'))?;
+    rile.assert_screen_contains("M-g- (C-h for help)")?;
+    rile.send("C-h", keys::control('h'))?;
+
+    rile.assert_screen_contains("Global Bindings Starting With M-g:")?;
+    rile.assert_screen_contains("Key             Binding")?;
+    rile.assert_screen_contains("---             -------")?;
+    rile.assert_screen_contains("M-g g           goto-line")?;
+    rile.assert_screen_contains("Type q in help window to restore previous buffer.")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
 
     rile.quit()?;
     Ok(())

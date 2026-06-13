@@ -61,6 +61,15 @@ impl KeyMap {
             KeyResolution::NoMatch
         }
     }
+
+    pub fn bindings_starting_with(&self, prefix: &[KeyEvent]) -> Vec<&KeyBinding> {
+        self.bindings
+            .iter()
+            .filter(|binding| {
+                binding.sequence.len() > prefix.len() && binding.sequence.starts_with(prefix)
+            })
+            .collect()
+    }
 }
 
 pub fn default_bindings() -> Vec<KeyBinding> {
@@ -273,6 +282,19 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('z')]),
             KeyResolution::NoMatch
+        );
+    }
+
+    #[test]
+    fn lists_bindings_starting_with_prefix() {
+        let keymap = KeyMap::default();
+        let bindings = keymap.bindings_starting_with(&[KeyEvent::Meta('g')]);
+
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].command, "goto-line");
+        assert_eq!(
+            bindings[0].sequence,
+            vec![KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]
         );
     }
 }

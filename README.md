@@ -33,6 +33,8 @@ Basic editor keys:
 - `C-a`/Home and `C-e`/End move within the current line.
 - `M-<` and `M->` move to the beginning and end of the buffer.
 - `M-g g` prompts for a line or `line:column` and moves point there.
+- `C-h` after a prefix such as `M-g` shows available bindings for that prefix;
+  type `q` in the help buffer to restore the previous buffer.
 - Printable UTF-8 text inserts at point.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `C-o` opens a line at point without moving point.

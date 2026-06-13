@@ -32,6 +32,7 @@ pub struct Editor {
     keymap: KeyMap,
     commands: CommandRegistry,
     minibuffer: MinibufferState,
+    help_return: Option<Viewport>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     region: Option<RegionState>,
@@ -116,6 +117,7 @@ impl Editor {
             keymap: KeyMap::default(),
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
+            help_return: None,
             search: None,
             query_replace: None,
             region: None,
@@ -284,6 +286,10 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         }
 
+        if self.document().is_help() && key == KeyEvent::Text("q".to_owned()) {
+            return Ok(self.restore_help_buffer());
+        }
+
         if !self.key_sequence.is_empty() {
             return self.handle_bound_key(key);
         }
@@ -319,6 +325,10 @@ impl Editor {
     }
 
     fn handle_bound_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        if !self.key_sequence.is_empty() && is_key_prefix_help(&key) {
+            return Ok(self.show_key_prefix_help());
+        }
+
         self.key_sequence.push(key);
 
         match self.keymap.resolve(&self.key_sequence) {
@@ -329,7 +339,7 @@ impl Editor {
             }
             KeyResolution::Prefix => {
                 self.minibuffer
-                    .set_message(format_key_sequence(&self.key_sequence));
+                    .set_message(format_key_prefix_message(&self.key_sequence));
                 Ok(EditorOutcome::Continue)
             }
             KeyResolution::Command(name) => {
@@ -337,6 +347,56 @@ impl Editor {
                 self.execute_command_by_name(name)
             }
         }
+    }
+
+    fn show_key_prefix_help(&mut self) -> EditorOutcome {
+        let prefix = self.key_sequence.clone();
+        let text = format_key_prefix_help(&self.keymap, &prefix);
+        self.sync_current_window();
+        if !self.document().is_help() || self.help_return.is_none() {
+            self.help_return = Some(*self.windows.current().viewport());
+        }
+        let help = self.buffers.open_help(text);
+
+        self.clear_key_sequence();
+        self.current_buffer = help;
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = 0;
+        viewport.first_visible_column = 0;
+        self.sync_current_window();
+        self.minibuffer
+            .set_message("Type q in help window to restore previous buffer.");
+
+        EditorOutcome::Continue
+    }
+
+    fn restore_help_buffer(&mut self) -> EditorOutcome {
+        let Some(viewport) = self.help_return.take() else {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        };
+        if self.buffers.document(viewport.buffer).is_none() {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        }
+
+        self.current_buffer = viewport.buffer;
+        self.cursor = viewport.cursor;
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        *self.windows.current_mut().viewport_mut() = viewport;
+        self.minibuffer.clear();
+
+        EditorOutcome::Continue
     }
 
     fn handle_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -435,6 +495,9 @@ impl Editor {
     }
 
     fn insert_text(&mut self, text: &str, group_with_previous: bool) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         let cursor = self.cursor;
         self.cursor = self.document_mut().buffer_mut().insert(cursor, text)?;
         self.record_insert(cursor, self.cursor, text, group_with_previous);
@@ -534,6 +597,9 @@ impl Editor {
     }
 
     fn delete_backward_char(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let start = self
             .document()
@@ -554,6 +620,9 @@ impl Editor {
     }
 
     fn delete_char(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let end = self
             .document()
@@ -597,6 +666,9 @@ impl Editor {
     }
 
     fn kill_region(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let Some(range) = self.active_region_range() else {
             self.minibuffer.set_error("no active region");
@@ -615,6 +687,9 @@ impl Editor {
     }
 
     fn yank(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let Some(text) = self.kill_ring.last().cloned() else {
             self.minibuffer.set_error("kill ring is empty");
@@ -634,6 +709,9 @@ impl Editor {
     }
 
     fn kill_line(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let Some(line) = self.document().buffer().line(self.cursor.line) else {
@@ -658,6 +736,9 @@ impl Editor {
     }
 
     fn open_line(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let end = self
@@ -674,6 +755,9 @@ impl Editor {
     }
 
     fn undo(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         let Some(index) = self
             .undo_stack
@@ -886,6 +970,9 @@ impl Editor {
     }
 
     fn start_query_replace(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
         self.clear_insert_group();
         self.search = None;
         self.query_replace = None;
@@ -1000,6 +1087,9 @@ impl Editor {
     }
 
     fn replace_query_replace_current(&mut self) -> Result<Position> {
+        if !self.ensure_buffer_editable() {
+            return Ok(self.cursor);
+        }
         let Some((old_range, replacement)) = self.query_replace.as_ref().and_then(|state| {
             state
                 .current
@@ -1373,6 +1463,15 @@ impl Editor {
         self.grouping_insert = false;
     }
 
+    fn ensure_buffer_editable(&mut self) -> bool {
+        if self.document().is_read_only() {
+            self.minibuffer.set_error("buffer is read-only");
+            false
+        } else {
+            true
+        }
+    }
+
     fn sync_current_window(&mut self) {
         let viewport = self.windows.current_mut().viewport_mut();
         viewport.buffer = self.current_buffer;
@@ -1421,6 +1520,36 @@ fn format_key_sequence(sequence: &[KeyEvent]) -> String {
         .map(format_key_event)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn format_key_prefix_message(sequence: &[KeyEvent]) -> String {
+    format!("{}- (C-h for help)", format_key_sequence(sequence))
+}
+
+fn is_key_prefix_help(key: &KeyEvent) -> bool {
+    matches!(
+        key,
+        KeyEvent::Ctrl('h') | KeyEvent::Special(SpecialKey::Backspace)
+    )
+}
+
+fn format_key_prefix_help(keymap: &KeyMap, prefix: &[KeyEvent]) -> String {
+    let mut text = format!(
+        "Global Bindings Starting With {}:\n\n",
+        format_key_sequence(prefix)
+    );
+    text.push_str("Key             Binding\n");
+    text.push_str("---             -------\n\n");
+
+    for binding in keymap.bindings_starting_with(prefix) {
+        text.push_str(&format!(
+            "{:<15} {}\n",
+            format_key_sequence(&binding.sequence),
+            binding.command
+        ));
+    }
+
+    text
 }
 
 fn format_key_event(key: &KeyEvent) -> String {
@@ -1888,7 +2017,10 @@ mod tests {
         editor
             .handle_key(KeyEvent::Ctrl('x'))
             .expect("prefix should start");
-        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("C-x"));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("C-x- (C-h for help)")
+        );
         editor
             .handle_key(KeyEvent::Ctrl('g'))
             .expect("C-g should cancel prefix");
@@ -1908,7 +2040,10 @@ mod tests {
             .handle_key(KeyEvent::Meta('g'))
             .expect("goto-line prefix should start");
 
-        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-g"));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("M-g- (C-h for help)")
+        );
         assert_eq!(editor.minibuffer().prompt(), None);
 
         editor
@@ -1919,6 +2054,92 @@ mod tests {
             editor.minibuffer().display_text().as_deref(),
             Some("Goto line: ")
         );
+    }
+
+    #[test]
+    fn prefix_help_opens_help_buffer_for_pending_sequence() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Type q in help window to restore previous buffer.")
+        );
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "Global Bindings Starting With M-g:\n\n\
+Key             Binding\n\
+---             -------\n\n\
+M-g g           goto-line\n"
+        );
+    }
+
+    #[test]
+    fn q_in_help_restores_previous_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        let original = editor.current_buffer_id();
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+
+        assert_eq!(editor.current_buffer_id(), original);
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert_eq!(editor.minibuffer().display_text(), None);
+    }
+
+    #[test]
+    fn special_buffers_are_read_only_but_normal_q_inserts() {
+        let mut welcome = Editor::new(Document::welcome());
+
+        welcome
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("read-only insert should not error");
+
+        assert!(
+            welcome
+                .document()
+                .buffer()
+                .serialize()
+                .contains("Welcome to Rile.")
+        );
+        assert!(!welcome.document().buffer().serialize().starts_with('x'));
+        assert_eq!(
+            welcome.minibuffer().message.as_deref(),
+            Some("Error: buffer is read-only")
+        );
+
+        let mut normal = Editor::new(Document::scratch());
+        normal
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("normal q should insert");
+
+        assert_eq!(normal.document().buffer().serialize(), "q");
     }
 
     #[test]
@@ -2046,7 +2267,10 @@ mod tests {
         editor
             .handle_key(KeyEvent::Meta('g'))
             .expect("goto-line prefix should start");
-        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-g"));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("M-g- (C-h for help)")
+        );
         editor
             .handle_key(KeyEvent::Text("g".to_owned()))
             .expect("goto-line should prompt");

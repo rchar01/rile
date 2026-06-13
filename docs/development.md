@@ -171,12 +171,15 @@ Milestone 14 adds configuration and polish:
 - `theme = "default"` keeps colored faces and `theme = "mono"` uses mostly monochrome ANSI emphasis;
 - tests cover config parsing, invalid config values, editor option application, toggles, tab expansion, and line-number rendering.
 
-Post-Milestone 14 UX polish adds a clean `*Rile*` welcome buffer for no-file launches, blank unused rows instead of Vim-like `~` markers, and compact mode-line position text such as `All (1,0)` alongside the major mode.
+Post-Milestone 14 UX polish adds a clean read-only `*Rile*` welcome buffer for no-file launches, blank unused rows instead of Vim-like `~` markers, and compact mode-line position text such as `All (1,0)` alongside the major mode.
 
 Post-Milestone 14 navigation polish adds `M-g g` and `goto-line` with `line` or
 `line:column` minibuffer input, clamping out-of-range targets to the current
 buffer bounds. It also adds `M-<` and `M->` for moving to the beginning and end
-of the current buffer.
+of the current buffer. Pending key prefixes echo the current sequence with a
+`C-h` help hint, and `C-h` opens a generated read-only `*Help*` buffer for that
+prefix. Help buffers display `Type q in help window to restore previous buffer.`
+and `q` restores the previous buffer in the current window.
 
 Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 

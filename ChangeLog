@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs, src/keymap.rs, src/buffers.rs, src/file.rs: Add prefix
+	help for pending key sequences, make *Rile* and *Help* read-only special
+	buffers, and restore the previous buffer with q in help.
+	* tests/pty_movement.rs: Cover M-g C-h help output and q restore.
+	* README.md, docs/development.md: Document prefix help behavior and special
+	buffers.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Echo pending key prefixes with their key sequence instead
 	of the generic Prefix key message.
 	* tests/pty_movement.rs: Cover M-g prefix echo before goto-line prompt.

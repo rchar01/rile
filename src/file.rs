@@ -11,11 +11,19 @@ use crate::{Result, RileError};
 
 static SAVE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DocumentKind {
+    Normal,
+    Welcome,
+    Help,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     buffer: Buffer,
     path: Option<PathBuf>,
     name: Option<String>,
+    kind: DocumentKind,
     missing_on_open: bool,
     backup_on_save: bool,
 }
@@ -26,6 +34,7 @@ impl Document {
             buffer: Buffer::new(),
             path: None,
             name: None,
+            kind: DocumentKind::Normal,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -41,6 +50,18 @@ Rile is free software under GPL-3.0-or-later.\n",
             ),
             path: None,
             name: Some("*Rile*".to_owned()),
+            kind: DocumentKind::Welcome,
+            missing_on_open: false,
+            backup_on_save: false,
+        }
+    }
+
+    pub fn help(text: impl AsRef<str>) -> Self {
+        Self {
+            buffer: Buffer::from_text(text.as_ref()),
+            path: None,
+            name: Some("*Help*".to_owned()),
+            kind: DocumentKind::Help,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -68,6 +89,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                     buffer: Buffer::from_text(&text),
                     path: Some(path),
                     name: None,
+                    kind: DocumentKind::Normal,
                     missing_on_open: false,
                     backup_on_save: false,
                 })
@@ -76,6 +98,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                 buffer: Buffer::new(),
                 path: Some(path),
                 name: None,
+                kind: DocumentKind::Normal,
                 missing_on_open: true,
                 backup_on_save: false,
             }),
@@ -104,6 +127,18 @@ Rile is free software under GPL-3.0-or-later.\n",
         })
     }
 
+    pub fn kind(&self) -> DocumentKind {
+        self.kind
+    }
+
+    pub fn is_read_only(&self) -> bool {
+        self.kind != DocumentKind::Normal
+    }
+
+    pub fn is_help(&self) -> bool {
+        self.kind == DocumentKind::Help
+    }
+
     pub fn is_dirty(&self) -> bool {
         self.buffer.is_dirty()
     }
@@ -121,6 +156,9 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     pub fn save(&mut self) -> Result<()> {
+        if self.is_read_only() {
+            return Err(RileError::InvalidInput("buffer is read-only".to_owned()));
+        }
         let Some(path) = self.path.clone() else {
             return Err(RileError::InvalidInput(
                 "cannot save unnamed buffer without a path".to_owned(),
@@ -130,6 +168,9 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     pub fn save_as(&mut self, path: impl AsRef<Path>) -> Result<()> {
+        if self.is_read_only() {
+            return Err(RileError::InvalidInput("buffer is read-only".to_owned()));
+        }
         let path = path.as_ref().to_path_buf();
         self.write_to_path(&path)?;
         self.path = Some(path);
@@ -237,7 +278,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::Document;
+    use super::{Document, DocumentKind};
     use crate::buffer::Position;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -295,19 +336,35 @@ mod tests {
 
     #[test]
     fn welcome_document_is_named_and_clean() {
-        let directory = TestDir::new();
-        let path = directory.path().join("welcome.txt");
         let mut document = Document::welcome();
 
         assert_eq!(document.display_name(), "*Rile*");
+        assert_eq!(document.kind(), DocumentKind::Welcome);
+        assert!(document.is_read_only());
         assert!(document.buffer().serialize().contains("Welcome to Rile."));
         assert!(!document.is_dirty());
 
-        document
-            .save_as(&path)
-            .expect("welcome should save as file");
-        assert_eq!(document.path(), Some(path.as_path()));
-        assert_eq!(document.display_name(), path.display().to_string());
+        let error = document
+            .save()
+            .expect_err("welcome buffer should be read-only");
+        assert!(error.to_string().contains("read-only"));
+    }
+
+    #[test]
+    fn help_document_is_named_clean_and_read_only() {
+        let mut document = Document::help("Help text\n");
+
+        assert_eq!(document.display_name(), "*Help*");
+        assert_eq!(document.kind(), DocumentKind::Help);
+        assert!(document.is_help());
+        assert!(document.is_read_only());
+        assert_eq!(document.buffer().serialize(), "Help text\n");
+        assert!(!document.is_dirty());
+
+        let error = document
+            .save()
+            .expect_err("help buffer should be read-only");
+        assert!(error.to_string().contains("read-only"));
     }
 
     #[test]
