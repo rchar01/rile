@@ -286,6 +286,7 @@ fn draw_editor_frame_with_options<W: Write>(
     size: TerminalSize,
     options: FrameOptions,
 ) -> Result<()> {
+    terminal.hide_cursor()?;
     terminal.move_cursor(1, 1)?;
     terminal.clear_screen()?;
 
@@ -918,6 +919,42 @@ mod tests {
             .handle_key(KeyEvent::Ctrl('p'))
             .expect("cursor should move up again");
         assert_eq!(rendered_cursor_position(&mut editor, size), Some((2, 1)));
+    }
+
+    #[test]
+    fn redraw_hides_cursor_until_final_cursor_move() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 40,
+        };
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(
+            frame.starts_with(b"\x1b[?25l"),
+            "redraw should hide cursor before painting"
+        );
+        let final_cursor = frame
+            .windows(b"\x1b[2;1H".len())
+            .rposition(|window| window == b"\x1b[2;1H")
+            .expect("redraw should move cursor to final point");
+        let show_cursor = frame
+            .windows(b"\x1b[?25h".len())
+            .rposition(|window| window == b"\x1b[?25h")
+            .expect("redraw should show cursor after painting");
+        assert!(
+            final_cursor < show_cursor,
+            "redraw should show cursor only after final cursor move"
+        );
     }
 
     #[test]

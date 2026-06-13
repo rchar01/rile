@@ -1,5 +1,11 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/terminal/mod.rs (draw_editor_frame_with_options): Hide the cursor
+	while repainting and show it only after moving to the final point.
+	(redraw_hides_cursor_until_final_cursor_move): New regression test.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add open-line command
 	and bind it to C-o.
 	* tests/pty_insert.rs: Cover open-line visible behavior in a PTY.
