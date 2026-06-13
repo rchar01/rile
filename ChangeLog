@@ -1,5 +1,18 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* demos/open-edit-save.tape: New VHS demo covering creating, editing,
+	saving, and clean quitting a file.
+	* demos/search.tape: New VHS demo covering incremental search prompts,
+	matches, repeat search, and accept.
+	* demos/resize.tape: New VHS demo covering narrow and short deterministic
+	render sizes with horizontal and vertical scrolling.
+	* scripts/visual-frames: Validate named PNG frames for the new demos and
+	check the open-edit-save demo writes the expected file contents.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	the expanded VHS visual review workflow and mark Phase 7 complete.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tests/support/screen.rs (snapshot): New path-free parsed-screen
 	snapshot formatter with size, cursor position, rows, and caret marker.
 	* tests/support/pty.rs (RilePty::snapshot_screen): New helper for PTY

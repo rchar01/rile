@@ -190,7 +190,7 @@ Tasks:
 
 - [x] Add `demos/movement.tape` using `--visual-test --test-size 120x32 fixtures/visual/numbered.txt`.
 - [x] Add `demos/split-pane.tape` using split and pane-switching commands.
-- [ ] Add `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` after the core demos work.
+- [x] Add `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` after the core demos work. Evidence: tapes exist and `make visual-frames` validates their named PNG frames.
 - [x] Add `artifacts/` to `.gitignore` unless artifacts are explicitly requested for distribution.
 - [x] Add documentation that VHS output is review evidence only, not the pass/fail oracle.
 - [x] Add a visual review checklist covering cursor visibility, status-line consistency, split separators, active pane clarity, scrolling, minibuffer readability, and clean quit.
@@ -209,6 +209,7 @@ Validation gate:
 
 - [x] `make visual-demos` generates `artifacts/movement.gif` on a machine with VHS and ttyd installed.
 - [x] `make visual-demos` generates `artifacts/split-pane.gif` on a machine with VHS and ttyd installed.
+- [x] `make visual-frames` generates named frames for movement, open-edit-save, resize, search, and split-pane demos.
 
 ## Phase 8: CI and Developer Workflow
 
@@ -262,6 +263,7 @@ Validation gate:
 | 2026-06-13 | Insert, save, and status-line PTY coverage added. | `tests/pty_insert.rs` covers ASCII, UTF-8, Enter, Backspace, and Delete; `tests/pty_save.rs` covers C-x C-s, clean/dirty state, and saved disk contents; `tests/pty_statusline.rs` covers visual state, line/column updates, save state, and minibuffer errors. |
 | 2026-06-13 | Scrolling, resize, and broader split PTY coverage added. | `tests/pty_scrolling.rs` covers vertical and horizontal scrolling; `tests/pty_resize.rs` covers small and narrow deterministic sizes; `tests/pty_split_pane.rs` covers C-x 2, C-x 3, C-x o, C-x 0, and C-x 1. |
 | 2026-06-13 | Parsed-screen snapshot workflow added. | `tests/pty_snapshots.rs` and `tests/snapshots/*.snap` cover open, movement, and split rendering; `scripts/snapshot-test` and `make snapshot-test` provide the opt-in review workflow. |
+| 2026-06-13 | Expanded VHS visual demos added. | `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` generate GIFs and named PNG frames through `make visual-frames`. |
 
 ## Decision Log
 

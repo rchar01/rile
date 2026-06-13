@@ -11,7 +11,7 @@ cd "$root"
 
 selected=()
 if (($# == 0)); then
-    selected=(movement split-pane)
+    selected=(movement open-edit-save resize search split-pane)
 else
     for tape in "$@"; do
         name=${tape##*/}
@@ -28,6 +28,23 @@ expect_frame() {
     fi
 }
 
+expect_file_contents() {
+    local output=$1
+    local expected=$2
+
+    if [[ ! -f "$output" ]]; then
+        printf 'visual demo file was not generated: %s\n' "$output" >&2
+        exit 1
+    fi
+
+    local actual
+    actual=$(<"$output")
+    if [[ "$actual" != "$expected" ]]; then
+        printf 'visual demo file contents differed: %s\n' "$output" >&2
+        exit 1
+    fi
+}
+
 for demo in "${selected[@]}"; do
     case "$demo" in
         movement)
@@ -39,6 +56,26 @@ for demo in "${selected[@]}"; do
             expect_frame artifacts/frames/movement-05-C-p.png
             expect_frame artifacts/frames/movement-06-C-a.png
             expect_frame artifacts/frames/movement-07-C-e.png
+            ;;
+        open-edit-save)
+            expect_frame artifacts/frames/open-edit-save-00-open.png
+            expect_frame artifacts/frames/open-edit-save-01-insert-ascii.png
+            expect_frame artifacts/frames/open-edit-save-02-insert-second-line.png
+            expect_frame artifacts/frames/open-edit-save-03-saved.png
+            expect_file_contents artifacts/open-edit-save.txt $'hello from visual demo\nsecond line from visual demo'
+            ;;
+        resize)
+            expect_frame artifacts/frames/resize-00-narrow-open.png
+            expect_frame artifacts/frames/resize-01-horizontal-scroll.png
+            expect_frame artifacts/frames/resize-02-short-open.png
+            expect_frame artifacts/frames/resize-03-vertical-scroll.png
+            ;;
+        search)
+            expect_frame artifacts/frames/search-00-open.png
+            expect_frame artifacts/frames/search-01-prompt.png
+            expect_frame artifacts/frames/search-02-match.png
+            expect_frame artifacts/frames/search-03-repeat.png
+            expect_frame artifacts/frames/search-04-accept.png
             ;;
         split-pane)
             expect_frame artifacts/frames/split-pane-00-open.png
