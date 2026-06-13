@@ -1,5 +1,11 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Echo pending key prefixes with their key sequence instead
+	of the generic Prefix key message.
+	* tests/pty_movement.rs: Cover M-g prefix echo before goto-line prompt.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add beginning-of-buffer
 	and end-of-buffer commands with M-< and M-> bindings.
 	* tests/pty_movement.rs: Cover buffer start/end viewport behavior.

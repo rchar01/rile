@@ -328,7 +328,8 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             KeyResolution::Prefix => {
-                self.minibuffer.set_message("Prefix key");
+                self.minibuffer
+                    .set_message(format_key_sequence(&self.key_sequence));
                 Ok(EditorOutcome::Continue)
             }
             KeyResolution::Command(name) => {
@@ -1414,6 +1415,35 @@ fn parse_goto_line_input(input: &str) -> std::result::Result<(usize, usize), ()>
     Ok((line, column))
 }
 
+fn format_key_sequence(sequence: &[KeyEvent]) -> String {
+    sequence
+        .iter()
+        .map(format_key_event)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn format_key_event(key: &KeyEvent) -> String {
+    match key {
+        KeyEvent::Ctrl(character) => format!("C-{character}"),
+        KeyEvent::Meta(character) => format!("M-{character}"),
+        KeyEvent::Text(text) => text.clone(),
+        KeyEvent::Special(SpecialKey::Backspace) => "Backspace".to_owned(),
+        KeyEvent::Special(SpecialKey::Delete) => "Delete".to_owned(),
+        KeyEvent::Special(SpecialKey::Enter) => "Enter".to_owned(),
+        KeyEvent::Special(SpecialKey::Tab) => "Tab".to_owned(),
+        KeyEvent::Special(SpecialKey::Escape) => "Esc".to_owned(),
+        KeyEvent::Special(SpecialKey::ArrowUp) => "Up".to_owned(),
+        KeyEvent::Special(SpecialKey::ArrowDown) => "Down".to_owned(),
+        KeyEvent::Special(SpecialKey::ArrowLeft) => "Left".to_owned(),
+        KeyEvent::Special(SpecialKey::ArrowRight) => "Right".to_owned(),
+        KeyEvent::Special(SpecialKey::Home) => "Home".to_owned(),
+        KeyEvent::Special(SpecialKey::End) => "End".to_owned(),
+        KeyEvent::Special(SpecialKey::PageUp) => "PageUp".to_owned(),
+        KeyEvent::Special(SpecialKey::PageDown) => "PageDown".to_owned(),
+    }
+}
+
 impl DecorationProvider for Editor {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
         self.spans_for_buffer_line(self.current_buffer, line_index, line)
@@ -1858,6 +1888,7 @@ mod tests {
         editor
             .handle_key(KeyEvent::Ctrl('x'))
             .expect("prefix should start");
+        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("C-x"));
         editor
             .handle_key(KeyEvent::Ctrl('g'))
             .expect("C-g should cancel prefix");
@@ -1867,6 +1898,27 @@ mod tests {
 
         assert_eq!(editor.minibuffer().message.as_deref(), None);
         assert_eq!(editor.document().buffer().serialize(), "x");
+    }
+
+    #[test]
+    fn prefix_keys_echo_pending_sequence_without_prompt() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+
+        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-g"));
+        assert_eq!(editor.minibuffer().prompt(), None);
+
+        editor
+            .handle_key(KeyEvent::Text("g".to_owned()))
+            .expect("goto-line should prompt");
+
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Goto line: ")
+        );
     }
 
     #[test]
@@ -1994,6 +2046,7 @@ mod tests {
         editor
             .handle_key(KeyEvent::Meta('g'))
             .expect("goto-line prefix should start");
+        assert_eq!(editor.minibuffer().display_text().as_deref(), Some("M-g"));
         editor
             .handle_key(KeyEvent::Text("g".to_owned()))
             .expect("goto-line should prompt");
