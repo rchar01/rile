@@ -378,6 +378,7 @@ impl Editor {
         match kind {
             PromptKind::ExtendedCommand => self.execute_command_by_name(input.trim()),
             PromptKind::FindFile => self.find_file(input.trim()),
+            PromptKind::GotoLine => self.goto_line(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input.trim()),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
@@ -403,6 +404,7 @@ impl Editor {
             FindFile => self.start_find_file(),
             ForwardChar => self.move_forward(),
             ForwardWord => self.move_word_forward(),
+            GotoLine => self.start_goto_line(),
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             KillLine => self.kill_line(),
@@ -725,6 +727,12 @@ impl Editor {
         Ok(())
     }
 
+    fn start_goto_line(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::GotoLine, "Goto line: ");
+        Ok(())
+    }
+
     fn start_switch_to_buffer(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::SwitchToBuffer, "Switch to buffer: ");
@@ -761,6 +769,27 @@ impl Editor {
             }
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
         }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn goto_line(&mut self, input: &str) -> Result<EditorOutcome> {
+        let Ok((line, column)) = parse_goto_line_input(input) else {
+            self.minibuffer.set_error(if input.is_empty() {
+                "missing line number"
+            } else {
+                "invalid line number"
+            });
+            return Ok(EditorOutcome::Continue);
+        };
+
+        let buffer = self.document().buffer();
+        let target_line = (line - 1).min(buffer.line_count() - 1);
+        let target_byte = buffer.byte_for_display_column(target_line, column)?;
+
+        self.clear_insert_group();
+        self.cursor = Position::new(target_line, target_byte);
+        self.goal_display_column = None;
+        self.sync_current_window();
         Ok(EditorOutcome::Continue)
     }
 
@@ -1342,6 +1371,31 @@ impl Editor {
     }
 }
 
+fn parse_goto_line_input(input: &str) -> std::result::Result<(usize, usize), ()> {
+    let input = input.trim();
+    if input.is_empty() {
+        return Err(());
+    }
+
+    let (line, column) = match input.split_once(':') {
+        Some((line, column)) => (line.trim(), Some(column.trim())),
+        None => (input, None),
+    };
+
+    let line = line.parse::<usize>().map_err(|_| ())?;
+    if line == 0 {
+        return Err(());
+    }
+
+    let column = match column {
+        Some("") => return Err(()),
+        Some(column) => column.parse::<usize>().map_err(|_| ())?,
+        None => 0,
+    };
+
+    Ok((line, column))
+}
+
 impl DecorationProvider for Editor {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
         self.spans_for_buffer_line(self.current_buffer, line_index, line)
@@ -1878,6 +1932,91 @@ mod tests {
 
         assert_eq!(editor.current_buffer_id(), first_id);
         assert_eq!(editor.buffer_count(), 2);
+    }
+
+    #[test]
+    fn goto_line_accepts_line_and_line_column() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "line 1\nline 2\nline 3 abc")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Goto line: ")
+        );
+        submit_prompt_text(&mut editor, "3:7");
+
+        assert_eq!(editor.cursor(), Position::new(2, 7));
+        assert_eq!(editor.minibuffer().display_text(), None);
+
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should prompt by name");
+        submit_prompt_text(&mut editor, "2");
+
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn goto_line_clamps_line_and_column() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "short\nlast")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should prompt");
+        submit_prompt_text(&mut editor, "99:99");
+
+        assert_eq!(editor.cursor(), Position::new(1, "last".len()));
+    }
+
+    #[test]
+    fn goto_line_rejects_invalid_input_without_moving() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should prompt");
+        submit_prompt_text(&mut editor, "0");
+
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: invalid line number")
+        );
+
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty prompt should submit");
+
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: missing line number")
+        );
     }
 
     #[test]

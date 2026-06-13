@@ -96,6 +96,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
+        KeyBinding::new([KeyEvent::Meta('g')], "goto-line"),
         KeyBinding::new([KeyEvent::Meta('%')], "query-replace"),
         KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
         KeyBinding::new(
@@ -155,6 +156,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('b')]),
             KeyResolution::Command("backward-word")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('g')]),
+            KeyResolution::Command("goto-line")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),

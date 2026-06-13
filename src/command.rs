@@ -16,6 +16,7 @@ pub enum Command {
     FindFile,
     ForwardChar,
     ForwardWord,
+    GotoLine,
     IncrementalSearchBackward,
     IncrementalSearchForward,
     KillLine,
@@ -154,6 +155,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             ForwardWord,
         ),
+        CommandSpec::new("goto-line", "Go to line or line:column", true, GotoLine),
         CommandSpec::new(
             "isearch-backward",
             "Search backward incrementally",
@@ -249,6 +251,7 @@ mod tests {
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
         assert!(registry.contains("forward-word"));
+        assert!(registry.contains("goto-line"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("switch-to-buffer"));

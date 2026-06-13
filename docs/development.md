@@ -173,6 +173,10 @@ Milestone 14 adds configuration and polish:
 
 Post-Milestone 14 UX polish adds a clean `*Rile*` welcome buffer for no-file launches, blank unused rows instead of Vim-like `~` markers, and compact mode-line position text such as `All (1,0)` alongside the major mode.
 
+Post-Milestone 14 navigation polish adds `M-g` and `goto-line` with `line` or
+`line:column` minibuffer input, clamping out-of-range targets to the current
+buffer bounds.
+
 Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.

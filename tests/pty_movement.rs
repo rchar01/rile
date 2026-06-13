@@ -99,3 +99,22 @@ fn movement_commands_cover_backward_arrows_and_words() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\nline 003\nline 004\nline 005 abc\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("M-g", keys::meta('g'))?;
+    rile.assert_screen_contains("Goto line:")?;
+
+    rile.send("5:4", b"5:4")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_cursor(4, 4)?;
+    rile.assert_status_contains("Ln 005 Col 004")?;
+
+    rile.quit()?;
+    Ok(())
+}

@@ -13,6 +13,7 @@ pub struct MinibufferState {
 pub enum PromptKind {
     ExtendedCommand,
     FindFile,
+    GotoLine,
     IncrementalSearch,
     KillBuffer,
     QueryReplaceReplacement,

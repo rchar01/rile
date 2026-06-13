@@ -31,6 +31,7 @@ Basic editor keys:
 - `M-f` and `M-b` move forward and backward by word.
 - `C-n`/down arrow and `C-p`/up arrow move vertically.
 - `C-a`/Home and `C-e`/End move within the current line.
+- `M-g` prompts for a line or `line:column` and moves point there.
 - Printable UTF-8 text inserts at point.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `C-o` opens a line at point without moving point.

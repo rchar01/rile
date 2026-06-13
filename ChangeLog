@@ -1,5 +1,12 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
+	goto-line command and bind it to M-g.
+	* tests/pty_movement.rs: Cover goto-line prompt behavior in a PTY.
+	* README.md, docs/development.md: Document goto-line.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/kg: New optional kg reference build and capture tooling.
 	* tools/reference/kg/scenarios: Add baseline UI, open-line, goto-line,
 	M-x completion, find-file completion, incremental-search, query-replace,
