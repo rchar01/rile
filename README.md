@@ -116,6 +116,6 @@ CI is deferred until it is configured for the official repository.
 
 ## Reference Policy
 
-The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
+The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile and kg. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
 
 See `NOTICE.md` for the current third-party code status.

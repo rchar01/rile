@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/kg: New optional kg reference build and capture tooling.
+	* tools/reference/kg/scenarios: Add baseline UI, open-line, goto-line,
+	M-x completion, find-file completion, incremental-search, query-replace,
+	and split-window reference-capture scenarios.
+	* docs/reference-testing.md, docs/README.md, README.md, NOTICE.md: Document
+	kg reference-testing workflow and provenance policy.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* scripts/devshell: Set Podman detach keys to Ctrl-] by default so
 	interactive containers do not intercept editor C-p input; allow override
 	through PODMAN_DETACH_KEYS.

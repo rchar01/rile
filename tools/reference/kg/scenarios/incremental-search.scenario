@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=incremental-search
+SCENARIO_DESCRIPTION='Observe kg incremental search prompt, repeat, and accept behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=incremental-search.txt
+FIXTURE_CONTENT=$'alpha one\nbeta two\ngamma one\ndelta two\nepsilon one\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-search-prompt.png
+Sleep 500ms
+Type "one"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-query.png
+Sleep 500ms
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-repeat.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-accept.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

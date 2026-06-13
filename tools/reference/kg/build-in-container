@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+kg_url=${KG_URL:-https://github.com/troglobit/kg.git}
+kg_commit=${KG_COMMIT:-5e08fce9f11e1d424ec6dd68161c83e578d5a4c2}
+
+root=/workspace
+artifact_root=$root/artifacts/reference/kg
+source_dir=$artifact_root/src/kg
+prefix=$artifact_root/install
+provenance=$artifact_root/provenance.txt
+
+mkdir -p "$artifact_root/src" "$prefix/bin" "$prefix/share/doc/kg" "$prefix/share/man/man1"
+
+if [[ ! -d "$source_dir/.git" ]]; then
+  rm -rf "$source_dir"
+  git clone "$kg_url" "$source_dir"
+fi
+
+git -C "$source_dir" fetch --tags origin
+git -C "$source_dir" checkout --detach "$kg_commit"
+git -C "$source_dir" clean -fdx
+
+make -C "$source_dir" -j"$(nproc)"
+
+install -m 755 "$source_dir/src/kg" "$prefix/bin/kg"
+install -m 644 "$source_dir/LICENSE" "$prefix/share/doc/kg/LICENSE"
+install -m 644 "$source_dir/README.md" "$prefix/share/doc/kg/README.md"
+install -m 644 "$source_dir/doc/kg.1" "$prefix/share/man/man1/kg.1"
+
+cat > "$provenance" <<EOF
+kg reference source
+url: $kg_url
+commit: $kg_commit
+license: BSD-2-Clause
+EOF
+
+printf 'Installed kg reference binary from %s: %s\n' "$kg_commit" "$prefix/bin/kg"

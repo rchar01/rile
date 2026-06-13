@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=query-replace
+SCENARIO_DESCRIPTION='Observe kg query-replace prompts and choice-key workflow.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=query-replace.txt
+FIXTURE_CONTENT=$'red one\nblue two\nred three\nred four\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /red one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "%"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-search-prompt.png
+Sleep 500ms
+Type "red"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-replacement-prompt.png
+Sleep 500ms
+Type "green"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-first-candidate.png
+Sleep 500ms
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-replace-one.png
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-skip-one.png
+Sleep 500ms
+Type "q"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-quit.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Wait+Screen /really quit/
+Type "y"
+EOF
+}

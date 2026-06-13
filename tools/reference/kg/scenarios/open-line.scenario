@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=open-line
+SCENARIO_DESCRIPTION='Observe kg open-line behavior with point in the first line.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=open-line.txt
+FIXTURE_CONTENT=$'alpha beta gamma\nsecond line\nthird line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha beta gamma/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-before-open-line.png
+Sleep 500ms
+Ctrl+O
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-open-line.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Wait+Screen /really quit/
+Type "y"
+EOF
+}

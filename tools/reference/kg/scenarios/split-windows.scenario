@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=split-windows
+SCENARIO_DESCRIPTION='Observe kg split window layout and window switching behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=split-windows.txt
+FIXTURE_CONTENT=$'line 001\nline 002\nline 003\nline 004\nline 005\nline 006\nline 007\nline 008\nline 009\nline 010\nline 011\nline 012\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /line 001/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Type "2"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-horizontal-split.png
+Sleep 500ms
+Ctrl+X
+Type "o"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-other-window.png
+Sleep 500ms
+Ctrl+X
+Type "3"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-vertical-split.png
+Sleep 500ms
+Ctrl+X
+Type "1"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-delete-other-windows.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

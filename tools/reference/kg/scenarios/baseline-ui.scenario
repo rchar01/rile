@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=baseline-ui
+SCENARIO_DESCRIPTION='Observe kg initial screen layout and mode line.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=baseline-ui.txt
+FIXTURE_CONTENT=$'alpha baseline\nbeta baseline\ngamma baseline\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha baseline/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
