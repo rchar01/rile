@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=goto-line
+SCENARIO_DESCRIPTION='Observe Zile goto-line prompt and cursor movement.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=goto-line.txt
+FIXTURE_CONTENT=$'line 001\nline 002\nline 003\nline 004\nline 005\nline 006\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /line 001/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "gg"
+Wait+Screen /Goto line/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-prompt.png
+Sleep 500ms
+Type "5"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-line-entered.png
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-goto-line.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

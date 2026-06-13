@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+FROM docker.io/library/debian:bookworm-slim
+
+ARG VHS_VERSION=0.11.0
+ARG TTYD_VERSION=1.7.7
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    autoconf \
+    automake \
+    bash \
+    build-essential \
+    ca-certificates \
+    chromium \
+    curl \
+    ffmpeg \
+    fontconfig \
+    fonts-dejavu-core \
+    gettext \
+    git \
+    help2man \
+    libgee-0.8-dev \
+    libglib2.0-dev \
+    libncurses-dev \
+    make \
+    perl \
+    pkg-config \
+    tar \
+    valac \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN set -eu; \
+    curl -fsSL -o /tmp/vhs.deb "https://github.com/charmbracelet/vhs/releases/download/v${VHS_VERSION}/vhs_${VHS_VERSION}_amd64.deb"; \
+    printf '%s  %s\n' 'fbc970f9e20ba59884af09b4d52c66117239a16cfe9a2a757f8af5b30b16d055' '/tmp/vhs.deb' | sha256sum -c -; \
+    dpkg -i /tmp/vhs.deb; \
+    rm -f /tmp/vhs.deb
+
+RUN set -eu; \
+    curl -fsSL -o /usr/local/bin/ttyd "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"; \
+    printf '%s  %s\n' '8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55' '/usr/local/bin/ttyd' | sha256sum -c -; \
+    chmod +x /usr/local/bin/ttyd
+
+RUN printf '%s\n' '#!/usr/bin/env bash' 'exec /usr/bin/chromium --no-sandbox "$@"' > /usr/local/bin/chromium \
+ && chmod +x /usr/local/bin/chromium \
+ && mkdir -p /workspace \
+ && chmod 777 /workspace
+
+ENV CHROME_BIN=/usr/local/bin/chromium
+
+WORKDIR /workspace

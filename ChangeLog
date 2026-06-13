@@ -1,5 +1,27 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* docs/reference-testing.md: New guide for optional reference-editor
+	behavior capture and provenance rules.
+	* tools/reference/zile: New optional GNU Zile reference build and capture
+	tooling.
+	* tools/reference/zile/scenarios: New original smoke, open-line, and
+	goto-line reference-capture scenarios.
+	* NOTICE.md, README.md, docs/README.md: Document the reference-testing
+	policy and links.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
+	* docs/README.md: New documentation index.
+	* docs/testing.md: New durable testing guide for unit, PTY, snapshot,
+	and optional visual-review workflows.
+	* docs/development.md: Replace detailed testing workflow with a pointer to
+	the dedicated testing guide.
+	* docs/pty-vt100-visual-testing-plan.md: Remove completed implementation
+	plan after moving durable guidance into docs/testing.md.
+	* README.md: Link to maintainer and testing documentation.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tests/pty_movement.rs (movement_commands_cover_backward_arrows_and_words):
 	New PTY coverage for C-b, arrow keys, M-f, and M-b.
 	* tests/pty_harness.rs: New readable failure-output regression for cursor

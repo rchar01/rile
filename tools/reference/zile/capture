@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if (($# != 1)); then
+  printf '%s\n' 'usage: tools/reference/zile/capture <scenario-name-or-path>' >&2
+  exit 2
+fi
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+image=${IMAGE:-rile-zile-reference}
+podman=${PODMAN:-podman}
+
+"$podman" build \
+  -f "$root/tools/reference/zile/Containerfile" \
+  -t "$image" \
+  "$root"
+
+"$podman" run --rm \
+  --userns=keep-id \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  "$image" \
+  tools/reference/zile/capture-in-container "$1"

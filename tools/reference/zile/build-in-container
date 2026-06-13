@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+version=${ZILE_VERSION:-2.6.4}
+sha256=${ZILE_SHA256:-d5d44b85cb490643d0707e1a2186f3a32998c2f6eabaa9481479b65caeee57c0}
+url=${ZILE_URL:-https://ftp.gnu.org/gnu/zile/zile-${version}.tar.gz}
+
+root=/workspace
+artifact_root=$root/artifacts/reference/zile
+download_dir=$artifact_root/downloads
+source_dir=$artifact_root/src
+build_dir=$artifact_root/build/zile-$version
+prefix=$artifact_root/install
+tarball=$download_dir/zile-$version.tar.gz
+
+mkdir -p "$download_dir" "$source_dir" "$artifact_root/build" "$prefix"
+
+if [[ ! -f "$tarball" ]]; then
+  curl -fsSL -o "$tarball" "$url"
+fi
+
+printf '%s  %s\n' "$sha256" "$tarball" | sha256sum -c -
+
+rm -rf "$source_dir/zile-$version" "$build_dir"
+tar -C "$source_dir" -xzf "$tarball"
+cp -a "$source_dir/zile-$version" "$build_dir"
+
+cd "$build_dir"
+./configure --prefix="$prefix"
+make -j"$(nproc)"
+make install
+
+printf 'Installed GNU Zile %s reference binary: %s\n' "$version" "$prefix/bin/zile"

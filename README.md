@@ -87,7 +87,7 @@ Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 
 ## Development
 
-The preferred development workflow uses Podman, `make`, and the project dev container. The host only needs:
+The preferred development workflow uses Podman, `make`, and the project dev container. See `docs/README.md` for maintainer documentation and `docs/testing.md` for the testing workflow. The host only needs:
 
 - `podman`
 - `make`
@@ -113,8 +113,8 @@ Release notes are maintained in `NEWS`. GNU-style file-level maintenance history
 
 CI is deferred until it is configured for the official repository.
 
-## Clean-Room Reference Policy
+## Reference Policy
 
-The surrounding private research workspace contains reference checkouts of GNU Zile and kg. Rile should use them only for behavior and architecture lessons unless license implications are explicitly documented.
+The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
 
 See `NOTICE.md` for the current third-party code status.

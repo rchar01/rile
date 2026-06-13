@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+image=${IMAGE:-rile-zile-reference}
+podman=${PODMAN:-podman}
+
+"$podman" build \
+  -f "$root/tools/reference/zile/Containerfile" \
+  -t "$image" \
+  "$root"
+
+"$podman" run --rm \
+  --userns=keep-id \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  "$image" \
+  tools/reference/zile/build-in-container "$@"
