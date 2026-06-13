@@ -218,7 +218,7 @@ Goal: Integrate structured tests into normal verification without making visual 
 Tasks:
 
 - [x] Add PTY tests to normal `cargo test` and `make test` once stable.
-- [ ] Add `cargo insta test` to `make verify` only after snapshot churn is low and snapshots are committed.
+- [x] Add `cargo insta test` to `make verify` only after snapshot churn is low and snapshots are committed. Evidence: `scripts/verify` runs `scripts/snapshot-test`, which uses `cargo insta test --check`.
 - [x] Keep VHS out of default `make verify`.
 - [x] Add optional `make demos` or `make visual-demos` target that checks for `vhs` and writes to `artifacts/`.
 - [x] Run optional visual tooling in a separate container from normal verification.
@@ -228,6 +228,7 @@ Tasks:
 Validation gate:
 
 - [x] `make verify` passes on the dev container without requiring VHS.
+- [x] `make verify` checks committed parsed-screen snapshots without updating them.
 - [x] Optional visual demo generation fails clearly when VHS is missing.
 - [x] Optional visual frame generation writes named PNGs under `artifacts/frames/`.
 
@@ -264,6 +265,7 @@ Validation gate:
 | 2026-06-13 | Scrolling, resize, and broader split PTY coverage added. | `tests/pty_scrolling.rs` covers vertical and horizontal scrolling; `tests/pty_resize.rs` covers small and narrow deterministic sizes; `tests/pty_split_pane.rs` covers C-x 2, C-x 3, C-x o, C-x 0, and C-x 1. |
 | 2026-06-13 | Parsed-screen snapshot workflow added. | `tests/pty_snapshots.rs` and `tests/snapshots/*.snap` cover open, movement, and split rendering; `scripts/snapshot-test` and `make snapshot-test` provide the opt-in review workflow. |
 | 2026-06-13 | Expanded VHS visual demos added. | `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` generate GIFs and named PNG frames through `make visual-frames`. |
+| 2026-06-13 | Parsed-screen snapshots promoted to verify. | `scripts/verify` now runs the check-only `scripts/snapshot-test` workflow after normal tests. |
 
 ## Decision Log
 
@@ -274,3 +276,4 @@ Validation gate:
 | 2026-06-12 | Visual-test mode uses default config instead of user config. | PTY and snapshot output should not depend on a developer's `~/.config/rile/config.toml`. |
 | 2026-06-13 | Treat PNG frames as visual evidence, not snapshots. | Named frames help human and LLM review, while Phase 6 snapshots remain parsed VT100 text artifacts for automated review. |
 | 2026-06-13 | Keep snapshot review opt-in. | `make verify` should not update snapshots implicitly; `RILE_SNAPSHOT_TEST=1` marks intentional snapshot review. |
+| 2026-06-13 | Check committed snapshots in make verify. | Snapshot files are now committed and stable enough to gate normal verification, while updates remain an explicit review step. |

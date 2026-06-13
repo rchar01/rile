@@ -8,6 +8,7 @@ root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
 "$root/scripts/build"
 "$root/scripts/test"
+"$root/scripts/snapshot-test"
 "$root/scripts/lint"
 "$root/scripts/audit"
 "$root/scripts/unused-deps"

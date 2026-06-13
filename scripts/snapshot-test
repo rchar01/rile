@@ -4,4 +4,4 @@
 
 set -euo pipefail
 
-RILE_SNAPSHOT_TEST=1 cargo insta test --test pty_snapshots "$@"
+RILE_SNAPSHOT_TEST=1 cargo insta test --check --test pty_snapshots "$@"

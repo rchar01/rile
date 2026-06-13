@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* scripts/snapshot-test: Run cargo-insta in check-only mode.
+	* scripts/verify: Add parsed-screen snapshot checks to the default
+	verification gate.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	that committed snapshots are now checked by make verify without allowing
+	automatic snapshot updates.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* demos/open-edit-save.tape: New VHS demo covering creating, editing,
 	saving, and clean quitting a file.
 	* demos/search.tape: New VHS demo covering incremental search prompts,
