@@ -184,6 +184,10 @@ read-only special buffer report `Buffer is read-only: <buffer>`, and transient
 messages clear on the next non-prompt command unless that command writes a new
 message.
 
+Post-Milestone 14 region polish adds `exchange-point-and-mark` on `C-x C-x`.
+It swaps point with the current buffer's mark, reactivates the region, and
+reports `No mark set in this buffer` when no mark exists for the current buffer.
+
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.

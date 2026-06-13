@@ -66,3 +66,27 @@ fn open_line_keeps_cursor_and_shifts_text_down() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn exchange_point_and_mark_keeps_region_active() -> Result<()> {
+    let file = fixtures::named_temp_file("abcdef\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("abcdef")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-@", b"\0")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.assert_cursor(0, 4)?;
+
+    rile.send("C-x C-x", keys::control_sequence("xx"))?;
+    rile.assert_cursor(0, 2)?;
+
+    rile.send("C-w", keys::control('w'))?;
+    rile.assert_screen_contains("abef")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}

@@ -39,6 +39,7 @@ Basic editor keys:
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
+- `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.
 - `M-w` copies the active region.
 - `C-y` yanks the latest kill or copy.

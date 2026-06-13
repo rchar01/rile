@@ -14,6 +14,7 @@ pub enum Command {
     DeleteWindow,
     EndOfBuffer,
     EndOfLine,
+    ExchangePointAndMark,
     ExecuteExtendedCommand,
     FindFile,
     ForwardChar,
@@ -157,6 +158,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("end-of-line", "Move cursor to end of line", true, EndOfLine),
         CommandSpec::new(
+            "exchange-point-and-mark",
+            "Exchange cursor and mark",
+            true,
+            ExchangePointAndMark,
+        ),
+        CommandSpec::new(
             "execute-extended-command",
             "Run command by exact name",
             true,
@@ -266,6 +273,7 @@ mod tests {
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-word"));
         assert!(registry.contains("end-of-buffer"));
+        assert!(registry.contains("exchange-point-and-mark"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
         assert!(registry.contains("forward-word"));

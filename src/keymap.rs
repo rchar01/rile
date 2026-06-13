@@ -136,6 +136,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], "find-file"),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], "write-file"),
         KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')],
+            "exchange-point-and-mark",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())],
             "kill-buffer",
         ),
@@ -249,6 +253,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')]),
             KeyResolution::Command("write-file")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')]),
+            KeyResolution::Command("exchange-point-and-mark")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("b".to_owned())]),

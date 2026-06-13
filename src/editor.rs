@@ -471,6 +471,7 @@ impl Editor {
             DeleteWindow => self.delete_window(),
             EndOfBuffer => self.move_end_of_buffer(),
             EndOfLine => self.move_end_of_line(),
+            ExchangePointAndMark => self.exchange_point_and_mark(),
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
             ForwardChar => self.move_forward(),
@@ -658,6 +659,24 @@ impl Editor {
             active: true,
         });
         self.minibuffer.set_message("Mark set");
+        Ok(())
+    }
+
+    fn exchange_point_and_mark(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(region) = &mut self.region else {
+            self.minibuffer.set_message("No mark set in this buffer");
+            return Ok(());
+        };
+        if region.buffer != self.current_buffer {
+            self.minibuffer.set_message("No mark set in this buffer");
+            return Ok(());
+        }
+
+        std::mem::swap(&mut self.cursor, &mut region.mark);
+        region.active = true;
+        self.goal_display_column = None;
+        self.sync_current_window();
         Ok(())
     }
 
@@ -2632,6 +2651,64 @@ M-g g           goto-line\n"
         assert_eq!(spans[0].start_byte, 0);
         assert_eq!(spans[0].end_byte, "é".len());
         assert_eq!(spans[0].face, Face::Region);
+    }
+
+    #[test]
+    fn exchange_point_and_mark_swaps_and_activates_region() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("point and mark should exchange");
+
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        let spans = editor.spans_for_line(0, "abcdef");
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_byte, 2);
+        assert_eq!(spans[0].end_byte, 4);
+        assert_eq!(spans[0].face, Face::Region);
+    }
+
+    #[test]
+    fn exchange_point_and_mark_reports_missing_mark() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("missing mark should be reported");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No mark set in this buffer")
+        );
     }
 
     #[test]

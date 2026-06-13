@@ -1,5 +1,14 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add
+	exchange-point-and-mark with C-x C-x, active region restoration, and No mark
+	set in this buffer message when the current buffer has no mark.
+	* tests/pty_insert.rs: Cover exchanging point and mark before killing the
+	active region.
+	* README.md, docs/development.md: Document exchange-point-and-mark.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Make editor messages transient across non-prompt commands,
 	report read-only special buffers as Buffer is read-only: <buffer>, and make
 	top-level Escape clear messages quietly.
