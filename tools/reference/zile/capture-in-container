@@ -57,7 +57,12 @@ tape=$capture_dir/$SCENARIO_NAME.tape
 
 rm -rf "$capture_dir"
 mkdir -p "$frame_dir" "$home_dir"
+mkdir -p "$(dirname "$fixture")"
 printf '%s' "$FIXTURE_CONTENT" > "$fixture"
+
+if declare -F setup_reference_files >/dev/null; then
+  setup_reference_files "$capture_dir" "$capture_rel"
+fi
 
 steps=$(vhs_steps)
 steps=${steps//\{\{FRAME_DIR\}\}/$frame_rel}

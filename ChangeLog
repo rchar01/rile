@@ -1,5 +1,15 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/zile/capture-in-container: Allow scenarios to create
+	extra capture-local reference files before VHS runs.
+	* tools/reference/zile/scenarios: Add baseline UI, long-line,
+	long-document scrolling, M-x completion, and find-file completion
+	reference-capture scenarios.
+	* tools/reference/zile/README.md: Document the baseline scenarios and the
+	optional setup hook.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* docs/reference-testing.md: New guide for optional reference-editor
 	behavior capture and provenance rules.
 	* tools/reference/zile: New optional GNU Zile reference build and capture

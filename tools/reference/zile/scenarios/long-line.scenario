@@ -1,0 +1,28 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=long-line
+SCENARIO_DESCRIPTION='Observe Zile horizontal display behavior on a long line.'
+WIDTH=80
+HEIGHT=20
+FIXTURE_NAME=long-line.txt
+FIXTURE_CONTENT=$'0123456789 abcdefghij 0123456789 abcdefghij 0123456789 abcdefghij 0123456789 abcdefghij 0123456789 abcdefghij END\nshort second line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /0123456789/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+E
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-end-of-line.png
+Sleep 500ms
+Ctrl+A
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-beginning-of-line.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

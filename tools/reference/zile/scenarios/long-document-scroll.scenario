@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=long-document-scroll
+SCENARIO_DESCRIPTION='Observe Zile vertical scrolling and mode line position on a long document.'
+WIDTH=80
+HEIGHT=20
+FIXTURE_NAME=long-document-scroll.txt
+FIXTURE_CONTENT=$(printf 'line %03d\n' {1..80})
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /line 001/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+V
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-page-down.png
+Sleep 500ms
+Ctrl+V
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-second-page-down.png
+Sleep 500ms
+Escape
+Type "v"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-page-up.png
+Sleep 500ms
+Escape
+Type ">"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-end-of-buffer.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

@@ -25,4 +25,15 @@ tools/reference/zile/capture smoke-open
 
 Outputs are written under `artifacts/reference/zile/`, which is ignored by Git.
 
+Baseline inspection scenarios:
+
+- `baseline-ui`: basic screen layout and mode line.
+- `long-line`: horizontal clipping behavior.
+- `long-document-scroll`: page scrolling and position text.
+- `m-x-completion`: command prompt completion after Tab.
+- `find-file-completion`: file prompt completion after Tab.
+
+Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
+capture needs extra files inside its ignored artifact directory.
+
 See `docs/reference-testing.md` for the workflow and licensing/provenance rules.
