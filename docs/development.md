@@ -258,6 +258,11 @@ Interactive development:
 make shell
 ```
 
+`make shell` sets Podman's interactive detach key sequence to `Ctrl-]` so
+Emacs-style `C-p` movement reaches terminal editors instead of being held as
+the first byte of Podman's default `Ctrl-p Ctrl-q` detach sequence. Override it
+with `PODMAN_DETACH_KEYS`, for example `PODMAN_DETACH_KEYS=ctrl-^ make shell`.
+
 One-shot tasks:
 
 ```sh

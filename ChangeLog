@@ -1,5 +1,12 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* scripts/devshell: Set Podman detach keys to Ctrl-] by default so
+	interactive containers do not intercept editor C-p input; allow override
+	through PODMAN_DETACH_KEYS.
+	* docs/development.md: Document the devshell detach-key override.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/terminal/mod.rs (TerminalSession::draw): Render each frame into an
 	intermediate buffer and write it once.
 	(draw_editor_frame_with_options): Stop clearing the whole screen during

@@ -7,10 +7,12 @@ set -euo pipefail
 IMAGE=${IMAGE:-rile-dev}
 PODMAN=${PODMAN:-podman}
 CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
+PODMAN_DETACH_KEYS=${PODMAN_DETACH_KEYS:-ctrl-]}
 
 "$PODMAN" build -f "$CONTAINERFILE" -t "$IMAGE" .
 
 "$PODMAN" run --rm -it \
+  --detach-keys="$PODMAN_DETACH_KEYS" \
   --userns=keep-id \
   -e CARGO_TERM_COLOR=always \
   -v "$PWD":/workspace:z \
