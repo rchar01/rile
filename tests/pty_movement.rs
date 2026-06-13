@@ -120,3 +120,30 @@ fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn buffer_start_and_end_scroll_the_viewport() -> Result<()> {
+    let text = (1..=20)
+        .map(|line| format!("line {line:03}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let file = fixtures::named_temp_file(&text)?;
+    let mut rile = RilePty::spawn(file.path(), 8, 80)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("M->", keys::meta('>'))?;
+
+    rile.assert_screen_contains("line 020")?;
+    rile.assert_cursor(5, 0)?;
+    rile.assert_status_contains("Ln 021 Col 000")?;
+
+    rile.send("M-<", keys::meta('<'))?;
+
+    rile.assert_screen_contains("line 001")?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}

@@ -175,7 +175,8 @@ Post-Milestone 14 UX polish adds a clean `*Rile*` welcome buffer for no-file lau
 
 Post-Milestone 14 navigation polish adds `M-g g` and `goto-line` with `line` or
 `line:column` minibuffer input, clamping out-of-range targets to the current
-buffer bounds.
+buffer bounds. It also adds `M-<` and `M->` for moving to the beginning and end
+of the current buffer.
 
 Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
 

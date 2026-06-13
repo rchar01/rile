@@ -393,12 +393,14 @@ impl Editor {
         match command {
             BackwardChar => self.move_backward(),
             BackwardWord => self.move_word_backward(),
+            BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
             CopyRegionAsKill => self.copy_region_as_kill(),
             DeleteBackwardChar => self.delete_backward_char(),
             DeleteChar => self.delete_char(),
             DeleteOtherWindows => self.delete_other_windows(),
             DeleteWindow => self.delete_window(),
+            EndOfBuffer => self.move_end_of_buffer(),
             EndOfLine => self.move_end_of_line(),
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
@@ -488,6 +490,22 @@ impl Editor {
                 .move_line(self.cursor, delta, self.goal_display_column)?;
         self.cursor = position;
         self.goal_display_column = Some(goal);
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_beginning_of_buffer(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_end_of_buffer(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = self.document().buffer().end_position();
+        self.goal_display_column = None;
         self.sync_current_window();
         Ok(())
     }
@@ -1704,6 +1722,36 @@ mod tests {
         editor
             .handle_key(KeyEvent::Meta('b'))
             .expect("M-b should move backward by previous word");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn moves_to_beginning_and_end_of_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "first\nmiddle\nlast")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('>'))
+            .expect("M-> should move to end of buffer");
+        assert_eq!(editor.cursor(), Position::new(2, "last".len()));
+
+        editor
+            .handle_key(KeyEvent::Meta('<'))
+            .expect("M-< should move to beginning of buffer");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .execute_command_by_name("end-of-buffer")
+            .expect("end-of-buffer should execute by name");
+        assert_eq!(editor.cursor(), Position::new(2, "last".len()));
+
+        editor
+            .execute_command_by_name("beginning-of-buffer")
+            .expect("beginning-of-buffer should execute by name");
         assert_eq!(editor.cursor(), Position::new(0, 0));
     }
 

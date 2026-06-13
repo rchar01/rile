@@ -5,12 +5,14 @@
 pub enum Command {
     BackwardChar,
     BackwardWord,
+    BeginningOfBuffer,
     BeginningOfLine,
     CopyRegionAsKill,
     DeleteBackwardChar,
     DeleteChar,
     DeleteOtherWindows,
     DeleteWindow,
+    EndOfBuffer,
     EndOfLine,
     ExecuteExtendedCommand,
     FindFile,
@@ -110,6 +112,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             BackwardWord,
         ),
         CommandSpec::new(
+            "beginning-of-buffer",
+            "Move cursor to beginning of buffer",
+            true,
+            BeginningOfBuffer,
+        ),
+        CommandSpec::new(
             "beginning-of-line",
             "Move cursor to beginning of line",
             true,
@@ -140,6 +148,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             DeleteOtherWindows,
         ),
         CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow),
+        CommandSpec::new(
+            "end-of-buffer",
+            "Move cursor to end of buffer",
+            true,
+            EndOfBuffer,
+        ),
         CommandSpec::new("end-of-line", "Move cursor to end of line", true, EndOfLine),
         CommandSpec::new(
             "execute-extended-command",
@@ -247,7 +261,9 @@ mod tests {
             registry.get("save-buffer").map(|spec| spec.command),
             Some(Command::SaveBuffer)
         );
+        assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-word"));
+        assert!(registry.contains("end-of-buffer"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
         assert!(registry.contains("forward-word"));

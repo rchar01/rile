@@ -1,5 +1,12 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add beginning-of-buffer
+	and end-of-buffer commands with M-< and M-> bindings.
+	* tests/pty_movement.rs: Cover buffer start/end viewport behavior.
+	* README.md, docs/development.md: Document buffer start/end bindings.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/keymap.rs, src/editor.rs, tests/pty_movement.rs: Change goto-line
 	binding from M-g to M-g g.
 	* README.md, docs/development.md: Document the updated binding.

@@ -73,6 +73,8 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], "forward-char"),
         KeyBinding::new([KeyEvent::Meta('b')], "backward-word"),
         KeyBinding::new([KeyEvent::Meta('f')], "forward-word"),
+        KeyBinding::new([KeyEvent::Meta('<')], "beginning-of-buffer"),
+        KeyBinding::new([KeyEvent::Meta('>')], "end-of-buffer"),
         KeyBinding::new([KeyEvent::Ctrl('p')], "previous-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], "previous-line"),
         KeyBinding::new([KeyEvent::Ctrl('n')], "next-line"),
@@ -159,6 +161,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('b')]),
             KeyResolution::Command("backward-word")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('<')]),
+            KeyResolution::Command("beginning-of-buffer")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('>')]),
+            KeyResolution::Command("end-of-buffer")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),
