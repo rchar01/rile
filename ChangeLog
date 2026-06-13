@@ -1,3 +1,15 @@
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
+	* tests/pty_insert.rs: New PTY coverage for ASCII insertion, UTF-8
+	insertion, Enter, Backspace, Delete, cursor position, and dirty state.
+	* tests/pty_save.rs: New PTY coverage for C-x C-s, saved disk
+	contents, and clearing dirty state.
+	* tests/pty_statusline.rs: New PTY coverage for visual mode-line state,
+	line and column updates, save state, and minibuffer error rendering.
+	* docs/pty-vt100-visual-testing-plan.md: Mark insert, save, and
+	status-line PTY coverage complete; clarify that PNG frames are visual
+	review evidence and parsed-screen snapshots remain future work.
+
 2026-06-12  Robert Charusta  <rch-public@posteo.net>
 
 	* demos/movement.tape, demos/split-pane.tape: Add pauses after named

@@ -17,8 +17,8 @@ The automated path must spawn the real `rile` binary in a pseudo-terminal, send 
 - Add integration-test support modules under `tests/support/`.
 - Add fixture files under `fixtures/visual/`.
 - Add PTY tests for open, movement, insert, save, status line, scrolling, splits, and terminal size behavior.
-- Add parsed-screen `insta` snapshots.
-- Add optional VHS tapes under `demos/` and generated artifacts under `artifacts/`.
+- Add parsed-screen `insta` snapshots after the format stabilizes.
+- Add optional VHS tapes under `demos/` and generated visual review artifacts under `artifacts/`.
 - Add documentation and Makefile/script targets for structured PTY tests and optional visual review.
 
 ## Non-Goals
@@ -31,12 +31,13 @@ The automated path must spawn the real `rile` binary in a pseudo-terminal, send 
 
 ## Current Context
 
-- `src/app.rs` currently parses only `rile [file]`, `--help`, and `--version`; new flags require parser changes.
-- `src/main.rs` passes only `options.file.as_deref()` to `terminal::run_basic_editor`; test mode requires passing richer options.
-- `src/terminal/mod.rs` reads terminal size through `ioctl(TIOCGWINSZ)` in `TerminalSession::draw`; deterministic `--test-size` needs an override path.
+- `src/app.rs` parses `--visual-test` and `--test-size WIDTHxHEIGHT` for deterministic PTY and VHS runs.
+- `src/main.rs` passes rich runtime options to `terminal::run_basic_editor`.
+- `src/terminal/mod.rs` uses `--test-size` when provided and falls back to `ioctl(TIOCGWINSZ)` otherwise.
 - The renderer already has testable `draw_editor_frame`, `TerminalSize`, cursor-position extraction tests, mode-line position tests, and scroll-to-cursor behavior.
 - Rile already supports splits, buffer switching, search, query replace, syntax highlighting, config, binary-file detection, and optional `backup_on_save`.
-- There is no existing `tests/` integration-test tree, no `fixtures/`, no `demos/`, no `artifacts/`, and no snapshot workflow.
+- The `tests/` integration-test tree, visual fixtures, VHS demos, visual frame workflow, and ignored `artifacts/` directory exist.
+- Parsed-screen `insta` snapshots are still future work; current PNG frames are optional visual review evidence, not snapshot tests.
 - Current canonical verification is `make verify`, backed by `scripts/verify` in the dev container.
 - Proposed crate versions are available: `expectrl = 0.9.0`, `vt100 = 0.16.2`, `insta = 1.48.0`, `anyhow = 1.0.102`, `tempfile = 3.27.0`, `assert_cmd = 2.2.2`, and `predicates = 3.1.4`.
 
@@ -50,11 +51,11 @@ The automated path must spawn the real `rile` binary in a pseudo-terminal, send 
 
 ## Open Questions
 
-- [ ] Should `--visual-test` imply a specific theme and line-number setting, or should it preserve user config except for nondeterministic fields?
-- [ ] Should PTY tests ignore user config by forcing a temporary `HOME`, or should Rile add an explicit `--no-config` test flag?
-- [ ] Should `--test-size 80x24` be accepted only with `--visual-test`, or should it be a general developer/debug flag?
+- [x] Should `--visual-test` imply a specific theme and line-number setting, or should it preserve user config except for nondeterministic fields? Decision: `--visual-test` uses `Config::default()` so output is deterministic.
+- [x] Should PTY tests ignore user config by forcing a temporary `HOME`, or should Rile add an explicit `--no-config` test flag? Decision: PTY tests force a temporary `HOME`; Rile does not need `--no-config` yet.
+- [x] Should `--test-size 80x24` be accepted only with `--visual-test`, or should it be a general developer/debug flag? Decision: `--test-size` is a general parsed CLI option used by test and visual workflows.
 - [ ] Should split visual labels use internal `WindowId` values or deterministic left/right labels computed from layout order?
-- [ ] Should snapshot files be committed immediately, or introduced after the first snapshot format stabilizes?
+- [x] Should snapshot files be committed immediately, or introduced after the first snapshot format stabilizes? Decision: delay parsed-screen snapshots until scrolling, resize, and split rendering coverage stabilizes.
 
 ## Design Decisions To Validate Early
 
@@ -129,12 +130,12 @@ Goal: Prove real-terminal open, movement, insert, save, and status behavior with
 
 Tasks:
 
-- [x] Add `tests/pty_open.rs` with an open-file assertion and first parsed-screen snapshot. Evidence: `opens_visual_fixture_in_pty` asserts parsed screen contents, status text, and cursor position.
+- [x] Add `tests/pty_open.rs` with an open-file assertion and first parsed cursor-position snapshot. Evidence: `opens_visual_fixture_in_pty` asserts parsed screen contents, status text, cursor position, and an inline cursor-position snapshot.
 - [ ] Add `tests/pty_movement.rs` for `C-f`, `C-b`, `C-n`, `C-p`, arrow keys, `C-a`, `C-e`, `M-f`, and `M-b` where stable.
 - [x] Add `tests/pty_movement.rs` coverage for the movement VHS demo flow.
-- [ ] Add `tests/pty_insert.rs` for printable ASCII, UTF-8 text, Enter, Backspace, and Delete.
-- [ ] Add `tests/pty_save.rs` for modification and `C-x C-s`, including verifying file contents on disk.
-- [ ] Add `tests/pty_statusline.rs` for clean/dirty state, save state, line/column changes, visual-test marker, and error messages.
+- [x] Add `tests/pty_insert.rs` for printable ASCII, UTF-8 text, Enter, Backspace, and Delete.
+- [x] Add `tests/pty_save.rs` for modification and `C-x C-s`, including verifying file contents on disk.
+- [x] Add `tests/pty_statusline.rs` for clean/dirty state, save state, line/column changes, visual-test marker, and error messages.
 - [ ] Keep expected cursor positions in terminal coordinates and document the conversion from logical buffer position to terminal position.
 
 Validation gate:
@@ -166,6 +167,8 @@ Validation gate:
 
 Goal: Make snapshot review useful and safe for agents and humans.
 
+PNG frames under `artifacts/frames/` are visual review evidence from VHS and do not satisfy this phase. Phase 6 snapshots are parsed VT100 screen text snapshots stored under `tests/snapshots/`.
+
 Tasks:
 
 - [ ] Store snapshots under `tests/snapshots/` using `insta` defaults.
@@ -191,6 +194,7 @@ Tasks:
 - [x] Add `artifacts/` to `.gitignore` unless artifacts are explicitly requested for distribution.
 - [x] Add documentation that VHS output is review evidence only, not the pass/fail oracle.
 - [x] Add a visual review checklist covering cursor visibility, status-line consistency, split separators, active pane clarity, scrolling, minibuffer readability, and clean quit.
+- [x] Add named PNG frame extraction for step-by-step visual review. Evidence: `make visual-frames` writes ignored PNG frames under `artifacts/frames/`.
 
 Visual review checklist:
 
@@ -254,6 +258,8 @@ Validation gate:
 | 2026-06-12 | Optional VHS demo infrastructure added. | Added `demos/movement.tape`, `demos/split-pane.tape`, `scripts/visual-demos`, `make visual-demos`, and ignored `artifacts/`. |
 | 2026-06-12 | VHS demos hardened and mirrored by PTY tests. | `scripts/visual-demos` builds the binary before recording; tapes use `./target/debug/rile --visual-test --test-size 120x32`; `tests/pty_movement.rs` and `tests/pty_split_pane.rs` pass. |
 | 2026-06-12 | Visual tooling container and named frames added. | Added `Containerfile.visual`, containerized `make visual-demos`, and `make visual-frames` for named PNG review screenshots. |
+| 2026-06-12 | Split visual demo flow fixed. | `a9dd1ec` fixed C-x o input, screenshot timing, and split selection behavior; regenerated frames showed the right file opening in the right pane. |
+| 2026-06-13 | Insert, save, and status-line PTY coverage added. | `tests/pty_insert.rs` covers ASCII, UTF-8, Enter, Backspace, and Delete; `tests/pty_save.rs` covers C-x C-s, clean/dirty state, and saved disk contents; `tests/pty_statusline.rs` covers visual state, line/column updates, save state, and minibuffer errors. |
 
 ## Decision Log
 
@@ -262,3 +268,4 @@ Validation gate:
 | 2026-06-12 | Treat VHS as optional visual review, not a correctness gate. | Structured PTY/VT100 assertions are required for exact behavior. |
 | 2026-06-12 | Add CLI flags before PTY tests. | Current CLI and terminal-size flow cannot produce deterministic PTY snapshots without `--visual-test` and `--test-size`. |
 | 2026-06-12 | Visual-test mode uses default config instead of user config. | PTY and snapshot output should not depend on a developer's `~/.config/rile/config.toml`. |
+| 2026-06-13 | Treat PNG frames as visual evidence, not snapshots. | Named frames help human and LLM review, while Phase 6 snapshots remain parsed VT100 text artifacts for automated review. |
