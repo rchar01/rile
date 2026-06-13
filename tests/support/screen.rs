@@ -11,7 +11,11 @@ pub fn dump(screen: &vt100::Screen) -> String {
     let mut output = String::new();
     let (cursor_row, cursor_column) = screen.cursor_position();
     for (index, row) in rows(screen).into_iter().enumerate() {
-        let _ = writeln!(output, "{:03}: {row}", index + 1);
+        let _ = if row.is_empty() {
+            writeln!(output, "{:03}:", index + 1)
+        } else {
+            writeln!(output, "{:03}: {row}", index + 1)
+        };
         if index == usize::from(cursor_row) {
             let _ = writeln!(output, "     {}^", " ".repeat(usize::from(cursor_column)));
         }

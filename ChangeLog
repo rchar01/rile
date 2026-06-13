@@ -1,5 +1,22 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* tests/pty_movement.rs (movement_commands_cover_backward_arrows_and_words):
+	New PTY coverage for C-b, arrow keys, M-f, and M-b.
+	* tests/pty_harness.rs: New readable failure-output regression for cursor
+	assertions.
+	* tests/pty_snapshots.rs (snapshot_split_below_after_other_window_80x16):
+	New stacked split snapshot coverage.
+	* tests/support/screen.rs (dump): Avoid trailing whitespace on blank
+	snapshot rows.
+	* tests/snapshots/pty_snapshots__split_below_after_other_window_80x16.snap:
+	New committed split snapshot.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	fixture stability, terminal-coordinate expectations, split label decision,
+	expectrl reliability, snapshot failure readability, and optional hosted CI
+	visual artifact guidance.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* scripts/snapshot-test: Run cargo-insta in check-only mode.
 	* scripts/verify: Add parsed-screen snapshot checks to the default
 	verification gate.

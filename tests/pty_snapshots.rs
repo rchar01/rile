@@ -75,3 +75,25 @@ fn snapshot_split_right_after_other_window_80x16() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn snapshot_split_below_after_other_window_80x16() -> Result<()> {
+    if !snapshot_tests_enabled() {
+        return Ok(());
+    }
+
+    let file = fixtures::fixture_path("split_left.txt");
+    let mut rile = RilePty::spawn(&file, 16, 80)?;
+
+    rile.wait_for_screen_contains("split_left.txt")?;
+    rile.send("C-x 2", control_x_text("2"))?;
+    rile.send("C-x o", control_x_text("o"))?;
+
+    insta::assert_snapshot!(
+        "split_below_after_other_window_80x16",
+        rile.snapshot_screen()
+    );
+    rile.quit()?;
+
+    Ok(())
+}

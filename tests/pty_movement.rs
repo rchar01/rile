@@ -47,3 +47,55 @@ fn movement_demo_flow_updates_cursor_and_status() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn movement_commands_cover_backward_arrows_and_words() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha beta\ngamma delta")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha beta")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.send("Right", keys::RIGHT)?;
+    rile.assert_cursor(0, 1)?;
+    rile.assert_status_contains("Ln 001 Col 001")?;
+
+    rile.send("Left", keys::LEFT)?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+
+    rile.send("M-f", keys::meta('f'))?;
+    rile.assert_cursor(0, 5)?;
+    rile.assert_status_contains("Ln 001 Col 005")?;
+
+    rile.send("M-f", keys::meta('f'))?;
+    rile.assert_cursor(0, 10)?;
+    rile.assert_status_contains("Ln 001 Col 010")?;
+
+    rile.send("M-b", keys::meta('b'))?;
+    rile.assert_cursor(0, 6)?;
+    rile.assert_status_contains("Ln 001 Col 006")?;
+
+    rile.send("M-b", keys::meta('b'))?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+
+    rile.send("Down", keys::DOWN)?;
+    rile.assert_cursor(1, 0)?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+
+    rile.send("Right", keys::RIGHT)?;
+    rile.assert_cursor(1, 1)?;
+    rile.assert_status_contains("Ln 002 Col 001")?;
+
+    rile.send("Up", keys::UP)?;
+    rile.assert_cursor(0, 1)?;
+    rile.assert_status_contains("Ln 001 Col 001")?;
+
+    rile.send("C-b", keys::control('b'))?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}

@@ -54,7 +54,7 @@ The automated path must spawn the real `rile` binary in a pseudo-terminal, send 
 - [x] Should `--visual-test` imply a specific theme and line-number setting, or should it preserve user config except for nondeterministic fields? Decision: `--visual-test` uses `Config::default()` so output is deterministic.
 - [x] Should PTY tests ignore user config by forcing a temporary `HOME`, or should Rile add an explicit `--no-config` test flag? Decision: PTY tests force a temporary `HOME`; Rile does not need `--no-config` yet.
 - [x] Should `--test-size 80x24` be accepted only with `--visual-test`, or should it be a general developer/debug flag? Decision: `--test-size` is a general parsed CLI option used by test and visual workflows.
-- [ ] Should split visual labels use internal `WindowId` values or deterministic left/right labels computed from layout order?
+- [x] Should split visual labels use internal `WindowId` values or deterministic left/right labels computed from layout order? Decision: keep stable internal `WindowId` labels for now because they are deterministic in PTY snapshots and useful for tracing split lifecycle behavior.
 - [x] Should snapshot files be committed immediately, or introduced after the first snapshot format stabilizes? Decision: delay parsed-screen snapshots until scrolling, resize, and split rendering coverage stabilizes.
 
 ## Design Decisions To Validate Early
@@ -82,7 +82,7 @@ Tasks:
 Validation gate:
 
 - [x] `cargo run -- --help` documents both flags. Evidence: `make run ARGS='--help'` prints both flags.
-- [ ] `cargo run -- --visual-test --test-size 80x24 fixtures/visual/numbered.txt` runs in an interactive terminal.
+- [x] `cargo run -- --visual-test --test-size 80x24 fixtures/visual/numbered.txt` runs in an interactive terminal. Evidence: PTY and VHS workflows spawn the real binary with `--visual-test --test-size` in an interactive pseudo-terminal, including `tests/pty_open.rs` and `demos/movement.tape`.
 - [x] Existing unit tests continue to pass. Evidence: `make verify` passed after Phase 1.
 
 ## Phase 2: Fixtures and Harness Skeleton
@@ -103,7 +103,7 @@ Tasks:
 Validation gate:
 
 - [x] `cargo test` compiles the empty integration-test support modules. Evidence: `cargo test --test pty_open` compiles support modules.
-- [ ] Fixture line endings and Unicode contents are documented and stable.
+- [x] Fixture line endings and Unicode contents are documented and stable. Evidence: `docs/development.md` documents LF-only UTF-8 visual fixtures and which fixtures intentionally contain Unicode.
 
 ## Phase 3: PTY Harness
 
@@ -117,12 +117,12 @@ Tasks:
 - [x] Start Rile with `--visual-test --test-size WIDTHxHEIGHT` and a shell-safe path. Evidence: harness uses `std::process::Command` with separate args.
 - [x] Implement `send`, `drain_for`, `wait_for_screen_contains`, `assert_screen_contains`, `assert_status_contains`, `cursor_position`, `assert_cursor`, `snapshot_text`, and `quit`. Evidence: these methods exist on `RilePty`.
 - [x] Include the last action name in failure messages. Evidence: `RilePty` assertion failures include `last_action` and screen dumps.
-- [ ] Confirm `expectrl` read APIs are reliable enough; if not, record a decision to switch the internals to `portable-pty` while preserving the public `RilePty` API.
+- [x] Confirm `expectrl` read APIs are reliable enough; if not, record a decision to switch the internals to `portable-pty` while preserving the public `RilePty` API. Evidence: repeated PTY, snapshot, and verification runs pass reliably with the current `expectrl` harness.
 
 Validation gate:
 
 - [x] A smoke test can open a temp file, parse the visible screen, find the file name, and quit cleanly. Evidence: `cargo test --test pty_open` passes.
-- [ ] A deliberately wrong cursor assertion prints a readable screen dump during local development.
+- [x] A deliberately wrong cursor assertion prints a readable screen dump during local development. Evidence: `tests/pty_harness.rs` asserts that an intentionally wrong cursor assertion includes cursor metadata, expected position, screen rows, and caret marker.
 
 ## Phase 4: First Structured Tests
 
@@ -131,18 +131,18 @@ Goal: Prove real-terminal open, movement, insert, save, and status behavior with
 Tasks:
 
 - [x] Add `tests/pty_open.rs` with an open-file assertion and first parsed cursor-position snapshot. Evidence: `opens_visual_fixture_in_pty` asserts parsed screen contents, status text, cursor position, and an inline cursor-position snapshot.
-- [ ] Add `tests/pty_movement.rs` for `C-f`, `C-b`, `C-n`, `C-p`, arrow keys, `C-a`, `C-e`, `M-f`, and `M-b` where stable.
+- [x] Add `tests/pty_movement.rs` for `C-f`, `C-b`, `C-n`, `C-p`, arrow keys, `C-a`, `C-e`, `M-f`, and `M-b` where stable. Evidence: `movement_demo_flow_updates_cursor_and_status` covers C-f/C-n/C-p/C-a/C-e, and `movement_commands_cover_backward_arrows_and_words` covers C-b, arrow keys, M-f, and M-b.
 - [x] Add `tests/pty_movement.rs` coverage for the movement VHS demo flow.
 - [x] Add `tests/pty_insert.rs` for printable ASCII, UTF-8 text, Enter, Backspace, and Delete.
 - [x] Add `tests/pty_save.rs` for modification and `C-x C-s`, including verifying file contents on disk.
 - [x] Add `tests/pty_statusline.rs` for clean/dirty state, save state, line/column changes, visual-test marker, and error messages.
-- [ ] Keep expected cursor positions in terminal coordinates and document the conversion from logical buffer position to terminal position.
+- [x] Keep expected cursor positions in terminal coordinates and document the conversion from logical buffer position to terminal position. Evidence: `docs/development.md` documents zero-based `vt100` terminal cursor coordinates and viewport offset handling.
 
 Validation gate:
 
 - [x] `cargo test --test pty_open` passes locally. Evidence: command passed on 2026-06-12.
 - [x] `cargo nextest run --locked --test pty_movement` passes locally.
-- [ ] Snapshot failure output is understandable without reading raw ANSI bytes.
+- [x] Snapshot failure output is understandable without reading raw ANSI bytes. Evidence: parsed-screen snapshots include terminal size, cursor metadata, normalized rows, and caret markers; `tests/pty_harness.rs` covers readable PTY assertion failures.
 
 ## Phase 5: Scrolling, Resize, and Splits
 
@@ -155,7 +155,7 @@ Tasks:
 - [x] Add `tests/pty_resize.rs` using `--test-size` for small and narrow parsed-screen assertions.
 - [x] Add `tests/pty_split_pane.rs` coverage for the split-pane VHS demo flow.
 - [x] Add broader split PTY coverage for `C-x 3`, `C-x 2`, `C-x o`, active pane marker, cursor-in-active-pane, and separator rendering.
-- [ ] Add split snapshot tests only after visual-test pane labels are deterministic.
+- [x] Add split snapshot tests only after visual-test pane labels are deterministic. Evidence: split labels use deterministic `WindowId` values, and `tests/pty_snapshots.rs` now covers right and below split layouts.
 
 Validation gate:
 
@@ -223,7 +223,7 @@ Tasks:
 - [x] Add optional `make demos` or `make visual-demos` target that checks for `vhs` and writes to `artifacts/`.
 - [x] Run optional visual tooling in a separate container from normal verification.
 - [x] Add optional `make visual-frames` target for named PNG frames after each demo step.
-- [ ] Document optional CI artifact generation for hosted CI after Codeberg CI is configured.
+- [x] Document optional CI artifact generation for hosted CI after Codeberg CI is configured. Evidence: `docs/development.md` documents a future non-blocking hosted CI visual artifact job that may upload ignored `artifacts/` outputs.
 
 Validation gate:
 
@@ -247,7 +247,7 @@ Validation gate:
 - [x] `make test` passes with PTY tests enabled.
 - [x] `make verify` passes without requiring VHS.
 - [x] `cargo insta test` passes after snapshots are committed.
-- [ ] At least one deliberately failed PTY assertion produces a readable screen dump during local harness validation.
+- [x] At least one deliberately failed PTY assertion produces a readable screen dump during local harness validation.
 - [x] At least one VHS movement GIF is generated manually under `artifacts/`.
 
 ## Progress Log
@@ -266,6 +266,7 @@ Validation gate:
 | 2026-06-13 | Parsed-screen snapshot workflow added. | `tests/pty_snapshots.rs` and `tests/snapshots/*.snap` cover open, movement, and split rendering; `scripts/snapshot-test` and `make snapshot-test` provide the opt-in review workflow. |
 | 2026-06-13 | Expanded VHS visual demos added. | `demos/open-edit-save.tape`, `demos/search.tape`, and `demos/resize.tape` generate GIFs and named PNG frames through `make visual-frames`. |
 | 2026-06-13 | Parsed-screen snapshots promoted to verify. | `scripts/verify` now runs the check-only `scripts/snapshot-test` workflow after normal tests. |
+| 2026-06-13 | Remaining PTY testing-plan gaps closed. | Added broader PTY movement coverage, a readable failure-output regression, stacked split snapshots, fixture stability docs, and optional CI artifact guidance. |
 
 ## Decision Log
 
@@ -277,3 +278,5 @@ Validation gate:
 | 2026-06-13 | Treat PNG frames as visual evidence, not snapshots. | Named frames help human and LLM review, while Phase 6 snapshots remain parsed VT100 text artifacts for automated review. |
 | 2026-06-13 | Keep snapshot review opt-in. | `make verify` should not update snapshots implicitly; `RILE_SNAPSHOT_TEST=1` marks intentional snapshot review. |
 | 2026-06-13 | Check committed snapshots in make verify. | Snapshot files are now committed and stable enough to gate normal verification, while updates remain an explicit review step. |
+| 2026-06-13 | Keep internal WindowId values as split labels. | They are deterministic in visual-test snapshots and useful for tracing split lifecycle behavior; layout-derived labels can be reconsidered later. |
+| 2026-06-13 | Keep expectrl for PTY tests. | The current harness has been reliable across movement, editing, saving, scrolling, resize, split, snapshot, and verification runs. |

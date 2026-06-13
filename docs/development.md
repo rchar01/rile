@@ -209,6 +209,12 @@ Use `--visual-test` to make terminal output deterministic for integration tests 
 
 PTY integration tests use support helpers under `tests/support/`. The harness spawns the compiled `rile` binary through `expectrl`, drains terminal output into `vt100::Parser`, and reports assertion failures with normalized screen dumps and cursor markers.
 
+PTY cursor assertions use zero-based terminal coordinates from `vt100::Screen::cursor_position()`, not one-based user-facing mode-line coordinates. For single-width fixture text at viewport origin, logical buffer line and display column map directly to terminal row and column. If a viewport has scrolled or a split pane starts below or to the right of the terminal origin, assertions must add the viewport row or column offset before comparing with the parsed terminal cursor.
+
+Visual fixtures under `fixtures/visual/` are committed as UTF-8 text with LF line endings. Keep those line endings stable; CRLF behavior is covered separately by file tests. `wide.txt` intentionally includes accented Latin, Greek, CJK, emoji, and mixed-width text for Unicode rendering checks. `numbered.txt`, `long_lines.txt`, `split_left.txt`, and `split_right.txt` intentionally stay ASCII so cursor-column and clipping assertions remain simple and deterministic.
+
+Visual-test split labels currently use stable internal `WindowId` values. Those IDs are deterministic within a run, visible in PTY snapshots, and useful for tracing split lifecycle behavior. Layout-derived labels such as left/right or top/bottom can be reconsidered later if user-facing visual review needs them, but tests should not require that label scheme now.
+
 Parsed-screen snapshots live under `tests/snapshots/` and are intentionally path-free. Snapshot names use `scenario_WIDTHxHEIGHT` so diffs make the scenario and terminal size clear. Run `make snapshot-test` to check committed snapshots through `cargo insta test`. `make verify` also runs this check-only snapshot target. To update snapshots intentionally, run `INSTA_UPDATE=always RILE_SNAPSHOT_TEST=1 cargo test --locked --test pty_snapshots`, inspect the changed `.snap` files, then rerun `make snapshot-test`. The direct cargo-insta equivalent is `RILE_SNAPSHOT_TEST=1 cargo insta test --check --test pty_snapshots`. Verification never updates snapshots automatically.
 
 Optional VHS demos live under `demos/` and write generated GIFs under ignored `artifacts/`. Run `make visual-demos` to generate every demo in the separate visual tooling container, or pass one or more tapes with `make visual-demos ARGS='demos/movement.tape'`. Current demos cover movement, open/edit/save, deterministic resize rendering, incremental search, and split panes. Run `make visual-frames` to regenerate the demos and verify the named PNG screenshots under `artifacts/frames/` for step-by-step human or LLM review. GIF and PNG output is review evidence; PTY tests remain the pass/fail oracle and visual tooling is intentionally outside `make verify`.
@@ -317,3 +323,5 @@ On this host, only `./scripts/build` and `./scripts/test-cargo` are expected to 
 ## CI Status
 
 CI is deferred until it is configured for the official repository. Future CI should call the same scripts used by `make verify`; it should not call `scripts/devshell`.
+
+Optional hosted CI visual artifact generation should be a separate, non-blocking job from `make verify`. That job may run `make visual-frames` in the visual tooling container and upload ignored files from `artifacts/` for review. GIFs and PNGs should remain review evidence only; PTY assertions and parsed-screen snapshots remain the correctness gates.
