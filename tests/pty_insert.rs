@@ -41,3 +41,28 @@ fn insert_delete_and_backspace_update_visible_buffer() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn open_line_keeps_cursor_and_shifts_text_down() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha beta gamma\nsecond line\nthird line\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha beta gamma")?;
+    for _ in 0..5 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    rile.assert_cursor(0, 5)?;
+
+    rile.send("C-o", keys::control('o'))?;
+    rile.wait_for_screen_contains(" beta gamma")?;
+
+    rile.assert_screen_contains("alpha")?;
+    rile.assert_screen_contains("second line")?;
+    rile.assert_screen_contains("third line")?;
+    rile.assert_cursor(0, 5)?;
+    rile.assert_status_contains("Ln 001 Col 005")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}

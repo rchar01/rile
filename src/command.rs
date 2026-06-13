@@ -22,6 +22,7 @@ pub enum Command {
     KillBuffer,
     KillRegion,
     NextLine,
+    OpenLine,
     PreviousLine,
     QueryReplace,
     SaveBuffer,
@@ -169,6 +170,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
+        CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new(

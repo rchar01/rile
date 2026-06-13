@@ -408,6 +408,7 @@ impl Editor {
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
             NextLine => self.move_line(1),
+            OpenLine => self.open_line(),
             PreviousLine => self.move_line(-1),
             QueryReplace => self.start_query_replace(),
             SaveBuffer => self.save_buffer(),
@@ -632,6 +633,22 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed line");
+        Ok(())
+    }
+
+    fn open_line(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        let end = self
+            .document_mut()
+            .buffer_mut()
+            .insert(cursor_before, "\n")?;
+        self.record_insert(cursor_before, end, "\n", false);
+        self.cursor = cursor_before;
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.deactivate_region();
+        self.sync_current_window();
         Ok(())
     }
 
@@ -2118,6 +2135,39 @@ mod tests {
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should restore line");
         assert_eq!(editor.document().buffer().serialize(), "abc\ndef");
+    }
+
+    #[test]
+    fn open_line_inserts_newline_without_moving_point() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha beta\nsecond")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        for _ in 0..5 {
+            editor
+                .handle_key(KeyEvent::Ctrl('f'))
+                .expect("cursor should move forward");
+        }
+
+        editor
+            .handle_key(KeyEvent::Ctrl('o'))
+            .expect("open-line should insert newline");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "alpha\n beta\nsecond"
+        );
+        assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted newline");
+        assert_eq!(editor.document().buffer().serialize(), "alpha beta\nsecond");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
     }
 
     #[test]

@@ -123,6 +123,7 @@ Milestone 10 adds region, kill/yank, and undo:
 - `M-w` and `copy-region-as-kill` copy the active region without deleting it;
 - `C-y` and `yank` insert the latest kill-ring entry;
 - `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
+- `C-o` and `open-line` insert a newline at point without moving point;
 - `C-_` and `undo` reverse current-buffer insert/delete/yank/kill operations;
 - normal printable typing is grouped into a single undo record until another command interrupts it;
 - tests cover Unicode-safe region highlighting, kill/yank, kill-line, grouped typing undo, and new control-key parsing.

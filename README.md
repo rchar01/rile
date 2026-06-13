@@ -33,6 +33,7 @@ Basic editor keys:
 - `C-a`/Home and `C-e`/End move within the current line.
 - Printable UTF-8 text inserts at point.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
+- `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
 - `C-w` kills the active region.
 - `M-w` copies the active region.

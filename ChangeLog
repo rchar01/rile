@@ -1,5 +1,12 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add open-line command
+	and bind it to C-o.
+	* tests/pty_insert.rs: Cover open-line visible behavior in a PTY.
+	* README.md, docs/development.md: Document the new open-line binding.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/zile/capture-in-container: Allow scenarios to create
 	extra capture-local reference files before VHS runs.
 	* tools/reference/zile/scenarios: Add baseline UI, long-line,
