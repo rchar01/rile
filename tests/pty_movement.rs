@@ -106,7 +106,9 @@ fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
 
     rile.wait_for_screen_contains("line 001")?;
-    rile.send("M-g", keys::meta('g'))?;
+    let mut goto_line = keys::meta('g');
+    goto_line.extend_from_slice(b"g");
+    rile.send("M-g g", goto_line)?;
     rile.assert_screen_contains("Goto line:")?;
 
     rile.send("5:4", b"5:4")?;

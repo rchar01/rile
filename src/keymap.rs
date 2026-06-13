@@ -96,7 +96,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
-        KeyBinding::new([KeyEvent::Meta('g')], "goto-line"),
+        KeyBinding::new(
+            [KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())],
+            "goto-line",
+        ),
         KeyBinding::new([KeyEvent::Meta('%')], "query-replace"),
         KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
         KeyBinding::new(
@@ -158,10 +161,6 @@ mod tests {
             KeyResolution::Command("backward-word")
         );
         assert_eq!(
-            keymap.resolve(&[KeyEvent::Meta('g')]),
-            KeyResolution::Command("goto-line")
-        );
-        assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),
             KeyResolution::Command("isearch-forward")
         );
@@ -210,6 +209,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x')]),
             KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('g')]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]),
+            KeyResolution::Command("goto-line")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')]),

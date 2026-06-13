@@ -1945,6 +1945,9 @@ mod tests {
 
         editor
             .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("g".to_owned()))
             .expect("goto-line should prompt");
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),

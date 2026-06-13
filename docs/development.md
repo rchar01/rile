@@ -173,7 +173,7 @@ Milestone 14 adds configuration and polish:
 
 Post-Milestone 14 UX polish adds a clean `*Rile*` welcome buffer for no-file launches, blank unused rows instead of Vim-like `~` markers, and compact mode-line position text such as `All (1,0)` alongside the major mode.
 
-Post-Milestone 14 navigation polish adds `M-g` and `goto-line` with `line` or
+Post-Milestone 14 navigation polish adds `M-g g` and `goto-line` with `line` or
 `line:column` minibuffer input, clamping out-of-range targets to the current
 buffer bounds.
 
