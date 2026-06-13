@@ -1,0 +1,23 @@
+---
+source: tests/pty_snapshots.rs
+expression: rile.snapshot_screen()
+---
+size: 80x16
+cursor: row 0, column 40
+001: left 000 | alpha                        left 000 | alpha
+                                             ^
+002: left 001 | beta                         left 001 | beta
+003: left 002 | gamma                        left 002 | gamma
+004: left 003 | delta                        left 003 | delta
+005: 
+006: 
+007: 
+008: 
+009: 
+010: 
+011: 
+012: 
+013: 
+014: 
+015: -- Rile VISUAL window 0 inactive split_l-- Rile VISUAL window 1 ACTIVE split_lef
+016: Selected other window

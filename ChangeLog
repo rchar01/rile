@@ -1,5 +1,20 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* tests/support/screen.rs (snapshot): New path-free parsed-screen
+	snapshot formatter with size, cursor position, rows, and caret marker.
+	* tests/support/pty.rs (RilePty::snapshot_screen): New helper for PTY
+	snapshot tests.
+	* tests/pty_snapshots.rs: New opt-in parsed-screen snapshot scenarios.
+	* tests/snapshots/*.snap: New committed PTY snapshots for open,
+	movement, and split rendering.
+	* scripts/snapshot-test: New helper for intentional snapshot review.
+	* Makefile (snapshot-test): New optional snapshot target.
+	* Containerfile.dev, scripts/tools: Install and report cargo-insta.
+	* docs/development.md, docs/pty-vt100-visual-testing-plan.md: Document
+	the snapshot workflow and mark Phase 6 complete.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* tests/pty_scrolling.rs: New PTY coverage for vertical scrolling and
 	horizontal scrolling on long lines.
 	* tests/pty_resize.rs: New PTY coverage for small and narrow deterministic

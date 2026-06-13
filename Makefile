@@ -9,7 +9,7 @@ VISUAL_IMAGE ?= rile-visual
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo fmt fmt-check lint audit unused-deps verify run visual-demos visual-frames clean
+.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -45,6 +45,10 @@ test:
 ## Run Cargo's built-in test runner in the dev container
 test-cargo:
 	$(IN_CONTAINER) ./scripts/test-cargo
+
+## Run opt-in parsed-screen snapshot tests
+snapshot-test:
+	$(IN_CONTAINER) ./scripts/snapshot-test $(ARGS)
 
 ## Format Rust code in the dev container
 fmt:

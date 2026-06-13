@@ -37,7 +37,7 @@ The automated path must spawn the real `rile` binary in a pseudo-terminal, send 
 - The renderer already has testable `draw_editor_frame`, `TerminalSize`, cursor-position extraction tests, mode-line position tests, and scroll-to-cursor behavior.
 - Rile already supports splits, buffer switching, search, query replace, syntax highlighting, config, binary-file detection, and optional `backup_on_save`.
 - The `tests/` integration-test tree, visual fixtures, VHS demos, visual frame workflow, and ignored `artifacts/` directory exist.
-- Parsed-screen `insta` snapshots are still future work; current PNG frames are optional visual review evidence, not snapshot tests.
+- Parsed-screen `insta` snapshots live under `tests/snapshots/`; current PNG frames are optional visual review evidence, not snapshot tests.
 - Current canonical verification is `make verify`, backed by `scripts/verify` in the dev container.
 - Proposed crate versions are available: `expectrl = 0.9.0`, `vt100 = 0.16.2`, `insta = 1.48.0`, `anyhow = 1.0.102`, `tempfile = 3.27.0`, `assert_cmd = 2.2.2`, and `predicates = 3.1.4`.
 
@@ -171,16 +171,16 @@ PNG frames under `artifacts/frames/` are visual review evidence from VHS and do 
 
 Tasks:
 
-- [ ] Store snapshots under `tests/snapshots/` using `insta` defaults.
-- [ ] Add a documented `cargo insta test` workflow.
-- [ ] Add a `scripts/snapshot-test` or Makefile target if the workflow proves useful.
-- [ ] Add snapshot naming rules that include scenario names and terminal size.
-- [ ] Ensure snapshots avoid local temp paths by displaying only file names or normalized paths in visual-test mode.
+- [x] Store snapshots under `tests/snapshots/` using `insta` defaults. Evidence: committed `pty_snapshots__*.snap` files cover open, movement, and split scenarios.
+- [x] Add a documented `cargo insta test` workflow. Evidence: `docs/development.md` documents `make snapshot-test` and the explicit snapshot update command.
+- [x] Add a `scripts/snapshot-test` or Makefile target if the workflow proves useful. Evidence: `scripts/snapshot-test` and `make snapshot-test` run the opt-in snapshot workflow.
+- [x] Add snapshot naming rules that include scenario names and terminal size. Evidence: `tests/pty_snapshots.rs` uses names such as `open_numbered_50x10`.
+- [x] Ensure snapshots avoid local temp paths by displaying only file names or normalized paths in visual-test mode. Evidence: snapshots include visible screen text, size, cursor, and row dumps, and a path-leak search found no local paths.
 
 Validation gate:
 
-- [ ] `cargo insta test` passes with committed snapshots.
-- [ ] Updating snapshots requires an intentional review step, not an automatic `make verify` side effect.
+- [x] `cargo insta test` passes with committed snapshots. Evidence: `RILE_SNAPSHOT_TEST=1 cargo insta test --test pty_snapshots` is the documented workflow.
+- [x] Updating snapshots requires an intentional review step, not an automatic `make verify` side effect. Evidence: `scripts/snapshot-test` sets `RILE_SNAPSHOT_TEST=1`, while default verification does not update snapshots.
 
 ## Phase 7: VHS Visual Review
 
@@ -244,7 +244,7 @@ Validation gate:
 - [x] `make fmt` passes.
 - [x] `make test` passes with PTY tests enabled.
 - [x] `make verify` passes without requiring VHS.
-- [ ] `cargo insta test` passes after snapshots are committed.
+- [x] `cargo insta test` passes after snapshots are committed.
 - [ ] At least one deliberately failed PTY assertion produces a readable screen dump during local harness validation.
 - [x] At least one VHS movement GIF is generated manually under `artifacts/`.
 
@@ -261,6 +261,7 @@ Validation gate:
 | 2026-06-12 | Split visual demo flow fixed. | `a9dd1ec` fixed C-x o input, screenshot timing, and split selection behavior; regenerated frames showed the right file opening in the right pane. |
 | 2026-06-13 | Insert, save, and status-line PTY coverage added. | `tests/pty_insert.rs` covers ASCII, UTF-8, Enter, Backspace, and Delete; `tests/pty_save.rs` covers C-x C-s, clean/dirty state, and saved disk contents; `tests/pty_statusline.rs` covers visual state, line/column updates, save state, and minibuffer errors. |
 | 2026-06-13 | Scrolling, resize, and broader split PTY coverage added. | `tests/pty_scrolling.rs` covers vertical and horizontal scrolling; `tests/pty_resize.rs` covers small and narrow deterministic sizes; `tests/pty_split_pane.rs` covers C-x 2, C-x 3, C-x o, C-x 0, and C-x 1. |
+| 2026-06-13 | Parsed-screen snapshot workflow added. | `tests/pty_snapshots.rs` and `tests/snapshots/*.snap` cover open, movement, and split rendering; `scripts/snapshot-test` and `make snapshot-test` provide the opt-in review workflow. |
 
 ## Decision Log
 
@@ -270,3 +271,4 @@ Validation gate:
 | 2026-06-12 | Add CLI flags before PTY tests. | Current CLI and terminal-size flow cannot produce deterministic PTY snapshots without `--visual-test` and `--test-size`. |
 | 2026-06-12 | Visual-test mode uses default config instead of user config. | PTY and snapshot output should not depend on a developer's `~/.config/rile/config.toml`. |
 | 2026-06-13 | Treat PNG frames as visual evidence, not snapshots. | Named frames help human and LLM review, while Phase 6 snapshots remain parsed VT100 text artifacts for automated review. |
+| 2026-06-13 | Keep snapshot review opt-in. | `make verify` should not update snapshots implicitly; `RILE_SNAPSHOT_TEST=1` marks intentional snapshot review. |

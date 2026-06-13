@@ -149,6 +149,10 @@ impl RilePty {
         screen::text(self.parser.screen())
     }
 
+    pub fn snapshot_screen(&self) -> String {
+        screen::snapshot(self.parser.screen())
+    }
+
     pub fn screen_dump(&self) -> String {
         let mut dump = format!(
             "file: {}\nsize: {}x{}\nlast action: {}\n",

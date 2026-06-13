@@ -22,6 +22,8 @@ RUN cargo install --locked \
     cargo-machete \
     cargo-nextest
 
+RUN cargo install --locked cargo-insta
+
 RUN chmod -R a+rwX /usr/local/cargo /usr/local/rustup \
  && mkdir -p /workspace \
  && chmod 777 /workspace

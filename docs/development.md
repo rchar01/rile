@@ -177,7 +177,7 @@ Current limitations: there is no prompt cursor movement, no file-name or buffer-
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.
 
-Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. The first PTY smoke test lives in `tests/pty_open.rs` and asserts parsed `vt100` screen state instead of raw escape bytes.
+Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY tests assert parsed `vt100` screen state instead of raw escape bytes.
 
 ## Line Ending Policy
 
@@ -208,6 +208,8 @@ Maintain `ChangeLog` in GNU-style plain text for file-level maintenance history,
 Use `--visual-test` to make terminal output deterministic for integration tests and visual demos. Use `--test-size WIDTHxHEIGHT` to render with a stable terminal size instead of reading the host terminal size. Fixture files for PTY and VHS work live under `fixtures/visual/`.
 
 PTY integration tests use support helpers under `tests/support/`. The harness spawns the compiled `rile` binary through `expectrl`, drains terminal output into `vt100::Parser`, and reports assertion failures with normalized screen dumps and cursor markers.
+
+Parsed-screen snapshots live under `tests/snapshots/` and are intentionally path-free. Snapshot names use `scenario_WIDTHxHEIGHT` so diffs make the scenario and terminal size clear. Run `make snapshot-test` to review committed snapshots through `cargo insta test`. To update snapshots intentionally, run `INSTA_UPDATE=always RILE_SNAPSHOT_TEST=1 cargo test --locked --test pty_snapshots`, inspect the changed `.snap` files, then rerun `make snapshot-test`. The direct cargo-insta equivalent is `RILE_SNAPSHOT_TEST=1 cargo insta test --test pty_snapshots`. The default `make verify` path does not set `RILE_SNAPSHOT_TEST` and does not update snapshots.
 
 Optional VHS demos live under `demos/` and write generated GIFs under ignored `artifacts/`. Run `make visual-demos` to generate every demo in the separate visual tooling container, or pass one or more tapes with `make visual-demos ARGS='demos/movement.tape'`. Run `make visual-frames` to regenerate the demos and verify the named PNG screenshots under `artifacts/frames/` for step-by-step human or LLM review. GIF and PNG output is review evidence; PTY tests remain the pass/fail oracle and visual tooling is intentionally outside `make verify`.
 
@@ -240,11 +242,12 @@ The dev container in `Containerfile.dev` provides:
 | `clippy` | Rust lint checks. | Yes |
 | `rust-analyzer` | Editor/LSP support. | Useful, not part of `verify` |
 | `cargo-nextest` | Preferred test runner. | Yes, with `cargo test` fallback in `scripts/test` |
+| `cargo-insta` | Opt-in parsed-screen snapshot review. | Optional, used by `make snapshot-test` |
 | `cargo-deny` | License, advisory, source, and dependency policy checks. | Yes |
 | `cargo-audit` | Security advisory checks. | Yes |
 | `cargo-machete` | Unused dependency detection. | Yes |
 
-Current host status in this workspace: `cargo`, `podman`, and `make` are available; `rustup`, `rustfmt`, clippy, `rust-analyzer`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, and `cargo-machete` are not. That is why the dev container is the canonical tooling environment.
+Current host status in this workspace: `cargo`, `podman`, and `make` are available; `rustup`, `rustfmt`, clippy, `rust-analyzer`, `cargo-nextest`, `cargo-insta`, `cargo-deny`, `cargo-audit`, and `cargo-machete` are not. That is why the dev container is the canonical tooling environment.
 
 The visual tooling container in `Containerfile.visual` provides `vhs`, `ttyd`, `ffmpeg`, Chromium, and Rust for optional visual artifact generation. It is separate from the normal dev container so `make verify` stays smaller, faster, and independent of browser/video tooling.
 
@@ -265,6 +268,7 @@ make build
 make fmt
 make fmt-check
 make test
+make snapshot-test
 make lint
 make audit
 make unused-deps
@@ -282,6 +286,7 @@ The Makefile delegates to scripts:
 - `scripts/fmt-check` runs `cargo fmt --check` without modifying files.
 - `scripts/test` runs `cargo nextest run --locked` when available, otherwise `cargo test --locked`.
 - `scripts/test-cargo` always runs `cargo test --locked`.
+- `scripts/snapshot-test` runs opt-in parsed-screen snapshot tests through `cargo insta test`.
 - `scripts/lint` runs `scripts/fmt-check` and `cargo clippy --locked --all-targets --all-features -- -D warnings`.
 - `scripts/audit` runs `cargo deny check` and `cargo audit`.
 - `scripts/unused-deps` runs `cargo machete`.
@@ -301,6 +306,7 @@ Direct host development is supported if the same tools are installed locally. Us
 ./scripts/fmt
 ./scripts/fmt-check
 ./scripts/test-cargo
+./scripts/snapshot-test
 ./scripts/lint
 ./scripts/audit
 ./scripts/unused-deps

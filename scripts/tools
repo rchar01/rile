@@ -36,6 +36,7 @@ check_tool clippy-driver
 check_tool rust-analyzer
 check_cargo_command nextest cargo-nextest
 check_cargo_command deny cargo-deny
+check_cargo_command insta cargo-insta
 check_cargo_command audit cargo-audit
 check_cargo_command machete cargo-machete
 
