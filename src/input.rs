@@ -40,19 +40,26 @@ pub struct ParsedKey {
 pub struct KeyReader<R> {
     reader: R,
     buffer: Vec<u8>,
+    erase_byte: u8,
 }
 
 impl<R: Read> KeyReader<R> {
     pub fn new(reader: R) -> Self {
+        Self::with_erase_byte(reader, 0x7f)
+    }
+
+    pub fn with_erase_byte(reader: R, erase_byte: u8) -> Self {
         Self {
             reader,
             buffer: Vec::new(),
+            erase_byte,
         }
     }
 
     pub fn read_key(&mut self) -> Result<KeyEvent> {
         loop {
-            if let Some(parsed) = parse_key_sequence(&self.buffer)? {
+            if let Some(parsed) = parse_key_sequence_with_erase_byte(&self.buffer, self.erase_byte)?
+            {
                 self.buffer.drain(..parsed.consumed);
                 return Ok(parsed.event);
             }
@@ -72,6 +79,13 @@ impl<R: Read> KeyReader<R> {
 }
 
 pub fn parse_key_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
+    parse_key_sequence_with_erase_byte(bytes, 0x7f)
+}
+
+pub fn parse_key_sequence_with_erase_byte(
+    bytes: &[u8],
+    erase_byte: u8,
+) -> Result<Option<ParsedKey>> {
     let Some(&first) = bytes.first() else {
         return Ok(None);
     };
@@ -79,7 +93,9 @@ pub fn parse_key_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     let event = match first {
         b'\r' | b'\n' => KeyEvent::Special(SpecialKey::Enter),
         b'\t' => KeyEvent::Special(SpecialKey::Tab),
-        0x7f | 0x08 => KeyEvent::Special(SpecialKey::Backspace),
+        0x7f => KeyEvent::Special(SpecialKey::Backspace),
+        0x08 if erase_byte == 0x08 => KeyEvent::Special(SpecialKey::Backspace),
+        0x08 => KeyEvent::Ctrl('h'),
         0x00 => KeyEvent::Ctrl('@'),
         0x01..=0x1a => KeyEvent::Ctrl((b'a' + first - 1) as char),
         0x1f => KeyEvent::Ctrl('_'),
@@ -235,10 +251,17 @@ fn utf8_char_width(byte: u8) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use super::parse_key_sequence_with_erase_byte;
     use super::{KeyEvent, ParsedKey, SpecialKey, parse_key_sequence};
 
     fn parse(bytes: &[u8]) -> ParsedKey {
         parse_key_sequence(bytes)
+            .expect("sequence should be valid")
+            .expect("sequence should be complete")
+    }
+
+    fn parse_with_erase_byte(bytes: &[u8], erase_byte: u8) -> ParsedKey {
+        parse_key_sequence_with_erase_byte(bytes, erase_byte)
             .expect("sequence should be valid")
             .expect("sequence should be complete")
     }
@@ -248,6 +271,7 @@ mod tests {
         assert_eq!(parse(&[0x00]).event, KeyEvent::Ctrl('@'));
         assert_eq!(parse(&[0x01]).event, KeyEvent::Ctrl('a'));
         assert_eq!(parse(&[0x1a]).event, KeyEvent::Ctrl('z'));
+        assert_eq!(parse(&[0x08]).event, KeyEvent::Ctrl('h'));
         assert_eq!(parse(&[0x1f]).event, KeyEvent::Ctrl('_'));
     }
 
@@ -276,6 +300,10 @@ mod tests {
         assert_eq!(parse(b"\t").event, KeyEvent::Special(SpecialKey::Tab));
         assert_eq!(
             parse(&[0x7f]).event,
+            KeyEvent::Special(SpecialKey::Backspace)
+        );
+        assert_eq!(
+            parse_with_erase_byte(&[0x08], 0x08).event,
             KeyEvent::Special(SpecialKey::Backspace)
         );
     }

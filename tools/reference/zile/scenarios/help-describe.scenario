@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=help-describe
+SCENARIO_DESCRIPTION='Observe Zile C-h k and C-h f help behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=help-describe.txt
+FIXTURE_CONTENT=$'help describe fixture\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /help describe fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+H
+Type "k"
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-describe-key.png
+Sleep 500ms
+Ctrl+X
+Type "1"
+Sleep 500ms
+Ctrl+H
+Type "f"
+Sleep 500ms
+Type "find-file"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-describe-function.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

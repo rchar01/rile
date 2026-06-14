@@ -224,11 +224,20 @@ candidates after recalling history in completion-enabled prompts. Incremental
 search and query-replace history remain deferred because they have separate
 interaction models.
 
+Post-Milestone 14 help polish adds `C-h k` and `C-h f` using Rile's existing
+read-only `*Help*` special buffer. `C-h k` reads a complete key sequence and
+shows the bound command plus its description. `C-h f` uses the shared command
+completion source, then shows the selected interactive command's description and
+current key bindings. Terminal input parsing uses the original termios erase
+byte, so `0x08` remains Backspace on `stty erase ^H` terminals and otherwise
+works as `C-h`; `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
-unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal
-yet. Search and query replace are exact line-local substring matching; they do
-not wrap around the buffer and do not match across line breaks.
+unsaved-changes quit confirmation, no read-only file-open mode, and no redo or
+advanced Emacs undo traversal yet. Search and query replace are exact line-local
+substring matching; they do not wrap around the buffer and do not match across
+line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

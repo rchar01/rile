@@ -13,6 +13,8 @@ pub enum Command {
     DeleteChar,
     DeleteOtherWindows,
     DeleteWindow,
+    DescribeFunction,
+    DescribeKey,
     EndOfBuffer,
     EndOfLine,
     ExchangePointAndMark,
@@ -161,6 +163,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             DeleteOtherWindows,
         ),
         CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow),
+        CommandSpec::new(
+            "describe-function",
+            "Describe an interactive command",
+            true,
+            DescribeFunction,
+        ),
+        CommandSpec::new("describe-key", "Describe a key binding", true, DescribeKey),
         CommandSpec::new(
             "end-of-buffer",
             "Move cursor to end of buffer",
@@ -327,6 +336,8 @@ mod tests {
         assert!(registry.contains("split-window-right"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
+        assert!(registry.contains("describe-function"));
+        assert!(registry.contains("describe-key"));
         assert!(registry.contains("other-window"));
         assert!(!registry.contains("save"));
     }

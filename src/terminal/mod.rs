@@ -83,6 +83,13 @@ impl RawModeGuard {
         self.active
     }
 
+    pub fn erase_byte(&self) -> u8 {
+        self.original
+            .as_ref()
+            .map(|termios| termios.c_cc[libc::VERASE])
+            .unwrap_or(0x7f)
+    }
+
     pub fn disable(&mut self) -> Result<()> {
         if !self.active {
             return Ok(());
@@ -242,6 +249,7 @@ where
         let input_fd = input.as_raw_fd();
         let output_fd = output.as_raw_fd();
         let raw_mode = RawModeGuard::activate(input_fd)?;
+        let erase_byte = raw_mode.erase_byte();
         let mut screen = ScreenGuard::enter(output)?;
         if options.visual_test {
             screen.set_steady_block_cursor()?;
@@ -252,7 +260,7 @@ where
         Ok(Self {
             screen,
             _raw_mode: raw_mode,
-            input: KeyReader::new(input),
+            input: KeyReader::with_erase_byte(input, erase_byte),
             output_fd,
             test_size: options.test_size,
             frame_options: FrameOptions {

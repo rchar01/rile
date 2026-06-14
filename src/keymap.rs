@@ -70,6 +70,19 @@ impl KeyMap {
             })
             .collect()
     }
+
+    pub fn binding_for_sequence(&self, sequence: &[KeyEvent]) -> Option<&KeyBinding> {
+        self.bindings
+            .iter()
+            .find(|binding| binding.sequence == sequence)
+    }
+
+    pub fn bindings_for_command(&self, command: &str) -> Vec<&KeyBinding> {
+        self.bindings
+            .iter()
+            .filter(|binding| binding.command == command)
+            .collect()
+    }
 }
 
 pub fn default_bindings() -> Vec<KeyBinding> {
@@ -111,6 +124,14 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
         KeyBinding::new([KeyEvent::Ctrl('o')], "open-line"),
         KeyBinding::new([KeyEvent::Ctrl('@')], "set-mark-command"),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())],
+            "describe-function",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())],
+            "describe-key",
+        ),
         KeyBinding::new([KeyEvent::Ctrl('_')], "undo"),
         KeyBinding::new([KeyEvent::Ctrl('k')], "kill-line"),
         KeyBinding::new([KeyEvent::Ctrl('s')], "isearch-forward"),
@@ -283,6 +304,18 @@ mod tests {
             KeyResolution::Prefix
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h')]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())]),
+            KeyResolution::Command("describe-function")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())]),
+            KeyResolution::Command("describe-key")
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]),
             KeyResolution::Command("goto-line")
         );
@@ -353,5 +386,19 @@ mod tests {
             bindings[0].sequence,
             vec![KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]
         );
+    }
+
+    #[test]
+    fn finds_bindings_by_sequence_and_command() {
+        let keymap = KeyMap::default();
+
+        assert_eq!(
+            keymap
+                .binding_for_sequence(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')])
+                .map(|binding| binding.command),
+            Some("find-file")
+        );
+        assert_eq!(keymap.bindings_for_command("find-file").len(), 1);
+        assert!(keymap.bindings_for_command("missing-command").is_empty());
     }
 }

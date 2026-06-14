@@ -36,6 +36,7 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
+    describe_key: Option<Vec<KeyEvent>>,
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
@@ -133,6 +134,7 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             help_return: None,
+            describe_key: None,
             completion: None,
             completion_return: None,
             completion_config: config.completion,
@@ -243,7 +245,10 @@ impl Editor {
         let prompt = self.minibuffer.prompt()?;
         if !matches!(
             prompt.kind,
-            PromptKind::ExtendedCommand | PromptKind::FindFile | PromptKind::SwitchToBuffer
+            PromptKind::DescribeFunction
+                | PromptKind::ExtendedCommand
+                | PromptKind::FindFile
+                | PromptKind::SwitchToBuffer
         ) {
             return self.minibuffer.display_text();
         }
@@ -341,11 +346,16 @@ impl Editor {
         }
 
         if key == KeyEvent::Ctrl('g') {
+            self.describe_key = None;
             self.clear_key_sequence();
             self.deactivate_region();
             self.clear_insert_group();
             self.minibuffer.set_message("Quit");
             return Ok(EditorOutcome::Continue);
+        }
+
+        if self.describe_key.is_some() {
+            return Ok(self.handle_describe_key(key));
         }
 
         if self.document().is_help() && key == KeyEvent::Text("q".to_owned()) {
@@ -419,13 +429,17 @@ impl Editor {
     fn show_key_prefix_help(&mut self) -> EditorOutcome {
         let prefix = self.key_sequence.clone();
         let text = format_key_prefix_help(&self.keymap, &prefix);
+        self.clear_key_sequence();
+        self.open_help_buffer(text)
+    }
+
+    fn open_help_buffer(&mut self, text: impl AsRef<str>) -> EditorOutcome {
         self.sync_current_window();
         if !self.document().is_help() || self.help_return.is_none() {
             self.help_return = Some(*self.windows.current().viewport());
         }
         let help = self.buffers.open_help(text);
 
-        self.clear_key_sequence();
         self.current_buffer = help;
         self.cursor = Position::new(0, 0);
         self.goal_display_column = None;
@@ -828,6 +842,7 @@ impl Editor {
 
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
         match kind {
+            PromptKind::DescribeFunction => Ok(self.describe_function(input.trim())),
             PromptKind::ExtendedCommand => self.execute_command_by_name(input.trim()),
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
@@ -854,6 +869,8 @@ impl Editor {
             DeleteChar => self.delete_char(),
             DeleteOtherWindows => self.delete_other_windows(),
             DeleteWindow => self.delete_window(),
+            DescribeFunction => self.start_describe_function(),
+            DescribeKey => self.start_describe_key(),
             EndOfBuffer => self.move_end_of_buffer(),
             EndOfLine => self.move_end_of_line(),
             ExchangePointAndMark => self.exchange_point_and_mark(),
@@ -1346,6 +1363,60 @@ impl Editor {
         ));
         self.update_completion_from_prompt();
         Ok(())
+    }
+
+    fn start_describe_function(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::DescribeFunction, "Describe command: ");
+        self.completion = Some(CompletionSession::commands(
+            &self.commands,
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
+        Ok(())
+    }
+
+    fn start_describe_key(&mut self) -> Result<()> {
+        self.describe_key = Some(Vec::new());
+        self.minibuffer.set_message("Describe key: ");
+        Ok(())
+    }
+
+    fn handle_describe_key(&mut self, key: KeyEvent) -> EditorOutcome {
+        let Some(sequence) = &mut self.describe_key else {
+            return EditorOutcome::Continue;
+        };
+        sequence.push(key);
+        let sequence = sequence.clone();
+
+        match self.keymap.resolve(&sequence) {
+            KeyResolution::Prefix => {
+                self.minibuffer
+                    .set_message(format!("Describe key: {}-", format_key_sequence(&sequence)));
+                EditorOutcome::Continue
+            }
+            KeyResolution::Command(command) => {
+                self.describe_key = None;
+                let text =
+                    format_describe_key_help(&self.commands, &self.keymap, &sequence, command);
+                self.open_help_buffer(text)
+            }
+            KeyResolution::NoMatch => {
+                self.describe_key = None;
+                let text = format_unbound_key_help(&sequence);
+                self.open_help_buffer(text)
+            }
+        }
+    }
+
+    fn describe_function(&mut self, name: &str) -> EditorOutcome {
+        let Some(command) = self.commands.get(name) else {
+            self.minibuffer
+                .set_message(format!("No such command: {name}"));
+            return EditorOutcome::Continue;
+        };
+        let text = format_describe_function_help(&self.keymap, command.name, command.description);
+        self.open_help_buffer(text)
     }
 
     fn start_find_file(&mut self) -> Result<()> {
@@ -2140,6 +2211,52 @@ fn format_key_prefix_help(keymap: &KeyMap, prefix: &[KeyEvent]) -> String {
     text
 }
 
+fn format_describe_key_help(
+    commands: &CommandRegistry,
+    keymap: &KeyMap,
+    sequence: &[KeyEvent],
+    command: &str,
+) -> String {
+    let mut text = format!(
+        "{} runs the command `{}`.\n\n",
+        format_key_sequence(sequence),
+        command
+    );
+    let description = commands.get(command).map(|command| command.description);
+    text.push_str(&format_command_help(keymap, command, description));
+    text
+}
+
+fn format_describe_function_help(keymap: &KeyMap, name: &str, description: &str) -> String {
+    format_command_help(keymap, name, Some(description))
+}
+
+fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
+    format!(
+        "{} is not bound to any command.\n",
+        format_key_sequence(sequence)
+    )
+}
+
+fn format_command_help(keymap: &KeyMap, name: &str, description: Option<&str>) -> String {
+    let mut text = match description {
+        Some(description) => format!("{} is an interactive command.\n\n{}\n", name, description),
+        None => format!("{} is not a known interactive command.\n", name),
+    };
+    let bindings = keymap.bindings_for_command(name);
+    if bindings.is_empty() {
+        text.push_str("\nIt is not bound to any key.\n");
+    } else {
+        let keys = bindings
+            .iter()
+            .map(|binding| format_key_sequence(&binding.sequence))
+            .collect::<Vec<_>>()
+            .join(", ");
+        text.push_str(&format!("\nIt is bound to {}.\n", keys));
+    }
+    text
+}
+
 fn format_key_event(key: &KeyEvent) -> String {
     match key {
         KeyEvent::Ctrl(character) => format!("C-{character}"),
@@ -2396,6 +2513,7 @@ fn format_completion_buffer(completion: &CompletionSession) -> String {
 
 fn prompt_label(kind: PromptKind) -> &'static str {
     match kind {
+        PromptKind::DescribeFunction => "Describe command: ",
         PromptKind::ExtendedCommand => "M-x ",
         PromptKind::FindFile => "Find file: ",
         PromptKind::GotoLine => "Goto line: ",
@@ -2412,6 +2530,7 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
     matches!(
         kind,
         PromptKind::ExtendedCommand
+            | PromptKind::DescribeFunction
             | PromptKind::FindFile
             | PromptKind::GotoLine
             | PromptKind::KillBuffer
@@ -3618,6 +3737,109 @@ mod tests {
 Key             Binding\n\
 ---             -------\n\n\
 M-g g           goto-line\n"
+        );
+    }
+
+    #[test]
+    fn describe_key_opens_help_for_complete_binding() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("describe-key should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("describe-key should read prefix");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Describe key: C-x-")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("describe-key should finish");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("C-x C-f runs the command `find-file`."));
+        assert!(help.contains("find-file is an interactive command."));
+        assert!(help.contains("Open file by path"));
+        assert!(help.contains("It is bound to C-x C-f."));
+    }
+
+    #[test]
+    fn describe_key_cancel_clears_pending_sequence() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("describe-key should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("describe-key should read prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel describe-key");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert after cancel");
+
+        assert_eq!(editor.minibuffer().display_text().as_deref(), None);
+        assert_eq!(editor.document().buffer().serialize(), "x");
+    }
+
+    #[test]
+    fn describe_function_opens_help_for_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("f".to_owned()))
+            .expect("describe-function should start");
+        editor
+            .handle_key(KeyEvent::Text("find-file".to_owned()))
+            .expect("describe-function input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-function should submit");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("find-file is an interactive command."));
+        assert!(help.contains("Open file by path"));
+        assert!(help.contains("It is bound to C-x C-f."));
+    }
+
+    #[test]
+    fn describe_function_completion_selects_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("f".to_owned()))
+            .expect("describe-function should start");
+        editor
+            .handle_key(KeyEvent::Text("find-f".to_owned()))
+            .expect("describe-function input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-function should accept selected completion");
+
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("find-file is an interactive command.")
         );
     }
 

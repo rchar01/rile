@@ -1,5 +1,20 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/input.rs, src/terminal/mod.rs: Parse C-h while preserving termios-aware
+	0x08 Backspace and Esc-0x08 Meta-Backspace compatibility.
+	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
+	describe-key and describe-function commands using the existing help buffer.
+	* tests/pty_movement.rs: Cover C-h k and C-h f in a real PTY.
+	* tools/reference/emacs/scenarios/help-describe-core.scenario,
+	tools/reference/zile/scenarios/help-describe.scenario: Add describe-help
+	reference scenarios.
+	* tools/reference/kg/scenarios/help-general.scenario: Add general help
+	reference scenario.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document help.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Add per-kind minibuffer prompt history with M-p and M-n for
 	command, file, buffer, write-file, and goto-line prompts.
 	* tests/pty_completion.rs: Cover M-x prompt history in a real PTY.

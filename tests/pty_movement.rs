@@ -146,6 +146,53 @@ fn goto_line_prefix_help_opens_help_buffer() -> Result<()> {
 }
 
 #[test]
+fn describe_key_opens_help_for_binding() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("k", b"k")?;
+    rile.assert_screen_contains("Describe key:")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.assert_screen_contains("Describe key: C-x-")?;
+    rile.send("C-f", keys::control('f'))?;
+
+    rile.assert_screen_contains("C-x C-f runs the command `find-file`.")?;
+    rile.assert_screen_contains("Open file by path")?;
+    rile.assert_screen_contains("It is bound to C-x C-f.")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn describe_function_opens_help_for_command() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.assert_screen_contains("Describe command:")?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("find-file is an interactive command.")?;
+    rile.assert_screen_contains("Open file by path")?;
+    rile.assert_screen_contains("It is bound to C-x C-f.")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn read_only_help_message_clears_on_movement() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
