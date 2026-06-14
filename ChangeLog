@@ -1,5 +1,14 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/zile/scenarios/buffer-completion.scenario: Add Zile
+	switch-buffer completion capture scenario.
+	* tools/reference/kg/scenarios/buffer-completion.scenario: Add kg
+	switch-buffer completion capture scenario.
+	* tools/reference/zile/README.md, tools/reference/kg/README.md: List the
+	new buffer-completion scenarios.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs: Add file-name completion candidates with directory
 	annotations, directory-first sorting, and relative display values.
 	* src/editor.rs: Enable completion in find-file prompts, resolve relative
