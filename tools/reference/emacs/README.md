@@ -15,9 +15,9 @@ not be used to copy, translate, or mechanically port their implementation code.
 ## Profiles
 
 - `core`: runs `emacs -Q -nw`; use this for baseline GNU Emacs behavior.
-- `modern`: runs `emacs -Q -nw` with a tiny Debian-packaged profile enabling
-  Vertico, Marginalia, and a Modus theme; use this for modern completion UX
-  evidence only, not as canonical base Emacs behavior.
+- `modern`: stages `early-init.el` and `init.el` in the scenario home, then runs
+  `emacs -nw` with Vertico, Marginalia, and a Modus theme; use this for modern
+  completion UX evidence only, not as canonical base Emacs behavior.
 
 ## Commands
 

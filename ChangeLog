@@ -1,5 +1,15 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/emacs/profiles/early-init.el: Add modern Emacs reference
+	early init that suppresses startup UI, GUI bars, dialogs, and cursor blinking.
+	* tools/reference/emacs/build-in-container: Stage early-init.el and init.el in
+	the scenario home before running emacs-modern.
+	* tools/reference/emacs/profiles/modern.el, tools/reference/emacs/README.md,
+	docs/reference-testing.md: Move startup UI setup into early init and document
+	the modern wrapper behavior.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add back-to-indentation on
 	M-m, moving to the first non-whitespace character or line end on whitespace-only
 	lines.

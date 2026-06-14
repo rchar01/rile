@@ -86,11 +86,12 @@ artifacts/reference/emacs/install/bin/emacs-core
 artifacts/reference/emacs/install/bin/emacs-modern
 ```
 
-The `emacs-core` wrapper runs `emacs -Q -nw`. The `emacs-modern` wrapper runs
-`emacs -Q -nw` with the project profile under
-`artifacts/reference/emacs/install/share/rile-reference-emacs/profiles/modern.el`.
-That profile enables Vertico, Marginalia, and a Modus theme from Debian ELPA
-packages for visual completion comparison.
+The `emacs-core` wrapper runs `emacs -Q -nw`. The `emacs-modern` wrapper stages
+`early-init.el` and `init.el` in the scenario home, then runs `emacs -nw` with
+site files disabled. The staged early init suppresses startup UI, dialogs, GUI
+bars, and cursor blinking before the first frame. The init profile enables
+Vertico, Marginalia, and a Modus theme from Debian ELPA packages for visual
+completion comparison.
 
 ## Capture A Scenario
 
