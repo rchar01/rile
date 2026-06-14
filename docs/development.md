@@ -198,13 +198,16 @@ Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.
 
-Post-Milestone 14 minibuffer polish adds command completion for `M-x` and file
-completion for `C-x C-f`. The completion core is separate from the UI style and
-supports command-name and file-name sources, prefix or substring matching,
-common-prefix Tab completion, selected candidate movement with `C-n`/Down and
-`C-p`/Up, and Enter acceptance. File completion resolves relative candidates
-against the current buffer's directory when available, keeps raw missing-file
-input working, and descends into selected directories. The default
+Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
+completion for `C-x C-f`, and buffer-name completion for `C-x b`. The completion
+core is separate from the UI style and supports command-name, file-name, and
+buffer-name sources, prefix or substring matching, common-prefix Tab completion,
+selected candidate movement with `C-n`/Down and `C-p`/Up, and Enter acceptance.
+File completion resolves relative candidates against the current buffer's
+directory when available, keeps raw missing-file input working, and descends
+into selected directories. Buffer completion keeps exact existing buffer names
+working and otherwise requires explicit selection or Tab completion before
+switching. The default
 `completion_style = "vertical"` reserves rows above the minibuffer and shows
 candidate annotations. `completion_style = "completions-buffer"` opens a
 temporary read-only `*Completions*` buffer and restores the previous viewport on
@@ -213,7 +216,7 @@ minibuffer display. Supported completion config keys are `completion_style`,
 `completion_max_candidates`, `completion_show_annotations`, and
 `completion_matching`.
 
-Current limitations: there is no prompt cursor movement, no buffer-name
+Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs
 undo traversal yet. Search and query replace are exact line-local substring
 matching; they do not wrap around the buffer and do not match across line

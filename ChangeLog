@@ -1,5 +1,13 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/completion.rs: Add buffer-name completion candidates.
+	* src/editor.rs: Enable completion in switch-buffer prompts and preserve exact
+	buffer-name input.
+	* tests/pty_completion.rs: Cover buffer completion in a real PTY.
+	* README.md, docs/development.md, NEWS: Document buffer-name completion.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/zile/scenarios/buffer-completion.scenario: Add Zile
 	switch-buffer completion capture scenario.
 	* tools/reference/kg/scenarios/buffer-completion.scenario: Add kg

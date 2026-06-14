@@ -98,6 +98,7 @@ impl CompletionCandidate {
 pub enum CompletionSource {
     Commands,
     Files,
+    Buffers,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -152,6 +153,24 @@ impl CompletionSession {
         session
     }
 
+    pub fn buffers(names: impl IntoIterator<Item = String>, config: CompletionConfig) -> Self {
+        let candidates = names
+            .into_iter()
+            .map(|name| CompletionCandidate::new(name, "Buffer"))
+            .collect::<Vec<_>>();
+        let mut session = Self {
+            source: CompletionSource::Buffers,
+            config,
+            base_dir: None,
+            candidates,
+            matches: Vec::new(),
+            selected: 0,
+            selection_explicit: false,
+        };
+        session.update("");
+        session
+    }
+
     pub fn source(&self) -> CompletionSource {
         self.source
     }
@@ -170,7 +189,7 @@ impl CompletionSession {
 
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
-            CompletionSource::Commands => self
+            CompletionSource::Commands | CompletionSource::Buffers => self
                 .candidates
                 .iter()
                 .enumerate()
@@ -434,5 +453,33 @@ mod tests {
                 .is_directory()
         );
         assert_eq!(session.common_prefix("alpha"), None);
+    }
+
+    #[test]
+    fn buffer_completion_filters_buffer_names() {
+        let mut session = CompletionSession::buffers(
+            [
+                "notes.txt".to_owned(),
+                "alpha-buffer.txt".to_owned(),
+                "alphabet-buffer.txt".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("alpha");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["alpha-buffer.txt", "alphabet-buffer.txt"]);
+
+        session.update("alpha-b");
+
+        assert_eq!(
+            session.common_prefix("alpha-b").as_deref(),
+            Some("alpha-buffer.txt")
+        );
     }
 }

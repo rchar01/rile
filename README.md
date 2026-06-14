@@ -93,8 +93,8 @@ completion_show_annotations = true
 completion_matching = "prefix" # or "substring"
 ```
 
-Completion currently applies to `M-x` command names and `C-x C-f` file names.
-Buffer-name completion is planned to reuse the same completion core later.
+Completion currently applies to `M-x` command names, `C-x C-f` file names,
+and `C-x b` buffer names.
 
 ## License
 
