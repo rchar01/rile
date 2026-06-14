@@ -6,6 +6,8 @@ pub const DELETE: &[u8] = b"\x1b[3~";
 pub const DOWN: &[u8] = b"\x1b[B";
 pub const ENTER: &[u8] = b"\r";
 pub const LEFT: &[u8] = b"\x1b[D";
+pub const PAGE_DOWN: &[u8] = b"\x1b[6~";
+pub const PAGE_UP: &[u8] = b"\x1b[5~";
 pub const RIGHT: &[u8] = b"\x1b[C";
 pub const UP: &[u8] = b"\x1b[A";
 

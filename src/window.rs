@@ -12,6 +12,7 @@ pub struct Viewport {
     pub cursor: Position,
     pub first_visible_line: usize,
     pub first_visible_column: usize,
+    pub text_rows: usize,
 }
 
 impl Viewport {
@@ -21,6 +22,7 @@ impl Viewport {
             cursor: Position::new(0, 0),
             first_visible_line: 0,
             first_visible_column: 0,
+            text_rows: 1,
         }
     }
 }

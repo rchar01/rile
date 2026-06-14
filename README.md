@@ -30,6 +30,8 @@ Basic editor keys:
 - `C-f`/right arrow and `C-b`/left arrow move horizontally.
 - `M-f` and `M-b` move forward and backward by word.
 - `C-n`/down arrow and `C-p`/up arrow move vertically.
+- `C-v`/PageDown and `M-v`/PageUp scroll by one visible page.
+- `C-l` recenters the current line in the window.
 - `C-a`/Home and `C-e`/End move within the current line.
 - `M-<` and `M->` move to the beginning and end of the buffer.
 - `M-g g` prompts for a line or `line:column` and moves point there.

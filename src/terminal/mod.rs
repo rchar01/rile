@@ -312,6 +312,9 @@ fn draw_editor_frame_with_options<W: Write>(
 
     let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
     let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
+    for layout in &layouts {
+        editor.set_window_text_rows(layout.id, layout.rect.rows.saturating_sub(1));
+    }
     ensure_current_window_visible(editor, &layouts)?;
     for layout in &layouts {
         draw_window(terminal, editor, *layout, options)?;

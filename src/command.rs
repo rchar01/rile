@@ -31,6 +31,7 @@ pub enum Command {
     OpenLine,
     PreviousLine,
     QueryReplace,
+    Recenter,
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
@@ -38,6 +39,8 @@ pub enum Command {
     SplitWindowBelow,
     SplitWindowRight,
     SwitchToBuffer,
+    ScrollPageBackward,
+    ScrollPageForward,
     ToggleLineNumbers,
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
@@ -212,7 +215,20 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             QueryReplace,
         ),
+        CommandSpec::new("recenter", "Center cursor in window", true, Recenter),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
+        CommandSpec::new(
+            "scroll-page-backward",
+            "Scroll one page backward",
+            true,
+            ScrollPageBackward,
+        ),
+        CommandSpec::new(
+            "scroll-page-forward",
+            "Scroll one page forward",
+            true,
+            ScrollPageForward,
+        ),
         CommandSpec::new(
             "save-buffers-kill-terminal",
             "Quit Rile",
@@ -299,6 +315,9 @@ mod tests {
         assert!(registry.contains("yank"));
         assert!(registry.contains("undo"));
         assert!(registry.contains("query-replace"));
+        assert!(registry.contains("recenter"));
+        assert!(registry.contains("scroll-page-backward"));
+        assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));
         assert!(registry.contains("toggle-line-numbers"));
         assert!(registry.contains("toggle-search-highlighting"));

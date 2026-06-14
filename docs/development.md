@@ -176,13 +176,14 @@ Post-Milestone 14 UX polish adds a clean read-only `*Rile*` welcome buffer for n
 Post-Milestone 14 navigation polish adds `M-g g` and `goto-line` with `line` or
 `line:column` minibuffer input, clamping out-of-range targets to the current
 buffer bounds. It also adds `M-<` and `M->` for moving to the beginning and end
-of the current buffer. Pending key prefixes echo the current sequence with a
-`C-h` help hint, and `C-h` opens a generated read-only `*Help*` buffer for that
-prefix. Help buffers display `Type q in help window to restore previous buffer.`
-and `q` restores the previous buffer in the current window. Attempts to edit a
-read-only special buffer report `Buffer is read-only: <buffer>`, and transient
-messages clear on the next non-prompt command unless that command writes a new
-message.
+of the current buffer, `C-v`/PageDown and `M-v`/PageUp for visible-page
+scrolling with one-line overlap, and `C-l` for recentering point in the current
+window. Pending key prefixes echo the current sequence with a `C-h` help hint,
+and `C-h` opens a generated read-only `*Help*` buffer for that prefix. Help
+buffers display `Type q in help window to restore previous buffer.` and `q`
+restores the previous buffer in the current window. Attempts to edit a read-only
+special buffer report `Buffer is read-only: <buffer>`, and transient messages
+clear on the next non-prompt command unless that command writes a new message.
 
 Post-Milestone 14 region polish adds `exchange-point-and-mark` on `C-x C-x`.
 It swaps point with the current buffer's mark, reactivates the region, and

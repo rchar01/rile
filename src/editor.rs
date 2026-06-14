@@ -169,6 +169,12 @@ impl Editor {
         self.windows.window(id).map(|window| window.viewport())
     }
 
+    pub fn set_window_text_rows(&mut self, id: WindowId, text_rows: usize) {
+        if let Some(window) = self.windows.window_mut(id) {
+            window.viewport_mut().text_rows = text_rows.max(1);
+        }
+    }
+
     pub fn ensure_current_window_contains_cursor(
         &mut self,
         text_rows: usize,
@@ -177,6 +183,7 @@ impl Editor {
     ) {
         self.sync_current_window();
         let viewport = self.windows.current_mut().viewport_mut();
+        viewport.text_rows = text_rows.max(1);
 
         if text_rows > 0 {
             if self.cursor.line < viewport.first_visible_line {
@@ -487,11 +494,14 @@ impl Editor {
             OpenLine => self.open_line(),
             PreviousLine => self.move_line(-1),
             QueryReplace => self.start_query_replace(),
+            Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             SetMarkCommand => self.set_mark_command(),
             KillBuffer => self.start_kill_buffer(),
             OtherWindow => self.other_window(),
+            ScrollPageBackward => self.scroll_page_backward(),
+            ScrollPageForward => self.scroll_page_forward(),
             SwitchToBuffer => self.start_switch_to_buffer(),
             SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
             SplitWindowRight => self.split_window(SplitAxis::Vertical),
@@ -567,6 +577,57 @@ impl Editor {
         self.cursor = position;
         self.goal_display_column = Some(goal);
         self.sync_current_window();
+        Ok(())
+    }
+
+    fn scroll_page_forward(&mut self) -> Result<()> {
+        self.scroll_page(1)
+    }
+
+    fn scroll_page_backward(&mut self) -> Result<()> {
+        self.scroll_page(-1)
+    }
+
+    fn scroll_page(&mut self, direction: isize) -> Result<()> {
+        self.clear_insert_group();
+        let text_rows = self.windows.current().viewport().text_rows.max(1);
+        let amount = text_rows.saturating_sub(1).max(1);
+        let old_first_visible_line = self.windows.current().viewport().first_visible_line;
+        let delta = if direction.is_negative() {
+            -(amount as isize)
+        } else {
+            amount as isize
+        };
+        let (position, goal) =
+            self.document()
+                .buffer()
+                .move_line(self.cursor, delta, self.goal_display_column)?;
+
+        self.cursor = position;
+        self.goal_display_column = Some(goal);
+        self.sync_current_window();
+
+        let line_count = self.document().buffer().line_count();
+        let max_first_visible_line = line_count.saturating_sub(text_rows);
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = if direction.is_negative() {
+            old_first_visible_line.saturating_sub(amount)
+        } else {
+            old_first_visible_line.saturating_add(amount)
+        }
+        .min(max_first_visible_line);
+        Ok(())
+    }
+
+    fn recenter(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.sync_current_window();
+        let text_rows = self.windows.current().viewport().text_rows.max(1);
+        let line_count = self.document().buffer().line_count();
+        let max_first_visible_line = line_count.saturating_sub(text_rows);
+        let centered_first_visible_line = self.cursor.line.saturating_sub(text_rows / 2);
+        self.windows.current_mut().viewport_mut().first_visible_line =
+            centered_first_visible_line.min(max_first_visible_line);
         Ok(())
     }
 
@@ -2023,6 +2084,78 @@ mod tests {
             .execute_command_by_name("beginning-of-buffer")
             .expect("beginning-of-buffer should execute by name");
         assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn page_scroll_moves_by_visible_text_rows_with_overlap() {
+        let text = (0..20)
+            .map(|line| format!("line {line:03}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &text)
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.ensure_current_window_contains_cursor(6, 80, 0);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('v'))
+            .expect("C-v should scroll forward");
+        assert_eq!(editor.cursor(), Position::new(5, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            5
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('v'))
+            .expect("M-v should scroll backward");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            0
+        );
+    }
+
+    #[test]
+    fn recenter_moves_viewport_without_moving_cursor() {
+        let text = (0..20)
+            .map(|line| format!("line {line:03}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &text)
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.ensure_current_window_contains_cursor(6, 80, 0);
+
+        for _ in 0..12 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+        }
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("C-l should recenter");
+
+        assert_eq!(editor.cursor(), Position::new(12, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            9
+        );
     }
 
     #[test]

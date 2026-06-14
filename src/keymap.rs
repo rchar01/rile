@@ -93,7 +93,18 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], "previous-line"),
         KeyBinding::new([KeyEvent::Ctrl('n')], "next-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowDown)], "next-line"),
+        KeyBinding::new([KeyEvent::Ctrl('v')], "scroll-page-forward"),
+        KeyBinding::new([KeyEvent::Meta('v')], "scroll-page-backward"),
+        KeyBinding::new(
+            [KeyEvent::Special(SpecialKey::PageDown)],
+            "scroll-page-forward",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Special(SpecialKey::PageUp)],
+            "scroll-page-backward",
+        ),
         KeyBinding::new([KeyEvent::Ctrl('a')], "beginning-of-line"),
+        KeyBinding::new([KeyEvent::Ctrl('l')], "recenter"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::Home)], "beginning-of-line"),
         KeyBinding::new([KeyEvent::Ctrl('e')], "end-of-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::End)], "end-of-line"),
@@ -200,6 +211,26 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),
             KeyResolution::Command("isearch-forward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('v')]),
+            KeyResolution::Command("scroll-page-forward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('v')]),
+            KeyResolution::Command("scroll-page-backward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Special(SpecialKey::PageDown)]),
+            KeyResolution::Command("scroll-page-forward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Special(SpecialKey::PageUp)]),
+            KeyResolution::Command("scroll-page-backward")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('l')]),
+            KeyResolution::Command("recenter")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('r')]),

@@ -1,5 +1,13 @@
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add visible-page scrolling
+	with C-v, M-v, PageDown, and PageUp, plus recenter on C-l.
+	* tests/pty_scrolling.rs, tests/support/keys.rs: Cover page scrolling and
+	recentering in a real PTY.
+	* README.md, docs/development.md, NEWS: Document page scrolling and recenter.
+
+2026-06-13  Robert Charusta  <rch-public@posteo.net>
+
 	* src/input.rs, src/command.rs, src/keymap.rs, src/editor.rs: Add
 	kill-word on M-d and backward-kill-word on M-Backspace.
 	* tests/pty_insert.rs, tests/support/keys.rs: Cover word-kill commands in a
