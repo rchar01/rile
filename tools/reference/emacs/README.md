@@ -41,6 +41,7 @@ Initial inspection scenarios:
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.
+- `incremental-search-wrap-core`: base Emacs incremental search wrapping behavior.
 - `insert-file-core`: base Emacs `C-x i` insert-file behavior.
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.
 - `prompt-history-modern`: Vertico/Marginalia minibuffer history behavior.

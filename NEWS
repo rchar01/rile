@@ -48,11 +48,12 @@ Interface features:
 
 Search and replacement:
 
-* Incremental forward and backward search with visible matches.
+* Incremental forward and backward search with visible matches and explicit
+  wrap-after-failure behavior.
 * Interactive query replace with y, n, !, q, Escape, and C-g choices.
 * Search and query replace are exact UTF-8 substring matching within
-  individual lines.  They do not wrap around the buffer or match across
-  line breaks yet.
+  individual lines.  Query replace does not wrap around the buffer, and neither
+  command matches across line breaks yet.
 
 Display and configuration:
 

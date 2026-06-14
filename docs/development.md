@@ -87,11 +87,14 @@ Milestone 7 adds incremental search:
 - `C-r` starts backward incremental search;
 - typed query text updates the current match live;
 - repeated `C-s` and `C-r` jump to the next or previous match;
+- repeating search at a buffer boundary first reports a failing search, and the
+  next repeat wraps to the first or last match with a wrapped-search prompt;
 - Enter accepts the current match;
 - `C-g` cancels search and restores the original cursor position;
 - active search uses `render::Face::CurrentSearchMatch` and `render::Face::SearchMatch` spans;
 - the terminal renderer displays active search spans with ANSI highlighting;
-- tests cover UTF-8 matches, repeated search, cancellation, failed search, and ANSI span rendering.
+- tests cover UTF-8 matches, repeated search, wrapping, cancellation, failed
+  search, and ANSI span rendering.
 
 Milestone 8 adds multiple buffers:
 

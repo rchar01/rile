@@ -105,6 +105,13 @@ impl SearchDirection {
             Self::Backward => "Failing I-search backward: ",
         }
     }
+
+    fn wrapped_label(self) -> &'static str {
+        match self {
+            Self::Forward => "Wrapped I-search: ",
+            Self::Backward => "Wrapped I-search backward: ",
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,6 +119,7 @@ struct SearchState {
     direction: SearchDirection,
     origin: Position,
     current: Option<TextRange>,
+    failed_direction: Option<SearchDirection>,
 }
 
 impl Editor {
@@ -1687,6 +1695,7 @@ impl Editor {
             direction,
             origin: self.cursor,
             current: None,
+            failed_direction: None,
         });
         self.minibuffer
             .start_prompt(PromptKind::IncrementalSearch, direction.label());
@@ -1907,6 +1916,7 @@ impl Editor {
         if query.is_empty() {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.failed_direction = None;
             }
             self.cursor = origin;
             self.goal_display_column = None;
@@ -1919,6 +1929,7 @@ impl Editor {
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
+                search.failed_direction = None;
             }
             self.cursor = range.start;
             self.goal_display_column = None;
@@ -1927,6 +1938,7 @@ impl Editor {
         } else {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.failed_direction = Some(direction);
             }
             self.cursor = origin;
             self.goal_display_column = None;
@@ -1945,12 +1957,15 @@ impl Editor {
         };
 
         let previous_cursor = self.cursor;
-        let start = match (direction, search.current) {
-            (SearchDirection::Forward, Some(range)) => {
+        let is_wrapping = search.current.is_none() && search.failed_direction == Some(direction);
+        let start = match (direction, search.current, is_wrapping) {
+            (SearchDirection::Forward, Some(range), _) => {
                 search_start_after(self.document().buffer(), range.start)?
             }
-            (SearchDirection::Backward, Some(range)) => range.start,
-            (_, None) => search.origin,
+            (SearchDirection::Backward, Some(range), _) => range.start,
+            (SearchDirection::Forward, None, true) => Position::new(0, 0),
+            (SearchDirection::Backward, None, true) => self.document().buffer().end_position(),
+            (_, None, false) => search.origin,
         };
 
         if let Some(search) = &mut self.search {
@@ -1966,14 +1981,21 @@ impl Editor {
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
+                search.failed_direction = None;
             }
             self.cursor = range.start;
             self.goal_display_column = None;
             self.sync_current_window();
-            self.minibuffer.set_prompt_label(direction.label());
+            let label = if is_wrapping {
+                direction.wrapped_label()
+            } else {
+                direction.label()
+            };
+            self.minibuffer.set_prompt_label(label);
         } else {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.failed_direction = Some(direction);
             }
             self.cursor = previous_cursor;
             self.sync_current_window();
@@ -5379,6 +5401,83 @@ M-g g           goto-line\n"
     }
 
     #[test]
+    fn incremental_search_wraps_forward_after_boundary_failure() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\none")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        for character in "one".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should move to next match");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should report boundary failure");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing I-search: one")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should wrap to first match");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Wrapped I-search: one")
+        );
+    }
+
+    #[test]
+    fn incremental_search_wraps_backward_after_boundary_failure() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\none")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("search should prompt");
+        for character in "one".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing I-search backward: one")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("repeat backward should wrap to last match");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Wrapped I-search backward: one")
+        );
+    }
+
+    #[test]
     fn incremental_search_cancel_restores_original_cursor() {
         let mut document = Document::scratch();
         document
@@ -5426,6 +5525,42 @@ M-g g           goto-line\n"
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),
             Some("Failing I-search: z")
+        );
+    }
+
+    #[test]
+    fn incremental_search_repeated_total_miss_stays_failing() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("query should update");
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should keep failing");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing I-search: z")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("repeat backward should keep failing");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing I-search backward: z")
         );
     }
 }

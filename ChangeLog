@@ -1,5 +1,16 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Add incremental-search wrap state so repeating after a
+	boundary failure wraps to the first or last match with a wrapped prompt.
+	* tests/pty_search.rs: Cover visible search-wrap prompts in a real PTY.
+	* tools/reference/emacs/scenarios/incremental-search-wrap-core.scenario,
+	tools/reference/zile/scenarios/incremental-search-wrap.scenario: Add focused
+	search-wrap reference scenarios.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md: Document search wrapping.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/file.rs: Add shared text-file reading for open and insert-file
 	validation.
 	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add

@@ -63,6 +63,8 @@ Basic editor keys:
 - `C-x o` selects the next window.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
+- Repeating search at a buffer boundary first reports a failing search; repeating
+  again wraps to the first or last match and shows a wrapped-search prompt.
 - `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit.
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
@@ -77,7 +79,7 @@ Basic editor keys:
   goto-line, and describe-command minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
+Current search and query replace use exact UTF-8 substring matching within individual lines. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and neither command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible. Empty rows are left blank rather than filled with marker characters.

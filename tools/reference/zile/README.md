@@ -32,6 +32,7 @@ Baseline inspection scenarios:
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.
 - `find-file-completion`: file prompt completion after Tab.
+- `incremental-search-wrap`: incremental search wrapping behavior.
 - `insert-file`: `C-x i` insert-file behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
