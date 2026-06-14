@@ -1,5 +1,16 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/completion.rs: Add file-name completion candidates with directory
+	annotations, directory-first sorting, and relative display values.
+	* src/editor.rs: Enable completion in find-file prompts, resolve relative
+	find-file input against the current buffer directory, keep raw missing-file
+	input working, and descend into selected directories.
+	* tests/pty_completion.rs, tests/support/keys.rs: Cover file completion in a
+	real PTY.
+	* README.md, docs/development.md, NEWS: Document file-name completion.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/emacs: Add optional GNU Emacs reference tooling with core
 	and modern Vertico/Marginalia profiles.
 	* tools/reference/emacs/scenarios: Add baseline, command completion, file

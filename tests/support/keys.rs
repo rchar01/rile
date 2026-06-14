@@ -9,6 +9,7 @@ pub const LEFT: &[u8] = b"\x1b[D";
 pub const PAGE_DOWN: &[u8] = b"\x1b[6~";
 pub const PAGE_UP: &[u8] = b"\x1b[5~";
 pub const RIGHT: &[u8] = b"\x1b[C";
+pub const TAB: &[u8] = b"\t";
 pub const UP: &[u8] = b"\x1b[A";
 
 pub fn control(letter: char) -> [u8; 1] {

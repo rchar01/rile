@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::path::{Path, PathBuf};
+
 use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, TextRange};
 use crate::buffers::BufferManager;
@@ -229,7 +231,10 @@ impl Editor {
             return self.minibuffer.display_text();
         }
         let prompt = self.minibuffer.prompt()?;
-        if prompt.kind != PromptKind::ExtendedCommand {
+        if !matches!(
+            prompt.kind,
+            PromptKind::ExtendedCommand | PromptKind::FindFile
+        ) {
             return self.minibuffer.display_text();
         }
         let candidates = if completion.has_matches() {
@@ -455,9 +460,7 @@ impl Editor {
         if self.minibuffer.prompt_kind() == Some(PromptKind::IncrementalSearch) {
             return self.handle_search_prompt_key(key);
         }
-        if self.minibuffer.prompt_kind() == Some(PromptKind::ExtendedCommand)
-            && self.completion.is_some()
-        {
+        if self.completion.is_some() {
             return self.handle_completion_prompt_key(key);
         }
 
@@ -498,6 +501,18 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
+                if self.completion_should_enter_selected_directory(&input) {
+                    self.minibuffer.start_prompt(kind, prompt_label(kind));
+                    let directory = self
+                        .completion
+                        .as_ref()
+                        .and_then(CompletionSession::selected)
+                        .map(|candidate| candidate.value.clone())
+                        .unwrap_or(input);
+                    self.minibuffer.set_prompt_input(directory);
+                    self.update_completion_from_prompt();
+                    return Ok(EditorOutcome::Continue);
+                }
                 let input = self.completion_accept_input(&input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
@@ -547,14 +562,57 @@ impl Editor {
         if trimmed.is_empty() {
             return input.to_owned();
         }
-        if self.commands.contains(trimmed) {
-            return trimmed.to_owned();
+        match self.completion.as_ref().map(CompletionSession::source) {
+            Some(CompletionSource::Commands) if self.commands.contains(trimmed) => {
+                return trimmed.to_owned();
+            }
+            Some(CompletionSource::Files) => return self.file_completion_accept_input(input),
+            Some(_) => {}
+            None => {}
         }
         self.completion
             .as_ref()
             .and_then(CompletionSession::selected)
             .map(|candidate| candidate.value.clone())
             .unwrap_or_else(|| input.to_owned())
+    }
+
+    fn file_completion_accept_input(&self, input: &str) -> String {
+        let trimmed = input.trim();
+        if self.find_file_input_is_exact_file(trimmed) {
+            return trimmed.to_owned();
+        }
+        let Some(completion) = self.completion.as_ref() else {
+            return input.to_owned();
+        };
+        if completion.selection_explicit() {
+            return completion
+                .selected()
+                .map(|candidate| candidate.value.clone())
+                .unwrap_or_else(|| input.to_owned());
+        }
+        input.to_owned()
+    }
+
+    fn completion_should_enter_selected_directory(&self, input: &str) -> bool {
+        if input.trim().is_empty() {
+            return false;
+        }
+        let Some(completion) = self
+            .completion
+            .as_ref()
+            .filter(|completion| completion.source() == CompletionSource::Files)
+        else {
+            return false;
+        };
+        let Some(candidate) = completion
+            .selected()
+            .filter(|candidate| candidate.is_directory())
+        else {
+            return false;
+        };
+        completion.selection_explicit()
+            || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/')
     }
 
     fn complete_prompt_common_prefix(&mut self) {
@@ -591,9 +649,6 @@ impl Editor {
             return;
         };
         if completion.style() != CompletionStyle::CompletionsBuffer {
-            return;
-        }
-        if completion.source() != CompletionSource::Commands {
             return;
         }
         let text = format_completion_buffer(completion);
@@ -1157,6 +1212,11 @@ impl Editor {
     fn start_find_file(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::FindFile, "Find file: ");
+        self.completion = Some(CompletionSession::files(
+            self.find_file_base_dir(),
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
         Ok(())
     }
 
@@ -1184,9 +1244,10 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         }
 
+        let path = self.resolve_find_file_path(path);
         match self
             .buffers
-            .open_path_with_backup(path, self.backup_on_save)
+            .open_path_with_backup(&path, self.backup_on_save)
         {
             Ok(opened) => {
                 self.current_buffer = opened.id;
@@ -1203,6 +1264,28 @@ impl Editor {
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
         }
         Ok(EditorOutcome::Continue)
+    }
+
+    fn find_file_base_dir(&self) -> PathBuf {
+        self.document()
+            .path()
+            .and_then(Path::parent)
+            .filter(|parent| !parent.as_os_str().is_empty())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+
+    fn resolve_find_file_path(&self, path: &str) -> PathBuf {
+        let path = Path::new(path);
+        if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            self.find_file_base_dir().join(path)
+        }
+    }
+
+    fn find_file_input_is_exact_file(&self, input: &str) -> bool {
+        self.resolve_find_file_path(input).is_file()
     }
 
     fn write_file(&mut self, path: &str) -> Result<EditorOutcome> {
@@ -2134,7 +2217,11 @@ fn search_start_after(buffer: &crate::buffer::Buffer, position: Position) -> Res
 }
 
 fn format_completion_buffer(completion: &CompletionSession) -> String {
-    let mut text = String::from("Possible Completions for M-x:\n\n");
+    let title = match completion.source() {
+        CompletionSource::Commands => "Possible Completions for M-x:",
+        CompletionSource::Files => "Possible Completions for Find file:",
+    };
+    let mut text = format!("{title}\n\n");
     let items = completion.view_items();
     if items.is_empty() {
         text.push_str("No match\n");
@@ -2152,6 +2239,20 @@ fn format_completion_buffer(completion: &CompletionSession) -> String {
         }
     }
     text
+}
+
+fn prompt_label(kind: PromptKind) -> &'static str {
+    match kind {
+        PromptKind::ExtendedCommand => "M-x ",
+        PromptKind::FindFile => "Find file: ",
+        PromptKind::GotoLine => "Goto line: ",
+        PromptKind::IncrementalSearch => "I-search: ",
+        PromptKind::KillBuffer => "Kill buffer: ",
+        PromptKind::QueryReplaceReplacement => "Query replace with: ",
+        PromptKind::QueryReplaceSearch => "Query replace: ",
+        PromptKind::SwitchToBuffer => "Switch to buffer: ",
+        PromptKind::WriteFile => "Write file: ",
+    }
 }
 
 #[cfg(test)]
@@ -2451,6 +2552,248 @@ mod tests {
             .expect("tab should complete common prefix");
 
         assert_eq!(editor.minibuffer().prompt_input(), Some("toggle-"));
+    }
+
+    #[test]
+    fn find_file_completion_extends_common_prefix() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(directory.path().join("alpha-note.txt"), "alpha")
+            .expect("alpha fixture should write");
+        fs::write(directory.path().join("alphabet-note.txt"), "alphabet")
+            .expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alp".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should complete common prefix");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha"));
+    }
+
+    #[test]
+    fn find_file_completion_accepts_selected_sibling_file() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-note.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha-n".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should complete selected file");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open selected file");
+
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(editor.document().path(), Some(alpha.as_path()));
+    }
+
+    #[test]
+    fn find_file_completion_keeps_raw_missing_file_input() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let missing = directory.path().join("new-note.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("new-note.txt".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open raw missing file");
+
+        assert_eq!(editor.document().path(), Some(missing.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn find_file_completion_keeps_raw_ambiguous_missing_file_input() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let missing = directory.path().join("alpha");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(directory.path().join("alpha-note.txt"), "alpha")
+            .expect("alpha fixture should write");
+        fs::create_dir(directory.path().join("alpha-dir")).expect("directory should create");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open raw missing file");
+
+        assert_eq!(editor.document().path(), Some(missing.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn find_file_completion_resolves_relative_paths_from_current_buffer_directory() {
+        let directory = TestDir::new();
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).expect("nested directory should create");
+        let start = nested.join("start.txt");
+        let sibling = nested.join("sibling.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&sibling, "sibling").expect("sibling fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("sibling.txt".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open sibling file");
+
+        assert_eq!(editor.document().path(), Some(sibling.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "sibling");
+    }
+
+    #[test]
+    fn find_file_completion_enters_selected_directory() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::create_dir(directory.path().join("alpha-dir")).expect("directory should create");
+        fs::write(directory.path().join("alpha-dir").join("note.txt"), "note")
+            .expect("nested fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha-dir".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should descend into directory");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-dir/"));
+        assert!(editor.completion().is_some());
+    }
+
+    #[test]
+    fn ido_file_completion_renders_candidates_in_minibuffer() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(directory.path().join("alpha-note.txt"), "alpha")
+            .expect("alpha fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::Ido,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("prompt input should update completion");
+
+        let text = editor
+            .minibuffer_display_text()
+            .expect("ido should render minibuffer text");
+        assert!(text.contains("Find file: alpha"));
+        assert!(text.contains("alpha-note.txt"));
+    }
+
+    #[test]
+    fn completions_buffer_file_completion_uses_file_title() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(directory.path().join("alpha-note.txt"), "alpha")
+            .expect("alpha fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::CompletionsBuffer,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+
+        assert_eq!(editor.current_buffer_name(), "*Completions*");
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("Possible Completions for Find file:")
+        );
     }
 
     #[test]
