@@ -22,6 +22,7 @@ Editing features:
 * Run commands through M-x with command-name completion.
 * Open files through C-x C-f with file-name completion.
 * Switch buffers through C-x b with buffer-name completion.
+* Recall minibuffer prompt history with M-p and M-n.
 
 Interface features:
 
@@ -37,6 +38,8 @@ Interface features:
 * Complete M-x command names, C-x C-f file names, and C-x b buffer names with
   the default vertical candidate list, optional *Completions* buffer fallback,
   or experimental ido-style inline display.
+* Navigate command, file, buffer, write-file, and goto-line prompt history with
+  M-p and M-n.
 
 Search and replacement:
 

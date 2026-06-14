@@ -39,6 +39,7 @@ pub struct Editor {
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
+    prompt_histories: Vec<PromptHistory>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     region: Option<RegionState>,
@@ -73,6 +74,14 @@ struct QueryReplaceState {
     current: Option<TextRange>,
     replacements: usize,
     visited: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PromptHistory {
+    kind: PromptKind,
+    entries: Vec<String>,
+    position: Option<usize>,
+    draft: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -127,6 +136,7 @@ impl Editor {
             completion: None,
             completion_return: None,
             completion_config: config.completion,
+            prompt_histories: Vec::new(),
             search: None,
             query_replace: None,
             region: None,
@@ -469,10 +479,12 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
+                self.record_prompt_history(kind, &input);
                 self.minibuffer.clear();
                 self.submit_prompt(kind, &input)
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                self.reset_current_prompt_history_navigation();
                 if matches!(
                     self.minibuffer.prompt_kind(),
                     Some(PromptKind::QueryReplaceSearch | PromptKind::QueryReplaceReplacement)
@@ -484,10 +496,20 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
                 self.minibuffer.delete_prompt_grapheme_backward();
+                self.reset_current_prompt_history_navigation();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Meta('p') => {
+                self.recall_prompt_history(-1);
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Meta('n') => {
+                self.recall_prompt_history(1);
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
+                self.reset_current_prompt_history_navigation();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => Ok(EditorOutcome::Continue),
@@ -502,6 +524,7 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 };
                 if self.completion_should_enter_selected_directory(&input) {
+                    self.reset_prompt_history_navigation(kind);
                     self.minibuffer.start_prompt(kind, prompt_label(kind));
                     let directory = self
                         .completion
@@ -514,12 +537,14 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 }
                 let input = self.completion_accept_input(&input);
+                self.record_prompt_history(kind, &input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
                 self.completion = None;
                 self.submit_prompt(kind, &input)
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                self.reset_current_prompt_history_navigation();
                 self.minibuffer.cancel_prompt();
                 self.finish_completion_buffer();
                 self.completion = None;
@@ -527,11 +552,23 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
                 self.minibuffer.delete_prompt_grapheme_backward();
+                self.reset_current_prompt_history_navigation();
                 self.update_completion_from_prompt();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.complete_prompt_common_prefix();
+                self.reset_current_prompt_history_navigation();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Meta('p') => {
+                self.recall_prompt_history(-1);
+                self.update_completion_from_prompt();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Meta('n') => {
+                self.recall_prompt_history(1);
+                self.update_completion_from_prompt();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Ctrl('n') | KeyEvent::Special(SpecialKey::ArrowDown) => {
@@ -550,6 +587,7 @@ impl Editor {
             }
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
+                self.reset_current_prompt_history_navigation();
                 self.update_completion_from_prompt();
                 Ok(EditorOutcome::Continue)
             }
@@ -630,6 +668,90 @@ impl Editor {
         };
         completion.selection_explicit()
             || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/')
+    }
+
+    fn record_prompt_history(&mut self, kind: PromptKind, input: &str) {
+        if !prompt_kind_uses_history(kind) || input.trim().is_empty() {
+            self.reset_prompt_history_navigation(kind);
+            return;
+        }
+        let index = self.prompt_history_index(kind);
+        let history = &mut self.prompt_histories[index];
+        if history.entries.last().is_none_or(|entry| entry != input) {
+            history.entries.push(input.to_owned());
+        }
+        history.position = None;
+        history.draft.clear();
+    }
+
+    fn recall_prompt_history(&mut self, direction: isize) {
+        let Some(kind) = self.minibuffer.prompt_kind() else {
+            return;
+        };
+        if !prompt_kind_uses_history(kind) {
+            return;
+        }
+        let current = self
+            .minibuffer
+            .prompt_input()
+            .unwrap_or_default()
+            .to_owned();
+        let index = self.prompt_history_index(kind);
+        let history = &mut self.prompt_histories[index];
+        if history.entries.is_empty() {
+            return;
+        }
+
+        let next_position = match (history.position, direction.signum()) {
+            (None, -1) => {
+                history.draft = current;
+                Some(history.entries.len() - 1)
+            }
+            (Some(position), -1) => Some(position.saturating_sub(1)),
+            (Some(position), 1) if position + 1 < history.entries.len() => Some(position + 1),
+            (Some(_), 1) => None,
+            _ => return,
+        };
+
+        history.position = next_position;
+        let input = next_position
+            .map(|position| history.entries[position].clone())
+            .unwrap_or_else(|| history.draft.clone());
+        self.minibuffer.set_prompt_input(input);
+    }
+
+    fn reset_current_prompt_history_navigation(&mut self) {
+        if let Some(kind) = self.minibuffer.prompt_kind() {
+            self.reset_prompt_history_navigation(kind);
+        }
+    }
+
+    fn reset_prompt_history_navigation(&mut self, kind: PromptKind) {
+        if let Some(history) = self
+            .prompt_histories
+            .iter_mut()
+            .find(|history| history.kind == kind)
+        {
+            history.position = None;
+            history.draft.clear();
+        }
+    }
+
+    fn prompt_history_index(&mut self, kind: PromptKind) -> usize {
+        if let Some(index) = self
+            .prompt_histories
+            .iter()
+            .position(|history| history.kind == kind)
+        {
+            return index;
+        }
+        self.prompt_histories.push(PromptHistory {
+            kind,
+            entries: Vec::new(),
+            position: None,
+            draft: String::new(),
+        });
+        self.prompt_histories.len() - 1
     }
 
     fn complete_prompt_common_prefix(&mut self) {
@@ -2286,6 +2408,18 @@ fn prompt_label(kind: PromptKind) -> &'static str {
     }
 }
 
+fn prompt_kind_uses_history(kind: PromptKind) -> bool {
+    matches!(
+        kind,
+        PromptKind::ExtendedCommand
+            | PromptKind::FindFile
+            | PromptKind::GotoLine
+            | PromptKind::KillBuffer
+            | PromptKind::SwitchToBuffer
+            | PromptKind::WriteFile
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -2298,6 +2432,7 @@ mod tests {
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
+    use crate::minibuffer::PromptKind;
     use crate::render::{DecorationProvider, Face, Span};
     use crate::syntax::{MajorMode, SyntaxMode};
 
@@ -3037,6 +3172,155 @@ mod tests {
                 .serialize()
                 .contains("Possible Completions for Switch to buffer:")
         );
+    }
+
+    #[test]
+    fn prompt_history_recalls_previous_m_x_input() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-line-numbers".to_owned()))
+            .expect("prompt input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should submit command");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt again");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall history");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("toggle-line-numbers")
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('n'))
+            .expect("M-n should return to draft");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
+    }
+
+    #[test]
+    fn prompt_history_preserves_current_draft() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-line-numbers".to_owned()))
+            .expect("prompt input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should submit command");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt again");
+        editor
+            .handle_key(KeyEvent::Text("toggle".to_owned()))
+            .expect("draft input should update");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall history");
+        editor
+            .handle_key(KeyEvent::Meta('n'))
+            .expect("M-n should restore draft");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("toggle"));
+    }
+
+    #[test]
+    fn prompt_history_is_per_prompt_kind() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-line-numbers".to_owned()))
+            .expect("prompt input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should submit command");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should not recall M-x history");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
+    }
+
+    #[test]
+    fn prompt_history_updates_completion_after_recall() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-line-numbers".to_owned()))
+            .expect("prompt input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should submit command");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt again");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall history and update completion");
+
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("toggle-line-numbers")
+        );
+    }
+
+    #[test]
+    fn prompt_history_resets_when_file_completion_enters_directory() {
+        let directory = TestDir::new();
+        let alpha_dir = directory.path().join("alpha-dir");
+        fs::create_dir(&alpha_dir).expect("directory fixture should create");
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor.record_prompt_history(PromptKind::FindFile, "alpha-dir");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall directory history");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should descend into recalled directory");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-dir/"));
+
+        editor
+            .handle_key(KeyEvent::Meta('n'))
+            .expect("M-n should not restore stale draft after descent");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-dir/"));
     }
 
     #[test]

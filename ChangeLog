@@ -1,5 +1,12 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Add per-kind minibuffer prompt history with M-p and M-n for
+	command, file, buffer, write-file, and goto-line prompts.
+	* tests/pty_completion.rs: Cover M-x prompt history in a real PTY.
+	* README.md, docs/development.md, NEWS: Document prompt history.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/emacs/scenarios/prompt-history-modern.scenario: Add Emacs
 	modern minibuffer history capture scenario.
 	* tools/reference/zile/scenarios/prompt-history.scenario: Add Zile

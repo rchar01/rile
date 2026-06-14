@@ -68,6 +68,8 @@ Basic editor keys:
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
   through candidates, Tab completes a common prefix, and Enter accepts the
   selected candidate.
+- `M-p` and `M-n` move through history in command, file, buffer, write-file,
+  and goto-line minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.

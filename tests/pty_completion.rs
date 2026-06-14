@@ -192,3 +192,27 @@ fn vertical_buffer_completion_preserves_space_sensitive_exact_name() -> Result<(
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn vertical_mx_prompt_history_recalls_previous_command() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("toggle-line-numbers", b"toggle-line-numbers")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("Line numbers enabled")?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("M-p", keys::meta('p'))?;
+
+    rile.assert_screen_contains("M-x toggle-line-numbers")?;
+
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("M-x")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
