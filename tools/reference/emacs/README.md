@@ -42,6 +42,7 @@ Initial inspection scenarios:
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.
+- `prompt-history-modern`: Vertico/Marginalia minibuffer history behavior.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

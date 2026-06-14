@@ -33,6 +33,7 @@ Baseline inspection scenarios:
 - `m-x-completion`: command prompt completion after Tab.
 - `find-file-completion`: file prompt completion after Tab.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
+- `prompt-history`: minibuffer history with `M-p` and `M-n`.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

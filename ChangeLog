@@ -1,5 +1,16 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/emacs/scenarios/prompt-history-modern.scenario: Add Emacs
+	modern minibuffer history capture scenario.
+	* tools/reference/zile/scenarios/prompt-history.scenario: Add Zile
+	minibuffer history capture scenario.
+	* tools/reference/kg/scenarios/prompt-history.scenario: Add kg minibuffer
+	history capture scenario.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md: List prompt-history scenarios.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs: Add buffer-name completion candidates.
 	* src/editor.rs: Enable completion in switch-buffer prompts and preserve exact
 	buffer-name input.

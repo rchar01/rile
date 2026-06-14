@@ -36,6 +36,7 @@ Initial inspection scenarios:
 - `m-x-completion`: command prompt completion after Tab.
 - `find-file-completion`: file prompt completion after Tab.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
+- `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `incremental-search`: `C-s` search prompt, repeat, and accept flow.
 - `query-replace`: `M-%` prompts and choice-key workflow.
 - `split-windows`: split layout and window switching behavior.

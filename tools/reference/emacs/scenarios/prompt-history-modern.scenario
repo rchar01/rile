@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=prompt-history-modern
+SCENARIO_DESCRIPTION='Observe Vertico/Marginalia minibuffer prompt history behavior.'
+EMACS_PROFILE=modern
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=prompt-history-modern.txt
+FIXTURE_CONTENT=$'prompt history fixture\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /prompt history fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-m-x-prompt.png
+Sleep 500ms
+Type "end-of-line"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-command-typed.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-command.png
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-second-m-x-prompt.png
+Sleep 500ms
+Escape
+Type "p"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-m-p.png
+Sleep 500ms
+Escape
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-m-n.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-cancel.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
