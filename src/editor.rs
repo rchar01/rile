@@ -9,7 +9,7 @@ use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
 use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
 use crate::config::{Config, ThemeName};
-use crate::file::Document;
+use crate::file::{Document, DocumentKind};
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
@@ -903,6 +903,7 @@ impl Editor {
             SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
             SplitWindowRight => self.split_window(SplitAxis::Vertical),
             ToggleLineNumbers => self.toggle_line_numbers(),
+            ToggleReadOnly => self.toggle_read_only(),
             ToggleSearchHighlighting => self.toggle_search_highlighting(),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
@@ -2007,6 +2008,22 @@ impl Editor {
         };
         self.minibuffer
             .set_message(format!("Line numbers {status}"));
+        Ok(())
+    }
+
+    fn toggle_read_only(&mut self) -> Result<()> {
+        if self.document().kind() != DocumentKind::Normal {
+            let name = self.current_buffer_name().to_owned();
+            self.minibuffer
+                .set_message(format!("Buffer is read-only: {name}"));
+            return Ok(());
+        }
+
+        let read_only = !self.document().is_read_only();
+        self.document_mut().set_read_only(read_only);
+        let status = if read_only { "read-only" } else { "writable" };
+        self.minibuffer
+            .set_message(format!("Buffer is now {status}"));
         Ok(())
     }
 
@@ -4063,6 +4080,78 @@ M-g g           goto-line\n"
             .expect("read-only open should reuse buffer");
 
         assert!(editor.document().is_read_only());
+    }
+
+    #[test]
+    fn toggle_read_only_flips_normal_buffer_editability() {
+        let directory = TestDir::new();
+        let path = directory.path().join("toggle.txt");
+        fs::write(&path, "toggle").expect("file should be written");
+        let document = Document::open(&path).expect("file should open");
+        let mut editor = Editor::new(document);
+
+        assert!(!editor.document().is_read_only());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("toggle-read-only should run");
+
+        assert!(editor.document().is_read_only());
+        assert!(editor.document().mode_line().contains(" RO]"));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is now read-only")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("read-only edit should not error");
+        assert_eq!(editor.document().buffer().serialize(), "toggle");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("toggle-read-only should run again");
+
+        assert!(!editor.document().is_read_only());
+        assert!(!editor.document().mode_line().contains(" RO]"));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is now writable")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("writable edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "xtoggle");
+    }
+
+    #[test]
+    fn toggle_read_only_does_not_make_special_buffers_writable() {
+        let mut editor = Editor::new(Document::welcome());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("toggle-read-only should not error");
+
+        assert!(editor.document().is_read_only());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *Rile*")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("special buffer edit should not error");
+        assert!(!editor.document().buffer().serialize().starts_with('x'));
     }
 
     #[test]

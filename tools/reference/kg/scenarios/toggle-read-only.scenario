@@ -1,0 +1,43 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=toggle-read-only
+SCENARIO_DESCRIPTION='Observe kg C-x C-q toggle-read-only behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=toggle-read-only.txt
+FIXTURE_CONTENT=$'toggle read-only reference\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /toggle read-only reference/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+Q
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-now-read-only.png
+Sleep 500ms
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-read-only-edit-attempt.png
+Sleep 500ms
+Ctrl+X
+Ctrl+Q
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-now-writable.png
+Sleep 500ms
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-writable-edit.png
+Sleep 500ms
+Ctrl+X
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-save.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

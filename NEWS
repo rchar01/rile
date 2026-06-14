@@ -22,6 +22,7 @@ Editing features:
 * Run commands through M-x with command-name completion.
 * Open files through C-x C-f with file-name completion.
 * Open files read-only through C-x C-r with file-name completion.
+* Toggle normal buffers read-only and writable with C-x C-q.
 * Switch buffers through C-x b with buffer-name completion.
 * Describe key bindings with C-h k and interactive commands with C-h f.
 * Recall minibuffer prompt history with M-p and M-n.

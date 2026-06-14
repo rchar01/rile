@@ -1,5 +1,20 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add toggle-read-only on
+	C-x C-q for normal buffers while preserving structural read-only special
+	buffers.
+	* tests/pty_open.rs: Cover toggling a file read-only and writable in a real
+	PTY.
+	* tools/reference/emacs/scenarios/toggle-read-only-core.scenario,
+	tools/reference/zile/scenarios/toggle-read-only.scenario,
+	tools/reference/kg/scenarios/toggle-read-only.scenario: Add focused
+	toggle-read-only reference scenarios.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	toggle-read-only.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/file.rs, src/buffers.rs: Add explicit read-only state for normal
 	file-backed documents.
 	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add

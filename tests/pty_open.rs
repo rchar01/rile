@@ -61,3 +61,33 @@ fn opens_file_read_only_and_blocks_editing() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn toggles_file_read_only_and_writable() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let target = directory.path().join("toggle.txt");
+    std::fs::write(&target, "toggle target\n")?;
+    let mut rile = RilePty::spawn(&target, 12, 100)?;
+
+    rile.wait_for_screen_contains("toggle target")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("C-q", keys::control('q'))?;
+    rile.assert_screen_contains("Buffer is now read-only")?;
+
+    rile.send("x", b"x")?;
+    rile.assert_screen_contains("Buffer is read-only:")?;
+    if rile.snapshot_text().contains("xtoggle target") {
+        anyhow::bail!("read-only edit modified buffer\n{}", rile.screen_dump());
+    }
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("C-q", keys::control('q'))?;
+    rile.assert_screen_contains("Buffer is now writable")?;
+
+    rile.send("x", b"x")?;
+    rile.assert_screen_contains("xtoggle target")?;
+
+    rile.quit()?;
+    Ok(())
+}

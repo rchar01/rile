@@ -236,15 +236,16 @@ Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
 the shared file-completion source and relative-path resolution from `C-x C-f`.
 Normal file-backed documents now carry an explicit read-only flag. Read-only
 file buffers show `RO` in the normal mode line, block editing through the same
-read-only guard used for special buffers, and reject save/write-file attempts
-until a later toggle-read-only command is added.
+read-only guard used for special buffers, and reject save/write-file attempts.
+`C-x C-q` / `toggle-read-only` toggles that flag for normal buffers; special
+buffers such as `*Rile*`, `*Help*`, and `*Completions*` remain structurally
+read-only.
 
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
-unsaved-changes quit confirmation, no toggle-read-only command, and no redo or
-advanced Emacs undo traversal yet. Search and query replace are exact line-local
-substring matching; they do not wrap around the buffer and do not match across
-line breaks.
+unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal
+yet. Search and query replace are exact line-local substring matching; they do
+not wrap around the buffer and do not match across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

@@ -45,6 +45,7 @@ pub enum Command {
     ScrollPageBackward,
     ScrollPageForward,
     ToggleLineNumbers,
+    ToggleReadOnly,
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
     Undo,
@@ -282,6 +283,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ToggleLineNumbers,
         ),
         CommandSpec::new(
+            "toggle-read-only",
+            "Toggle buffer read-only state",
+            true,
+            ToggleReadOnly,
+        ),
+        CommandSpec::new(
             "toggle-search-highlighting",
             "Toggle search highlighting",
             true,
@@ -337,6 +344,7 @@ mod tests {
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));
         assert!(registry.contains("toggle-line-numbers"));
+        assert!(registry.contains("toggle-read-only"));
         assert!(registry.contains("toggle-search-highlighting"));
         assert!(registry.contains("toggle-syntax-highlighting"));
         assert!(registry.contains("write-file"));
