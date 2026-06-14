@@ -1,5 +1,21 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/file.rs, src/buffers.rs: Add explicit read-only state for normal
+	file-backed documents.
+	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
+	find-file-read-only on C-x C-r with shared file completion.
+	* tests/pty_open.rs: Cover read-only file open, edit blocking, and save
+	failure in a real PTY.
+	* tools/reference/emacs/scenarios/read-only-open-core.scenario,
+	tools/reference/zile/scenarios/read-only-open.scenario,
+	tools/reference/kg/scenarios/read-only-open.scenario: Add read-only open
+	reference scenarios.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	read-only open.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/input.rs, src/terminal/mod.rs: Parse C-h while preserving termios-aware
 	0x08 Backspace and Esc-0x08 Meta-Backspace compatibility.
 	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add

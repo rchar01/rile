@@ -35,6 +35,7 @@ Baseline inspection scenarios:
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `help-describe`: `C-h k` and `C-h f` help behavior.
+- `read-only-open`: `C-x C-r` read-only file open behavior.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

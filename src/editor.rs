@@ -248,6 +248,7 @@ impl Editor {
             PromptKind::DescribeFunction
                 | PromptKind::ExtendedCommand
                 | PromptKind::FindFile
+                | PromptKind::FindFileReadOnly
                 | PromptKind::SwitchToBuffer
         ) {
             return self.minibuffer.display_text();
@@ -845,6 +846,7 @@ impl Editor {
             PromptKind::DescribeFunction => Ok(self.describe_function(input.trim())),
             PromptKind::ExtendedCommand => self.execute_command_by_name(input.trim()),
             PromptKind::FindFile => self.find_file(input.trim()),
+            PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input.trim()),
@@ -876,6 +878,7 @@ impl Editor {
             ExchangePointAndMark => self.exchange_point_and_mark(),
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
+            FindFileReadOnly => self.start_find_file_read_only(),
             ForwardChar => self.move_forward(),
             ForwardWord => self.move_word_forward(),
             GotoLine => self.start_goto_line(),
@@ -1430,6 +1433,17 @@ impl Editor {
         Ok(())
     }
 
+    fn start_find_file_read_only(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::FindFileReadOnly, "Find file read-only: ");
+        self.completion = Some(CompletionSession::files(
+            self.find_file_base_dir(),
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
+        Ok(())
+    }
+
     fn start_goto_line(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::GotoLine, "Goto line: ");
@@ -1462,16 +1476,27 @@ impl Editor {
     }
 
     fn find_file(&mut self, path: &str) -> Result<EditorOutcome> {
+        self.open_file_path(path, false)
+    }
+
+    fn find_file_read_only(&mut self, path: &str) -> Result<EditorOutcome> {
+        self.open_file_path(path, true)
+    }
+
+    fn open_file_path(&mut self, path: &str, read_only: bool) -> Result<EditorOutcome> {
         if path.is_empty() {
             self.minibuffer.set_error("missing file name");
             return Ok(EditorOutcome::Continue);
         }
 
         let path = self.resolve_find_file_path(path);
-        match self
-            .buffers
-            .open_path_with_backup(&path, self.backup_on_save)
-        {
+        let result = if read_only {
+            self.buffers.open_path_read_only(&path, self.backup_on_save)
+        } else {
+            self.buffers
+                .open_path_with_backup(&path, self.backup_on_save)
+        };
+        match result {
             Ok(opened) => {
                 self.current_buffer = opened.id;
                 self.cursor = Position::new(0, 0);
@@ -1481,8 +1506,9 @@ impl Editor {
                 self.deactivate_region();
                 self.clear_insert_group();
                 self.sync_current_window();
+                let mode = if read_only { " read-only" } else { "" };
                 self.minibuffer
-                    .set_message(format!("Opened {}", self.document().display_name()));
+                    .set_message(format!("Opened{mode} {}", self.document().display_name()));
             }
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
         }
@@ -2516,6 +2542,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::DescribeFunction => "Describe command: ",
         PromptKind::ExtendedCommand => "M-x ",
         PromptKind::FindFile => "Find file: ",
+        PromptKind::FindFileReadOnly => "Find file read-only: ",
         PromptKind::GotoLine => "Goto line: ",
         PromptKind::IncrementalSearch => "I-search: ",
         PromptKind::KillBuffer => "Kill buffer: ",
@@ -2532,6 +2559,7 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
         PromptKind::ExtendedCommand
             | PromptKind::DescribeFunction
             | PromptKind::FindFile
+            | PromptKind::FindFileReadOnly
             | PromptKind::GotoLine
             | PromptKind::KillBuffer
             | PromptKind::SwitchToBuffer
@@ -3961,6 +3989,80 @@ M-g g           goto-line\n"
                 .as_deref()
                 .is_some_and(|message| message.starts_with("Opened "))
         );
+    }
+
+    #[test]
+    fn find_file_read_only_prompt_opens_read_only_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("readonly.txt");
+        fs::write(&path, "locked").expect("file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("read-only find-file should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Find file read-only: ")
+        );
+        for character in path.to_string_lossy().chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("file prompt should update");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("file prompt should open file read-only");
+
+        assert_eq!(editor.document().buffer().serialize(), "locked");
+        assert!(editor.document().is_read_only());
+        assert!(editor.document().mode_line().contains("[noeol RO]"));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some(format!("Opened read-only {}", editor.document().display_name()).as_str())
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("read-only edit should not error");
+        assert_eq!(editor.document().buffer().serialize(), "locked");
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("Buffer is read-only:"))
+        );
+
+        let written = directory.path().join("written.txt");
+        editor
+            .write_file(written.to_str().expect("path should be utf-8"))
+            .expect("write-file should report read-only error");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: save failed: invalid input: buffer is read-only")
+        );
+        assert!(!written.exists());
+    }
+
+    #[test]
+    fn find_file_read_only_marks_existing_buffer_read_only() {
+        let directory = TestDir::new();
+        let path = directory.path().join("shared.txt");
+        fs::write(&path, "shared").expect("file should be written");
+        let document = Document::open(&path).expect("file should open");
+        let mut editor = Editor::new(document);
+
+        assert!(!editor.document().is_read_only());
+
+        editor
+            .find_file_read_only(path.to_str().expect("path should be utf-8"))
+            .expect("read-only open should reuse buffer");
+
+        assert!(editor.document().is_read_only());
     }
 
     #[test]

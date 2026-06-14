@@ -14,6 +14,7 @@ pub enum PromptKind {
     DescribeFunction,
     ExtendedCommand,
     FindFile,
+    FindFileReadOnly,
     GotoLine,
     IncrementalSearch,
     KillBuffer,

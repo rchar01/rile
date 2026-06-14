@@ -25,6 +25,7 @@ pub struct Document {
     path: Option<PathBuf>,
     name: Option<String>,
     kind: DocumentKind,
+    read_only: bool,
     missing_on_open: bool,
     backup_on_save: bool,
 }
@@ -36,6 +37,7 @@ impl Document {
             path: None,
             name: None,
             kind: DocumentKind::Normal,
+            read_only: false,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -52,6 +54,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Rile*".to_owned()),
             kind: DocumentKind::Welcome,
+            read_only: false,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -63,6 +66,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Help*".to_owned()),
             kind: DocumentKind::Help,
+            read_only: false,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -74,6 +78,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Completions*".to_owned()),
             kind: DocumentKind::Completions,
+            read_only: false,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -102,6 +107,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                     path: Some(path),
                     name: None,
                     kind: DocumentKind::Normal,
+                    read_only: false,
                     missing_on_open: false,
                     backup_on_save: false,
                 })
@@ -111,6 +117,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                 path: Some(path),
                 name: None,
                 kind: DocumentKind::Normal,
+                read_only: false,
                 missing_on_open: true,
                 backup_on_save: false,
             }),
@@ -144,7 +151,11 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     pub fn is_read_only(&self) -> bool {
-        self.kind != DocumentKind::Normal
+        self.kind != DocumentKind::Normal || self.read_only
+    }
+
+    pub fn set_read_only(&mut self, read_only: bool) {
+        self.read_only = read_only;
     }
 
     pub fn is_help(&self) -> bool {
@@ -203,7 +214,11 @@ Rile is free software under GPL-3.0-or-later.\n",
             "noeol"
         };
         let missing = if self.missing_on_open { " new" } else { "" };
-        format!("{dirty} {} [{newline}{missing}]", self.display_name())
+        let read_only = if self.read_only { " RO" } else { "" };
+        format!(
+            "{dirty} {} [{newline}{missing}{read_only}]",
+            self.display_name()
+        )
     }
 
     fn write_to_path(&mut self, path: &Path) -> Result<()> {
@@ -335,6 +350,23 @@ mod tests {
         assert!(document.buffer().final_newline());
         assert!(!document.is_dirty());
         assert!(!document.missing_on_open());
+    }
+
+    #[test]
+    fn normal_document_can_be_marked_read_only() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        fs::write(&path, "hello\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+
+        document.set_read_only(true);
+
+        assert!(document.is_read_only());
+        assert!(document.mode_line().contains("[LF RO]"));
+        let error = document
+            .save()
+            .expect_err("read-only normal buffer should not save");
+        assert!(error.to_string().contains("read-only"));
     }
 
     #[test]

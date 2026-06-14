@@ -51,6 +51,7 @@ Basic editor keys:
 - `C-x C-s` saves the current file.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
 - `C-x C-f` prompts for a file path with completion and opens it.
+- `C-x C-r` prompts for a file path with completion and opens it read-only.
 - `C-x b` prompts for a buffer name and switches to it.
 - `C-x k` prompts for a buffer name and kills it; empty input kills the current buffer.
 - `C-x 2` splits the current window below.
@@ -98,7 +99,7 @@ completion_matching = "prefix" # or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
-`C-x C-f` file names, and `C-x b` buffer names.
+`C-x C-f` and `C-x C-r` file names, and `C-x b` buffer names.
 
 ## License
 

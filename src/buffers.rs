@@ -94,12 +94,32 @@ impl BufferManager {
         path: impl AsRef<Path>,
         backup_on_save: bool,
     ) -> Result<OpenBufferResult> {
+        self.open_path_with_options(path, backup_on_save, false)
+    }
+
+    pub fn open_path_read_only(
+        &mut self,
+        path: impl AsRef<Path>,
+        backup_on_save: bool,
+    ) -> Result<OpenBufferResult> {
+        self.open_path_with_options(path, backup_on_save, true)
+    }
+
+    fn open_path_with_options(
+        &mut self,
+        path: impl AsRef<Path>,
+        backup_on_save: bool,
+        read_only: bool,
+    ) -> Result<OpenBufferResult> {
         let path = path.as_ref();
         if let Some(entry) = self
             .entries
-            .iter()
+            .iter_mut()
             .find(|entry| entry.document.path() == Some(path))
         {
+            if read_only {
+                entry.document.set_read_only(true);
+            }
             return Ok(OpenBufferResult {
                 id: entry.id,
                 created: false,
@@ -108,6 +128,7 @@ impl BufferManager {
 
         let mut document = Document::open(path)?;
         document.set_backup_on_save(backup_on_save);
+        document.set_read_only(read_only);
         let id = self.push(document);
         Ok(OpenBufferResult { id, created: true })
     }

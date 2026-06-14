@@ -44,6 +44,7 @@ Initial inspection scenarios:
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.
 - `prompt-history-modern`: Vertico/Marginalia minibuffer history behavior.
 - `help-describe-core`: base Emacs `C-h k` and `C-h f` help behavior.
+- `read-only-open-core`: base Emacs `C-x C-r` read-only file open behavior.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

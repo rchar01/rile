@@ -20,6 +20,7 @@ pub enum Command {
     ExchangePointAndMark,
     ExecuteExtendedCommand,
     FindFile,
+    FindFileReadOnly,
     ForwardChar,
     ForwardWord,
     GotoLine,
@@ -190,6 +191,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ExecuteExtendedCommand,
         ),
         CommandSpec::new("find-file", "Open file by path", true, FindFile),
+        CommandSpec::new(
+            "find-file-read-only",
+            "Open file read-only by path",
+            true,
+            FindFileReadOnly,
+        ),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar),
         CommandSpec::new(
             "forward-word",
@@ -311,6 +318,7 @@ mod tests {
         assert!(registry.contains("exchange-point-and-mark"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
+        assert!(registry.contains("find-file-read-only"));
         assert!(registry.contains("forward-word"));
         assert!(registry.contains("goto-line"));
         assert!(registry.contains("isearch-forward"));

@@ -171,6 +171,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "switch-to-buffer",
         ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], "find-file"),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')],
+            "find-file-read-only",
+        ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], "write-file"),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')],
@@ -326,6 +330,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')]),
             KeyResolution::Command("find-file")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),
+            KeyResolution::Command("find-file-read-only")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')]),

@@ -232,9 +232,16 @@ current key bindings. Terminal input parsing uses the original termios erase
 byte, so `0x08` remains Backspace on `stty erase ^H` terminals and otherwise
 works as `C-h`; `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
 
+Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
+the shared file-completion source and relative-path resolution from `C-x C-f`.
+Normal file-backed documents now carry an explicit read-only flag. Read-only
+file buffers show `RO` in the normal mode line, block editing through the same
+read-only guard used for special buffers, and reject save/write-file attempts
+until a later toggle-read-only command is added.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
-unsaved-changes quit confirmation, no read-only file-open mode, and no redo or
+unsaved-changes quit confirmation, no toggle-read-only command, and no redo or
 advanced Emacs undo traversal yet. Search and query replace are exact line-local
 substring matching; they do not wrap around the buffer and do not match across
 line breaks.

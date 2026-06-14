@@ -41,6 +41,7 @@ Initial inspection scenarios:
 - `query-replace`: `M-%` prompts and choice-key workflow.
 - `split-windows`: split layout and window switching behavior.
 - `help-general`: general `C-h` help screen behavior.
+- `read-only-open`: `C-x C-r` read-only file open behavior.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.
