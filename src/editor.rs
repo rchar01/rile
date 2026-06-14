@@ -871,6 +871,7 @@ impl Editor {
         use Command::*;
 
         match command {
+            BackToIndentation => self.move_back_to_indentation(),
             BackwardChar => self.move_backward(),
             BackwardKillWord => self.backward_kill_word(),
             BackwardWord => self.move_word_backward(),
@@ -1073,6 +1074,24 @@ impl Editor {
             )));
         };
         self.cursor = Position::new(self.cursor.line, line.len());
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_back_to_indentation(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(line) = self.document().buffer().line(self.cursor.line) else {
+            return Err(RileError::InvalidPosition(format!(
+                "line {} is outside buffer",
+                self.cursor.line
+            )));
+        };
+        let target = line
+            .char_indices()
+            .find_map(|(byte, character)| (!character.is_whitespace()).then_some(byte))
+            .unwrap_or(line.len());
+        self.cursor = Position::new(self.cursor.line, target);
         self.goal_display_column = None;
         self.sync_current_window();
         Ok(())
@@ -2765,6 +2784,40 @@ mod tests {
             .handle_key(KeyEvent::Meta('b'))
             .expect("M-b should move backward by previous word");
         assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn moves_back_to_indentation() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "    alpha\n  beta\n    \n\tomega")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor.cursor = Position::new(0, "    alpha".len());
+        editor
+            .handle_key(KeyEvent::Meta('m'))
+            .expect("M-m should move to first non-whitespace character");
+        assert_eq!(editor.cursor(), Position::new(0, 4));
+
+        editor.cursor = Position::new(1, "  beta".len());
+        editor
+            .execute_command_by_name("back-to-indentation")
+            .expect("back-to-indentation should execute by name");
+        assert_eq!(editor.cursor(), Position::new(1, 2));
+
+        editor.cursor = Position::new(2, 0);
+        editor
+            .handle_key(KeyEvent::Meta('m'))
+            .expect("M-m should move to end of all-whitespace line");
+        assert_eq!(editor.cursor(), Position::new(2, 4));
+
+        editor.cursor = Position::new(3, "\tomega".len());
+        editor
+            .handle_key(KeyEvent::Meta('m'))
+            .expect("M-m should treat tabs as indentation");
+        assert_eq!(editor.cursor(), Position::new(3, 1));
     }
 
     #[test]

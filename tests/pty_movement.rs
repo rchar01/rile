@@ -101,6 +101,34 @@ fn movement_commands_cover_backward_arrows_and_words() -> Result<()> {
 }
 
 #[test]
+fn back_to_indentation_moves_to_first_non_whitespace() -> Result<()> {
+    let file = fixtures::named_temp_file("    alpha\n  beta\n    \nplain\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.assert_status_contains("Ln 001 Col 009")?;
+    rile.send("M-m", keys::meta('m'))?;
+    rile.assert_cursor(0, 4)?;
+    rile.assert_status_contains("Ln 001 Col 004")?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("M-m", keys::meta('m'))?;
+    rile.assert_cursor(1, 2)?;
+    rile.assert_status_contains("Ln 002 Col 002")?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("M-m", keys::meta('m'))?;
+    rile.assert_cursor(2, 4)?;
+    rile.assert_status_contains("Ln 003 Col 004")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn goto_line_prompt_moves_to_line_and_column() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\nline 003\nline 004\nline 005 abc\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

@@ -1,5 +1,19 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add back-to-indentation on
+	M-m, moving to the first non-whitespace character or line end on whitespace-only
+	lines.
+	* tests/pty_movement.rs: Cover back-to-indentation in a real PTY.
+	* tools/reference/emacs/scenarios/back-to-indentation-core.scenario,
+	tools/reference/zile/scenarios/back-to-indentation.scenario,
+	tools/reference/kg/scenarios/back-to-indentation.scenario: Add focused
+	back-to-indentation reference scenarios.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	back-to-indentation.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Add incremental-search wrap state so repeating after a
 	boundary failure wraps to the first or last match with a wrapped prompt.
 	* tests/pty_search.rs: Cover visible search-wrap prompts in a real PTY.

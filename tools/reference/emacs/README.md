@@ -38,6 +38,7 @@ Outputs are written under `artifacts/reference/emacs/`, which is ignored by Git.
 Initial inspection scenarios:
 
 - `baseline-ui-core`: base `emacs -Q -nw` screen layout.
+- `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.

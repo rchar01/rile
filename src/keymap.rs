@@ -96,6 +96,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Meta('b')], "backward-word"),
         KeyBinding::new([KeyEvent::Meta('f')], "forward-word"),
         KeyBinding::new([KeyEvent::Meta('d')], "kill-word"),
+        KeyBinding::new([KeyEvent::Meta('m')], "back-to-indentation"),
         KeyBinding::new(
             [KeyEvent::MetaSpecial(SpecialKey::Backspace)],
             "backward-kill-word",
@@ -228,6 +229,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('d')]),
             KeyResolution::Command("kill-word")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('m')]),
+            KeyResolution::Command("back-to-indentation")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::MetaSpecial(SpecialKey::Backspace)]),

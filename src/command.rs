@@ -3,6 +3,7 @@
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
+    BackToIndentation,
     BackwardChar,
     BackwardKillWord,
     BackwardWord,
@@ -116,6 +117,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
     use Command::*;
 
     vec![
+        CommandSpec::new(
+            "back-to-indentation",
+            "Move cursor to first non-whitespace character on line",
+            true,
+            BackToIndentation,
+        ),
         CommandSpec::new("backward-char", "Move cursor left", true, BackwardChar),
         CommandSpec::new(
             "backward-kill-word",
@@ -325,6 +332,7 @@ mod tests {
             registry.get("save-buffer").map(|spec| spec.command),
             Some(Command::SaveBuffer)
         );
+        assert!(registry.contains("back-to-indentation"));
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));
         assert!(registry.contains("backward-word"));

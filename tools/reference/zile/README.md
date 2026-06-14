@@ -28,6 +28,7 @@ Outputs are written under `artifacts/reference/zile/`, which is ignored by Git.
 Baseline inspection scenarios:
 
 - `baseline-ui`: basic screen layout and mode line.
+- `back-to-indentation`: `M-m` back-to-indentation behavior.
 - `long-line`: horizontal clipping behavior.
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.
