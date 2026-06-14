@@ -88,20 +88,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         let path = path.as_ref().to_path_buf();
         match fs::read(&path) {
             Ok(bytes) => {
-                if bytes.contains(&0) {
-                    return Err(RileError::InvalidInput(format!(
-                        "{} appears to be a binary file and was not opened",
-                        path.display()
-                    )));
-                }
-
-                let text = String::from_utf8(bytes).map_err(|error| {
-                    RileError::InvalidInput(format!(
-                        "{} is not valid UTF-8: {}",
-                        path.display(),
-                        error.utf8_error()
-                    ))
-                })?;
+                let text = decode_text_file_bytes(&path, bytes)?;
                 Ok(Self {
                     buffer: Buffer::from_text(&text),
                     path: Some(path),
@@ -230,6 +217,28 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.missing_on_open = false;
         Ok(())
     }
+}
+
+pub fn read_text_file(path: impl AsRef<Path>) -> Result<String> {
+    let path = path.as_ref();
+    decode_text_file_bytes(path, fs::read(path)?)
+}
+
+fn decode_text_file_bytes(path: &Path, bytes: Vec<u8>) -> Result<String> {
+    if bytes.contains(&0) {
+        return Err(RileError::InvalidInput(format!(
+            "{} appears to be a binary file",
+            path.display()
+        )));
+    }
+
+    String::from_utf8(bytes).map_err(|error| {
+        RileError::InvalidInput(format!(
+            "{} is not valid UTF-8: {}",
+            path.display(),
+            error.utf8_error()
+        ))
+    })
 }
 
 pub fn safe_write(path: &Path, bytes: &[u8]) -> Result<()> {

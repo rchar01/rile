@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=insert-file-core
+SCENARIO_DESCRIPTION='Observe base Emacs C-x i insert-file behavior, including empty input.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=insert-file-core.txt
+FIXTURE_CONTENT=$'before\nafter\n'
+
+setup_reference_files() {
+  local capture_dir=$1
+  printf '%s\n' 'inserted reference line' > "$capture_dir/insert-source.txt"
+}
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /before/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Type "i"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-insert-file-prompt.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-empty-input.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Type "i"
+Sleep 500ms
+Type "insert-source.txt"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-insert.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

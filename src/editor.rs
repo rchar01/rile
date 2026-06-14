@@ -249,6 +249,7 @@ impl Editor {
                 | PromptKind::ExtendedCommand
                 | PromptKind::FindFile
                 | PromptKind::FindFileReadOnly
+                | PromptKind::InsertFile
                 | PromptKind::SwitchToBuffer
         ) {
             return self.minibuffer.display_text();
@@ -848,6 +849,7 @@ impl Editor {
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
+            PromptKind::InsertFile => self.insert_file(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input.trim()),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
@@ -884,6 +886,7 @@ impl Editor {
             GotoLine => self.start_goto_line(),
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
+            InsertFile => self.start_insert_file(),
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
             KillWord => self.kill_word(),
@@ -1445,6 +1448,20 @@ impl Editor {
         Ok(())
     }
 
+    fn start_insert_file(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.minibuffer
+            .start_prompt(PromptKind::InsertFile, "Insert file: ");
+        self.completion = Some(CompletionSession::files(
+            self.find_file_base_dir(),
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
+        Ok(())
+    }
+
     fn start_goto_line(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::GotoLine, "Goto line: ");
@@ -1549,6 +1566,35 @@ impl Editor {
                 .minibuffer
                 .set_message(format!("Wrote {}", self.document().display_name())),
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn insert_file(&mut self, path: &str) -> Result<EditorOutcome> {
+        if path.is_empty() {
+            self.minibuffer.set_error("missing file name");
+            return Ok(EditorOutcome::Continue);
+        }
+        if !self.ensure_buffer_editable() {
+            return Ok(EditorOutcome::Continue);
+        }
+
+        let path = self.resolve_find_file_path(path);
+        match crate::file::read_text_file(&path) {
+            Ok(text) => {
+                let cursor_before = self.cursor;
+                self.cursor = self
+                    .document_mut()
+                    .buffer_mut()
+                    .insert(cursor_before, &text)?;
+                self.record_insert(cursor_before, self.cursor, &text, false);
+                self.goal_display_column = None;
+                self.deactivate_region();
+                self.sync_current_window();
+                self.minibuffer
+                    .set_message(format!("Inserted {}", path.display()));
+            }
+            Err(error) => self.minibuffer.set_error(format!("insert failed: {error}")),
         }
         Ok(EditorOutcome::Continue)
     }
@@ -2561,6 +2607,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::FindFile => "Find file: ",
         PromptKind::FindFileReadOnly => "Find file read-only: ",
         PromptKind::GotoLine => "Goto line: ",
+        PromptKind::InsertFile => "Insert file: ",
         PromptKind::IncrementalSearch => "I-search: ",
         PromptKind::KillBuffer => "Kill buffer: ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
@@ -2578,6 +2625,7 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::FindFile
             | PromptKind::FindFileReadOnly
             | PromptKind::GotoLine
+            | PromptKind::InsertFile
             | PromptKind::KillBuffer
             | PromptKind::SwitchToBuffer
             | PromptKind::WriteFile
@@ -4246,6 +4294,138 @@ M-g g           goto-line\n"
             Some("Error: missing file name")
         );
         assert_eq!(editor.document().path(), None);
+    }
+
+    #[test]
+    fn insert_file_prompt_inserts_text_at_point_and_undo_removes_it() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let source = directory.path().join("source.txt");
+        fs::write(&start, "before\nafter\n").expect("start file should be written");
+        fs::write(&source, "inserted\n").expect("source file should be written");
+        let document = Document::open(&start).expect("start file should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move to second line");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("i".to_owned()))
+            .expect("insert-file should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Insert file: ")
+        );
+        submit_prompt_text(&mut editor, source.to_str().expect("path should be utf-8"));
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "before\ninserted\nafter\n"
+        );
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.starts_with("Inserted "))
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted file contents");
+        assert_eq!(editor.document().buffer().serialize(), "before\nafter\n");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn insert_file_prompt_reports_empty_input() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("insert-file")
+            .expect("insert-file should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty input should be reported");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: missing file name")
+        );
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn insert_file_rejects_binary_input_without_modifying_buffer() {
+        let directory = TestDir::new();
+        let source = directory.path().join("binary.bin");
+        fs::write(&source, b"text\0binary").expect("binary file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("safe".to_owned()))
+            .expect("text should insert");
+        editor
+            .insert_file(source.to_str().expect("path should be utf-8"))
+            .expect("binary input should be reported");
+
+        assert_eq!(editor.document().buffer().serialize(), "safe");
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("appears to be a binary file"))
+        );
+    }
+
+    #[test]
+    fn insert_file_rejects_invalid_utf8_without_modifying_buffer() {
+        let directory = TestDir::new();
+        let source = directory.path().join("invalid.txt");
+        fs::write(&source, [0xff, b'a']).expect("invalid file should be written");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("safe".to_owned()))
+            .expect("text should insert");
+        editor
+            .insert_file(source.to_str().expect("path should be utf-8"))
+            .expect("invalid utf-8 should be reported");
+
+        assert_eq!(editor.document().buffer().serialize(), "safe");
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("not valid UTF-8"))
+        );
+    }
+
+    #[test]
+    fn insert_file_does_not_prompt_in_read_only_buffer() {
+        let mut document = Document::scratch();
+        document.set_read_only(true);
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("i".to_owned()))
+            .expect("insert-file should be blocked");
+
+        assert!(editor.minibuffer().prompt().is_none());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
     }
 
     #[test]

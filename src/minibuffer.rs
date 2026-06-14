@@ -16,6 +16,7 @@ pub enum PromptKind {
     FindFile,
     FindFileReadOnly,
     GotoLine,
+    InsertFile,
     IncrementalSearch,
     KillBuffer,
     QueryReplaceReplacement,

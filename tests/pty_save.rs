@@ -61,3 +61,33 @@ fn write_file_saves_as_new_path_and_clears_dirty_state() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn insert_file_inserts_contents_at_point() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let source = directory.path().join("source.txt");
+    std::fs::write(&start, "before\nafter\n")?;
+    std::fs::write(&source, "inserted line\n")?;
+    let mut rile = RilePty::spawn(&start, 12, 100)?;
+
+    rile.wait_for_screen_contains("before")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("i", b"i")?;
+    rile.assert_screen_contains("Insert file:")?;
+    rile.send("source file", b"source.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("inserted line")?;
+    rile.assert_screen_contains("Inserted")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-_", b"\x1f")?;
+    if rile.snapshot_text().contains("inserted line") {
+        anyhow::bail!("undo did not remove inserted file\n{}", rile.screen_dump());
+    }
+
+    rile.quit()?;
+    Ok(())
+}

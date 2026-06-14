@@ -241,6 +241,14 @@ read-only guard used for special buffers, and reject save/write-file attempts.
 buffers such as `*Rile*`, `*Help*`, and `*Completions*` remain structurally
 read-only.
 
+Post-Milestone 14 file polish also adds `C-x i` / `insert-file`, prompting
+with `Insert file: ` and using the shared file-completion and relative-path
+resolution path. Inserted files use the same UTF-8 and binary-file validation
+as file opening, insert at point, mark the current buffer dirty, and record an
+undo entry. Empty input reports `Error: missing file name` to match Rile's
+existing file prompts, even though base Emacs defaults empty `insert-file` input
+to the current file.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
 unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal
