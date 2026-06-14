@@ -5,6 +5,7 @@ use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, TextRange};
 use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
+use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
 use crate::config::{Config, ThemeName};
 use crate::file::Document;
 use crate::input::{KeyEvent, SpecialKey};
@@ -33,6 +34,9 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
+    completion: Option<CompletionSession>,
+    completion_return: Option<Viewport>,
+    completion_config: CompletionConfig,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     region: Option<RegionState>,
@@ -118,6 +122,9 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             help_return: None,
+            completion: None,
+            completion_return: None,
+            completion_config: config.completion,
             search: None,
             query_replace: None,
             region: None,
@@ -212,6 +219,37 @@ impl Editor {
 
     pub fn minibuffer(&self) -> &MinibufferState {
         &self.minibuffer
+    }
+
+    pub fn minibuffer_display_text(&self) -> Option<String> {
+        let Some(completion) = &self.completion else {
+            return self.minibuffer.display_text();
+        };
+        if completion.style() != CompletionStyle::Ido {
+            return self.minibuffer.display_text();
+        }
+        let prompt = self.minibuffer.prompt()?;
+        if prompt.kind != PromptKind::ExtendedCommand {
+            return self.minibuffer.display_text();
+        }
+        let candidates = if completion.has_matches() {
+            completion
+                .view_items()
+                .into_iter()
+                .map(|item| item.candidate.value.as_str())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        } else {
+            "No match".to_owned()
+        };
+        Some(format!(
+            "{}{}  [{}]",
+            prompt.label, prompt.input, candidates
+        ))
+    }
+
+    pub fn completion(&self) -> Option<&CompletionSession> {
+        self.completion.as_ref()
     }
 
     pub fn syntax_enabled(&self) -> bool {
@@ -417,6 +455,11 @@ impl Editor {
         if self.minibuffer.prompt_kind() == Some(PromptKind::IncrementalSearch) {
             return self.handle_search_prompt_key(key);
         }
+        if self.minibuffer.prompt_kind() == Some(PromptKind::ExtendedCommand)
+            && self.completion.is_some()
+        {
+            return self.handle_completion_prompt_key(key);
+        }
 
         match key {
             KeyEvent::Special(SpecialKey::Enter) => {
@@ -447,6 +490,146 @@ impl Editor {
             KeyEvent::Special(SpecialKey::Tab) => Ok(EditorOutcome::Continue),
             _ => Ok(EditorOutcome::Continue),
         }
+    }
+
+    fn handle_completion_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        match key {
+            KeyEvent::Special(SpecialKey::Enter) => {
+                let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
+                    return Ok(EditorOutcome::Continue);
+                };
+                let input = self.completion_accept_input(&input);
+                self.minibuffer.clear();
+                self.finish_completion_buffer();
+                self.completion = None;
+                self.submit_prompt(kind, &input)
+            }
+            KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                self.minibuffer.cancel_prompt();
+                self.finish_completion_buffer();
+                self.completion = None;
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Special(SpecialKey::Backspace) => {
+                self.minibuffer.delete_prompt_grapheme_backward();
+                self.update_completion_from_prompt();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Special(SpecialKey::Tab) => {
+                self.complete_prompt_common_prefix();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Ctrl('n') | KeyEvent::Special(SpecialKey::ArrowDown) => {
+                if let Some(completion) = &mut self.completion {
+                    completion.move_selection(1);
+                }
+                self.update_completion_buffer();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Ctrl('p') | KeyEvent::Special(SpecialKey::ArrowUp) => {
+                if let Some(completion) = &mut self.completion {
+                    completion.move_selection(-1);
+                }
+                self.update_completion_buffer();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Text(text) => {
+                self.minibuffer.insert_prompt_text(&text);
+                self.update_completion_from_prompt();
+                Ok(EditorOutcome::Continue)
+            }
+            _ => Ok(EditorOutcome::Continue),
+        }
+    }
+
+    fn completion_accept_input(&self, input: &str) -> String {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return input.to_owned();
+        }
+        if self.commands.contains(trimmed) {
+            return trimmed.to_owned();
+        }
+        self.completion
+            .as_ref()
+            .and_then(CompletionSession::selected)
+            .map(|candidate| candidate.value.clone())
+            .unwrap_or_else(|| input.to_owned())
+    }
+
+    fn complete_prompt_common_prefix(&mut self) {
+        let input = self
+            .minibuffer
+            .prompt_input()
+            .unwrap_or_default()
+            .to_owned();
+        let Some(prefix) = self
+            .completion
+            .as_ref()
+            .and_then(|completion| completion.common_prefix(&input))
+        else {
+            return;
+        };
+        self.minibuffer.set_prompt_input(prefix);
+        self.update_completion_from_prompt();
+    }
+
+    fn update_completion_from_prompt(&mut self) {
+        let input = self
+            .minibuffer
+            .prompt_input()
+            .unwrap_or_default()
+            .to_owned();
+        if let Some(completion) = &mut self.completion {
+            completion.update(&input);
+        }
+        self.update_completion_buffer();
+    }
+
+    fn update_completion_buffer(&mut self) {
+        let Some(completion) = &self.completion else {
+            return;
+        };
+        if completion.style() != CompletionStyle::CompletionsBuffer {
+            return;
+        }
+        if completion.source() != CompletionSource::Commands {
+            return;
+        }
+        let text = format_completion_buffer(completion);
+        if self.completion_return.is_none() {
+            self.sync_current_window();
+            self.completion_return = Some(*self.windows.current().viewport());
+        }
+        let completions = self.buffers.open_completions(text);
+        self.current_buffer = completions;
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = 0;
+        viewport.first_visible_column = 0;
+        self.sync_current_window();
+    }
+
+    fn finish_completion_buffer(&mut self) {
+        let Some(viewport) = self.completion_return.take() else {
+            return;
+        };
+        if self.buffers.document(viewport.buffer).is_none() {
+            return;
+        }
+        self.current_buffer = viewport.buffer;
+        self.cursor = viewport.cursor;
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        *self.windows.current_mut().viewport_mut() = viewport;
     }
 
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
@@ -963,6 +1146,11 @@ impl Editor {
     fn start_extended_command(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        self.completion = Some(CompletionSession::commands(
+            &self.commands,
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
         Ok(())
     }
 
@@ -1945,6 +2133,27 @@ fn search_start_after(buffer: &crate::buffer::Buffer, position: Position) -> Res
     Ok(buffer.end_position())
 }
 
+fn format_completion_buffer(completion: &CompletionSession) -> String {
+    let mut text = String::from("Possible Completions for M-x:\n\n");
+    let items = completion.view_items();
+    if items.is_empty() {
+        text.push_str("No match\n");
+        return text;
+    }
+    for item in items {
+        let marker = if item.selected { ">" } else { " " };
+        if completion.show_annotations() && !item.candidate.annotation.is_empty() {
+            text.push_str(&format!(
+                "{marker} {:<32} {}\n",
+                item.candidate.value, item.candidate.annotation
+            ));
+        } else {
+            text.push_str(&format!("{marker} {}\n", item.candidate.value));
+        }
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -1953,6 +2162,7 @@ mod tests {
 
     use super::{Editor, EditorOutcome};
     use crate::buffer::Position;
+    use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
@@ -2122,6 +2332,221 @@ mod tests {
                 .expect("current window should exist")
                 .first_visible_line,
             0
+        );
+    }
+
+    #[test]
+    fn extended_command_completion_accepts_selected_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should execute selected completion");
+
+        assert!(!editor.search_highlighting());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Search highlighting disabled")
+        );
+    }
+
+    #[test]
+    fn extended_command_completion_keeps_exact_name_entry_working() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-search-highlighting".to_owned()))
+            .expect("exact command name should update prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should execute exact command name");
+
+        assert!(!editor.search_highlighting());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Search highlighting disabled")
+        );
+    }
+
+    #[test]
+    fn extended_command_completion_prefers_exact_name_over_selected_substring() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc def")
+            .expect("fixture text should insert");
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    matching: CompletionMatching::Substring,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("kill-word".to_owned()))
+            .expect("exact command name should update prompt");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("backward-kill-word")
+        );
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should execute the exact command name");
+
+        assert_eq!(editor.document().buffer().serialize(), " def");
+    }
+
+    #[test]
+    fn extended_command_completion_reports_no_match_as_raw_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("nosuchcommand".to_owned()))
+            .expect("unknown command should update prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should submit raw command name");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No such command: nosuchcommand")
+        );
+    }
+
+    #[test]
+    fn extended_command_tab_extends_common_prefix() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should complete common prefix");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("toggle-"));
+    }
+
+    #[test]
+    fn ido_completion_renders_candidates_in_minibuffer() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::Ido,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+
+        let text = editor
+            .minibuffer_display_text()
+            .expect("ido should render minibuffer text");
+        assert!(text.contains("M-x toggle-s"));
+        assert!(text.contains("toggle-search-highlighting"));
+        assert!(text.contains("toggle-syntax-highlighting"));
+    }
+
+    #[test]
+    fn completions_buffer_completion_restores_previous_buffer_on_cancel() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::CompletionsBuffer,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        assert_eq!(editor.current_buffer_name(), "*Completions*");
+        assert!(
+            editor
+                .document_for_buffer(editor.current_buffer_id())
+                .expect("current buffer should exist")
+                .is_completions()
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn completions_buffer_completion_restores_previous_buffer_on_accept() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::CompletionsBuffer,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("buffer text".to_owned()))
+            .expect("fixture text should insert");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion buffer");
+        assert_eq!(editor.current_buffer_name(), "*Completions*");
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should accept selected command");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.document().buffer().serialize(), "buffer text");
+        assert!(!editor.search_highlighting());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Search highlighting disabled")
         );
     }
 
@@ -3218,6 +3643,7 @@ M-g g           goto-line\n"
                 search_highlighting: false,
                 backup_on_save: true,
                 theme: ThemeName::Mono,
+                completion: Default::default(),
             },
         );
 

@@ -72,6 +72,12 @@ impl MinibufferState {
         }
     }
 
+    pub fn set_prompt_input(&mut self, input: impl Into<String>) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.input = input.into();
+        }
+    }
+
     pub fn delete_prompt_grapheme_backward(&mut self) {
         let Some(prompt) = &mut self.prompt else {
             return;

@@ -198,7 +198,23 @@ Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.
 
-Current limitations: there is no prompt cursor movement, no file-name or buffer-name completion, no unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal yet. Search and query replace are exact line-local substring matching; they do not wrap around the buffer and do not match across line breaks.
+Post-Milestone 14 minibuffer polish adds command completion for `M-x`. The
+completion core is separate from the UI style and starts with command-name
+sources, prefix or substring matching, common-prefix Tab completion, selected
+candidate movement with `C-n`/Down and `C-p`/Up, and Enter acceptance. The
+default `completion_style = "vertical"` reserves rows above the minibuffer and
+shows command descriptions. `completion_style = "completions-buffer"` opens a
+temporary read-only `*Completions*` buffer and restores the previous viewport on
+accept/cancel. `completion_style = "ido"` is an experimental compact inline
+minibuffer display. Supported completion config keys are
+`completion_style`, `completion_max_candidates`, `completion_show_annotations`,
+and `completion_matching`.
+
+Current limitations: there is no prompt cursor movement, no file-name or
+buffer-name completion, no unsaved-changes quit confirmation, and no redo or
+advanced Emacs undo traversal yet. Search and query replace are exact line-local
+substring matching; they do not wrap around the buffer and do not match across
+line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

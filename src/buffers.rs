@@ -129,6 +129,23 @@ impl BufferManager {
         id
     }
 
+    pub fn open_completions(&mut self, text: impl AsRef<str>) -> BufferId {
+        let name = "*Completions*";
+        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.name == name) {
+            entry.document = Document::completions(text);
+            return entry.id;
+        }
+
+        let id = BufferId(self.next_id);
+        self.next_id += 1;
+        self.entries.push(BufferEntry {
+            id,
+            name: name.to_owned(),
+            document: Document::completions(text),
+        });
+        id
+    }
+
     pub fn kill(&mut self, id: BufferId) -> Result<BufferId> {
         let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
             return Err(RileError::InvalidInput(format!("no such buffer: {}", id.0)));

@@ -16,6 +16,7 @@ pub enum DocumentKind {
     Normal,
     Welcome,
     Help,
+    Completions,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +63,17 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Help*".to_owned()),
             kind: DocumentKind::Help,
+            missing_on_open: false,
+            backup_on_save: false,
+        }
+    }
+
+    pub fn completions(text: impl AsRef<str>) -> Self {
+        Self {
+            buffer: Buffer::from_text(text.as_ref()),
+            path: None,
+            name: Some("*Completions*".to_owned()),
+            kind: DocumentKind::Completions,
             missing_on_open: false,
             backup_on_save: false,
         }
@@ -137,6 +149,10 @@ Rile is free software under GPL-3.0-or-later.\n",
 
     pub fn is_help(&self) -> bool {
         self.kind == DocumentKind::Help
+    }
+
+    pub fn is_completions(&self) -> bool {
+        self.kind == DocumentKind::Completions
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -364,6 +380,23 @@ mod tests {
         let error = document
             .save()
             .expect_err("help buffer should be read-only");
+        assert!(error.to_string().contains("read-only"));
+    }
+
+    #[test]
+    fn completions_document_is_named_clean_and_read_only() {
+        let mut document = Document::completions("command\n");
+
+        assert_eq!(document.display_name(), "*Completions*");
+        assert_eq!(document.kind(), DocumentKind::Completions);
+        assert!(document.is_completions());
+        assert!(document.is_read_only());
+        assert_eq!(document.buffer().serialize(), "command\n");
+        assert!(!document.is_dirty());
+
+        let error = document
+            .save()
+            .expect_err("completions buffer should be read-only");
         assert!(error.to_string().contains("read-only"));
     }
 

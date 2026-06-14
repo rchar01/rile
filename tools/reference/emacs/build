@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+image=${IMAGE:-rile-emacs-reference}
+podman=${PODMAN:-podman}
+
+"$podman" build \
+  -f "$root/tools/reference/emacs/Containerfile" \
+  -t "$image" \
+  "$root"
+
+"$podman" run --rm \
+  --userns=keep-id \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  "$image" \
+  tools/reference/emacs/build-in-container "$@"
+
+"$podman" run --rm \
+  --user root \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  "$image" \
+  chown -R "$(id -u):$(id -g)" artifacts/reference/emacs

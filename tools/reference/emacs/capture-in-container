@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if (($# != 1)); then
+  printf '%s\n' 'usage: tools/reference/emacs/capture-in-container <scenario-name-or-path>' >&2
+  exit 2
+fi
+
+root=/workspace
+scenario_arg=$1
+scenario_path=$scenario_arg
+if [[ $scenario_arg != */* ]]; then
+  scenario_path=$root/tools/reference/emacs/scenarios/$scenario_arg.scenario
+fi
+
+if [[ ! -f "$scenario_path" ]]; then
+  printf 'reference scenario not found: %s\n' "$scenario_path" >&2
+  exit 1
+fi
+
+# shellcheck source=/dev/null
+source "$scenario_path"
+
+: "${SCENARIO_NAME:?scenario must set SCENARIO_NAME}"
+: "${WIDTH:?scenario must set WIDTH}"
+: "${HEIGHT:?scenario must set HEIGHT}"
+: "${FIXTURE_NAME:?scenario must set FIXTURE_NAME}"
+: "${FIXTURE_CONTENT:?scenario must set FIXTURE_CONTENT}"
+: "${EMACS_PROFILE:?scenario must set EMACS_PROFILE to core or modern}"
+
+if ! declare -F vhs_steps >/dev/null; then
+  printf 'scenario must define vhs_steps function: %s\n' "$scenario_path" >&2
+  exit 1
+fi
+
+case "$EMACS_PROFILE" in
+  core | modern) ;;
+  *)
+    printf 'unsupported EMACS_PROFILE: %s\n' "$EMACS_PROFILE" >&2
+    exit 1
+    ;;
+esac
+
+emacs_rel=artifacts/reference/emacs/install/bin/emacs-$EMACS_PROFILE
+emacs=$root/$emacs_rel
+if [[ ! -x "$emacs" ]]; then
+  printf 'Emacs reference wrapper not found: %s\n' "$emacs" >&2
+  printf '%s\n' 'Run tools/reference/emacs/build first.' >&2
+  exit 1
+fi
+
+capture_rel=artifacts/reference/emacs/captures/$SCENARIO_NAME
+frame_rel=$capture_rel/frames
+home_rel=$capture_rel/home
+fixture_rel=$capture_rel/$FIXTURE_NAME
+gif_rel=$capture_rel/$SCENARIO_NAME.gif
+
+capture_dir=$root/$capture_rel
+frame_dir=$root/$frame_rel
+home_dir=$root/$home_rel
+fixture=$root/$fixture_rel
+tape=$capture_dir/$SCENARIO_NAME.tape
+
+rm -rf "$capture_dir"
+mkdir -p "$frame_dir" "$home_dir"
+mkdir -p "$(dirname "$fixture")"
+printf '%s' "$FIXTURE_CONTENT" > "$fixture"
+
+if declare -F setup_reference_files >/dev/null; then
+  setup_reference_files "$capture_dir" "$capture_rel"
+fi
+
+steps=$(vhs_steps)
+steps=${steps//\{\{FRAME_DIR\}\}/$frame_rel}
+steps=${steps//\{\{FIXTURE\}\}/$fixture_rel}
+steps=${steps//\{\{EMACS\}\}/$emacs_rel}
+steps=${steps//\{\{HOME\}\}/$home_rel}
+
+cat > "$tape" <<EOF
+Output $gif_rel
+
+Set Width 1280
+Set Height 720
+Set FontSize 18
+Set Padding 12
+Set CursorBlink false
+
+Require $emacs_rel
+
+Type "stty cols $WIDTH rows $HEIGHT && HOME=$home_rel TERM=xterm-256color $emacs_rel $fixture_rel"
+Enter
+$steps
+EOF
+
+vhs validate "$tape"
+vhs "$tape"
+
+printf 'Captured Emacs reference scenario: %s\n' "$SCENARIO_NAME"
+printf 'Profile: %s\n' "$EMACS_PROFILE"
+printf 'Artifacts: %s\n' "$capture_dir"

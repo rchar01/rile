@@ -19,7 +19,7 @@ Editing features:
 * Delete characters, kill words and lines, set a mark, kill/copy regions,
   and yank.
 * Undo current-buffer edits with grouped normal typing.
-* Run exact-name commands through M-x.
+* Run commands through M-x with command-name completion.
 
 Interface features:
 
@@ -32,6 +32,9 @@ Interface features:
 * Scroll viewports automatically to keep point visible.
 * Use minibuffer prompts for commands, file names, buffers, search, and
   query replace.
+* Complete M-x command names with the default vertical candidate list,
+  optional *Completions* buffer fallback, or experimental ido-style inline
+  display.
 
 Search and replacement:
 
@@ -47,7 +50,7 @@ Display and configuration:
   highlighters.
 * Select Emacs-style major-mode names from file extensions.
 * Configure tab width, line numbers, syntax highlighting, search
-  highlighting, theme, and optional save backups in
+  highlighting, theme, command-completion style, and optional save backups in
   ~/.config/rile/config.toml.
 * Toggle line numbers, syntax highlighting, and search highlighting from
   M-x.
@@ -60,6 +63,8 @@ Hardening and development:
 * Optionally write sibling file~ backups before saving existing files.
 * Provide deterministic `--visual-test` and `--test-size WIDTHxHEIGHT`
   developer flags for future PTY, snapshot, and VHS terminal testing.
+* Provide optional Emacs reference-capture tooling alongside Zile and kg for
+  base and modern Vertico/Marginalia terminal behavior evidence.
 * Provide GPL-3.0-or-later licensing, clean-room reference notices,
   containerized development tooling, and a canonical make verify quality
   gate.

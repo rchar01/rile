@@ -5,17 +5,19 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Reference Testing
 
-Rile includes optional reference-testing tooling for studying user-visible behavior of other terminal editors. Current reference targets are GNU Zile and kg.
+Rile includes optional reference-testing tooling for studying user-visible behavior of other terminal editors. Current reference targets are GNU Zile, kg, and GNU Emacs.
 
 Reference testing is not part of Rile's normal quality gate. It is a way to produce behavior evidence before writing original Rile requirements and tests.
 
 ## Licensing And Provenance
 
-The reference-testing tooling in this repository is original Rile project material. It does not vendor, incorporate, copy, translate, or mechanically port GNU Zile or kg source code.
+The reference-testing tooling in this repository is original Rile project material. It does not vendor, incorporate, copy, translate, or mechanically port GNU Zile, kg, Emacs, or Emacs package source code.
 
 The Zile reference tooling may download a pinned upstream GNU Zile release into ignored local artifacts. Zile is GPL-3.0-or-later software from the GNU Project. Any local downloaded source tree keeps its upstream license files and notices in `artifacts/reference/zile/`, which is ignored by Git.
 
 The kg reference tooling may clone a pinned upstream kg commit into ignored local artifacts. kg is BSD-2-Clause software by its upstream authors. Any local cloned source tree keeps its upstream license files and notices in `artifacts/reference/kg/`, which is ignored by Git.
+
+The Emacs reference tooling uses Debian-packaged GNU Emacs and ELPA packages in a container. It writes local wrapper scripts, profile copies, Debian package copyright files, and provenance under `artifacts/reference/emacs/`, which is ignored by Git. The `core` profile runs base `emacs -Q -nw`; the `modern` profile enables Vertico, Marginalia, and a Modus theme for modern completion UX evidence. Treat the modern profile as a curated reference profile, not canonical base Emacs behavior.
 
 Generated screenshots, GIFs, temporary files, downloaded tarballs, extracted sources, and installed reference binaries are review evidence only. They are ignored local artifacts unless explicitly distributed with their required upstream notices.
 
@@ -28,6 +30,7 @@ Committed tooling lives under:
 ```text
 tools/reference/zile/
 tools/reference/kg/
+tools/reference/emacs/
 ```
 
 Ignored generated outputs live under:
@@ -35,6 +38,7 @@ Ignored generated outputs live under:
 ```text
 artifacts/reference/zile/
 artifacts/reference/kg/
+artifacts/reference/emacs/
 ```
 
 Scenario files under `tools/reference/<editor>/scenarios/` are original Rile project scenario definitions. They describe fixtures, terminal sizes, keystrokes, and frame names for visual behavior capture. The capture scripts apply each scenario's `WIDTH` and `HEIGHT` with `stty cols` and `stty rows` before launching the reference editor.
@@ -67,6 +71,27 @@ The installed reference binary is written under:
 artifacts/reference/kg/install/bin/kg
 ```
 
+## Build The Emacs Reference
+
+Build the reference container and install local profile wrappers:
+
+```sh
+tools/reference/emacs/build
+```
+
+The installed reference wrappers are written under:
+
+```text
+artifacts/reference/emacs/install/bin/emacs-core
+artifacts/reference/emacs/install/bin/emacs-modern
+```
+
+The `emacs-core` wrapper runs `emacs -Q -nw`. The `emacs-modern` wrapper runs
+`emacs -Q -nw` with the project profile under
+`artifacts/reference/emacs/install/share/rile-reference-emacs/profiles/modern.el`.
+That profile enables Vertico, Marginalia, and a Modus theme from Debian ELPA
+packages for visual completion comparison.
+
 ## Capture A Scenario
 
 Capture the smoke scenario:
@@ -87,11 +112,18 @@ Capture a kg scenario:
 tools/reference/kg/capture baseline-ui
 ```
 
+Capture an Emacs scenario:
+
+```sh
+tools/reference/emacs/capture m-x-completion-modern
+```
+
 Capture outputs are written under:
 
 ```text
 artifacts/reference/zile/captures/<scenario>/
 artifacts/reference/kg/captures/<scenario>/
+artifacts/reference/emacs/captures/<scenario>/
 ```
 
 Each capture directory may include:
@@ -130,7 +162,12 @@ Supported placeholders in `vhs_steps` output:
 - `{{FIXTURE}}`: generated fixture path.
 - `{{ZILE}}`: installed reference Zile binary.
 - `{{KG}}`: installed reference kg binary.
+- `{{EMACS}}`: installed reference Emacs profile wrapper.
 - `{{HOME}}`: temporary home directory for the scenario.
+
+Emacs scenarios must also set `EMACS_PROFILE` to `core` or `modern`. Use
+`core` for base `emacs -Q -nw` behavior and `modern` for the curated
+Vertico/Marginalia/Modus profile.
 
 ## How To Use Evidence
 

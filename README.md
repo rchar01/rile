@@ -13,7 +13,7 @@ Official repository: <https://codeberg.org/rch/rile>
 
 ## Status
 
-Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run exact-name `M-x` commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
+Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run `M-x` commands with command-name completion, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
 
 Current binary behavior:
 
@@ -65,7 +65,9 @@ Basic editor keys:
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.
 - `C-x C-c` quits.
-- `M-x` runs an exact command name.
+- `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
+  through candidates, Tab completes a common prefix, and Enter accepts the
+  selected candidate.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and query replace use exact UTF-8 substring matching within individual lines. They do not wrap around the buffer and do not match across line breaks yet.
@@ -85,7 +87,14 @@ syntax_highlighting = true
 search_highlighting = true
 backup_on_save = false # when true, save previous contents to file~
 theme = "default" # or "mono"
+completion_style = "vertical" # "completions-buffer" or "ido"
+completion_max_candidates = 8
+completion_show_annotations = true
+completion_matching = "prefix" # or "substring"
 ```
+
+Command completion currently applies to `M-x`. File-name and buffer-name
+completion are planned to reuse the same completion core later.
 
 ## License
 
@@ -125,6 +134,6 @@ CI is deferred until it is configured for the official repository.
 
 ## Reference Policy
 
-The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile and kg. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
+The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile, kg, and GNU Emacs. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
 
 See `NOTICE.md` for the current third-party code status.

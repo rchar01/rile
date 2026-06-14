@@ -6,6 +6,7 @@ use std::os::fd::AsRawFd;
 use std::path::Path;
 
 use crate::buffer::{Buffer, Position};
+use crate::completion::CompletionStyle;
 use crate::config::{Config, ThemeName};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
@@ -310,7 +311,9 @@ fn draw_editor_frame_with_options<W: Write>(
         terminal.clear_screen()?;
     }
 
-    let window_rows = usize::from(size.rows.saturating_sub(1).max(1));
+    let completion_rows = completion_popup_rows(editor, size.rows);
+    let window_rows =
+        usize::from(size.rows.saturating_sub(1).max(1)).saturating_sub(completion_rows);
     let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
     for layout in &layouts {
         editor.set_window_text_rows(layout.id, layout.rect.rows.saturating_sub(1));
@@ -320,9 +323,11 @@ fn draw_editor_frame_with_options<W: Write>(
         draw_window(terminal, editor, *layout, options)?;
     }
 
+    draw_completion_popup(terminal, editor, size, completion_rows)?;
+
     terminal.move_cursor(size.rows.max(1), 1)?;
     terminal.clear_line()?;
-    if let Some(text) = editor.minibuffer().display_text() {
+    if let Some(text) = editor.minibuffer_display_text() {
         let face = if text.starts_with("Error:") {
             Face::Error
         } else {
@@ -333,6 +338,67 @@ fn draw_editor_frame_with_options<W: Write>(
 
     move_cursor_to_current_window(terminal, editor, &layouts)?;
     terminal.show_cursor()
+}
+
+fn completion_popup_rows(editor: &Editor, terminal_rows: u16) -> usize {
+    let Some(completion) = editor.completion() else {
+        return 0;
+    };
+    if completion.style() != CompletionStyle::Vertical {
+        return 0;
+    }
+    let available = usize::from(terminal_rows.saturating_sub(2));
+    if available == 0 {
+        return 0;
+    }
+    if completion.has_matches() {
+        completion.view_items().len().min(available)
+    } else {
+        1
+    }
+}
+
+fn draw_completion_popup<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    size: TerminalSize,
+    rows: usize,
+) -> Result<()> {
+    if rows == 0 {
+        return Ok(());
+    }
+    let columns = usize::from(size.columns.max(1));
+    let start_row = usize::from(size.rows).saturating_sub(rows);
+    let Some(completion) = editor.completion() else {
+        return Ok(());
+    };
+    let items = completion.view_items();
+    if items.is_empty() {
+        terminal.move_cursor(start_row as u16, 1)?;
+        write_fixed_width_text_with_face(
+            terminal,
+            "No match",
+            columns,
+            Face::Warning,
+            editor.theme(),
+        )?;
+        return Ok(());
+    }
+    for (index, item) in items.into_iter().take(rows).enumerate() {
+        terminal.move_cursor((start_row + index) as u16, 1)?;
+        let line = if completion.show_annotations() && !item.candidate.annotation.is_empty() {
+            format!("{:<32} {}", item.candidate.value, item.candidate.annotation)
+        } else {
+            item.candidate.value.clone()
+        };
+        let face = if item.selected {
+            Face::ModeLine
+        } else {
+            Face::Default
+        };
+        write_fixed_width_text_with_face(terminal, &line, columns, face, editor.theme())?;
+    }
+    Ok(())
 }
 
 fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) -> Result<()> {

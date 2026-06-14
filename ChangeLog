@@ -1,3 +1,28 @@
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
+	* tools/reference/emacs: Add optional GNU Emacs reference tooling with core
+	and modern Vertico/Marginalia profiles.
+	* tools/reference/emacs/scenarios: Add baseline, command completion, file
+	completion, and buffer completion capture scenarios.
+	* docs/reference-testing.md, README.md, NOTICE.md: Document Emacs reference
+	profiles, artifacts, and provenance policy.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
+	* src/completion.rs: Add shared command-completion session state, matching,
+	selection, common-prefix completion, and view rows.
+	* src/config.rs, src/lib.rs: Add completion style, matching, annotation, and
+	maximum-candidate config keys.
+	* src/editor.rs, src/minibuffer.rs: Wire M-x completion into minibuffer prompt
+	handling, including vertical, *Completions*, and ido-style modes.
+	* src/terminal/mod.rs: Render the vertical completion list above the
+	minibuffer and ido candidates in the minibuffer line.
+	* src/file.rs, src/buffers.rs: Add read-only *Completions* special buffer.
+	* tests/pty_completion.rs: Cover default vertical M-x completion in a real
+	PTY.
+	* README.md, docs/development.md, NEWS: Document command completion and
+	configuration.
+
 2026-06-13  Robert Charusta  <rch-public@posteo.net>
 
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add visible-page scrolling

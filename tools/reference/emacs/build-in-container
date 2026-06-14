@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=/workspace
+artifact_root=$root/artifacts/reference/emacs
+prefix=$artifact_root/install
+profile_src=$root/tools/reference/emacs/profiles
+profile_dst=$prefix/share/rile-reference-emacs/profiles
+doc_dst=$prefix/share/doc/rile-reference-emacs
+provenance=$artifact_root/provenance.txt
+packages=(emacs-nox elpa-vertico elpa-marginalia elpa-modus-themes)
+
+mkdir -p "$prefix/bin" "$profile_dst" "$doc_dst" "$artifact_root"
+install -m 644 "$profile_src/core.el" "$profile_dst/core.el"
+install -m 644 "$profile_src/modern.el" "$profile_dst/modern.el"
+
+for package in "${packages[@]}"; do
+  copyright=/usr/share/doc/$package/copyright
+  if [[ -f "$copyright" ]]; then
+    install -m 644 "$copyright" "$doc_dst/$package.copyright"
+  fi
+done
+
+cat > "$prefix/bin/emacs-core" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+exec /usr/bin/emacs -Q -nw "$@"
+EOF
+
+cat > "$prefix/bin/emacs-modern" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+profile_dir=$(CDPATH= cd -- "$script_dir/../share/rile-reference-emacs/profiles" && pwd)
+exec /usr/bin/emacs -Q -nw --load "$profile_dir/modern.el" "$@"
+EOF
+
+chmod +x "$prefix/bin/emacs-core" "$prefix/bin/emacs-modern"
+
+/usr/bin/emacs --batch -Q --load "$profile_dst/modern.el" \
+  --eval '(unless (and (featurep '\''vertico) (featurep '\''marginalia)) (kill-emacs 1))'
+
+{
+  printf '%s\n' 'GNU Emacs reference target'
+  printf 'emacs: '
+  emacs --version | sed -n '1p'
+  printf '%s\n' 'packages:'
+  dpkg-query -W -f='${binary:Package} ${Version}\n' "${packages[@]}"
+  printf '%s\n' 'profiles:'
+  printf '%s\n' 'core: emacs -Q -nw'
+  printf '%s\n' 'modern: emacs -Q -nw with Vertico, Marginalia, and Modus'
+  printf '%s\n' 'copyright metadata:'
+  printf '%s\n' "$doc_dst"/*.copyright
+} > "$provenance"
+
+printf 'Installed GNU Emacs reference wrappers: %s\n' "$prefix/bin"

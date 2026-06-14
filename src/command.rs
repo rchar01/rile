@@ -176,7 +176,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new(
             "execute-extended-command",
-            "Run command by exact name",
+            "Run command by name",
             true,
             ExecuteExtendedCommand,
         ),

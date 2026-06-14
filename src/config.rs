@@ -4,6 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,6 +30,7 @@ pub struct Config {
     pub search_highlighting: bool,
     pub backup_on_save: bool,
     pub theme: ThemeName,
+    pub completion: CompletionConfig,
 }
 
 impl Default for Config {
@@ -40,6 +42,7 @@ impl Default for Config {
             search_highlighting: true,
             backup_on_save: false,
             theme: ThemeName::Default,
+            completion: CompletionConfig::default(),
         }
     }
 }
@@ -84,6 +87,19 @@ impl Config {
                 }
                 "backup_on_save" => config.backup_on_save = parse_bool(value, line_number)?,
                 "theme" => config.theme = parse_theme(value, line_number)?,
+                "completion_style" => {
+                    config.completion.style = parse_completion_style(value, line_number)?;
+                }
+                "completion_max_candidates" => {
+                    config.completion.max_candidates =
+                        parse_completion_max_candidates(value, line_number)?;
+                }
+                "completion_show_annotations" => {
+                    config.completion.show_annotations = parse_bool(value, line_number)?;
+                }
+                "completion_matching" => {
+                    config.completion.matching = parse_completion_matching(value, line_number)?;
+                }
                 _ => return Err(config_error(line_number, format!("unknown key `{key}`"))),
             }
         }
@@ -148,6 +164,42 @@ fn parse_theme(value: &str, line_number: usize) -> Result<ThemeName> {
     }
 }
 
+fn parse_completion_style(value: &str, line_number: usize) -> Result<CompletionStyle> {
+    match unquote(value) {
+        "vertical" => Ok(CompletionStyle::Vertical),
+        "completions-buffer" => Ok(CompletionStyle::CompletionsBuffer),
+        "ido" => Ok(CompletionStyle::Ido),
+        _ => Err(config_error(
+            line_number,
+            "completion_style must be `vertical`, `completions-buffer`, or `ido`",
+        )),
+    }
+}
+
+fn parse_completion_max_candidates(value: &str, line_number: usize) -> Result<usize> {
+    let max = value
+        .parse::<usize>()
+        .map_err(|_| config_error(line_number, "completion_max_candidates must be an integer"))?;
+    if !(1..=20).contains(&max) {
+        return Err(config_error(
+            line_number,
+            "completion_max_candidates must be between 1 and 20",
+        ));
+    }
+    Ok(max)
+}
+
+fn parse_completion_matching(value: &str, line_number: usize) -> Result<CompletionMatching> {
+    match unquote(value) {
+        "prefix" => Ok(CompletionMatching::Prefix),
+        "substring" => Ok(CompletionMatching::Substring),
+        _ => Err(config_error(
+            line_number,
+            "completion_matching must be `prefix` or `substring`",
+        )),
+    }
+}
+
 fn unquote(value: &str) -> &str {
     value
         .strip_prefix('"')
@@ -161,7 +213,7 @@ fn config_error(line_number: usize, message: impl Into<String>) -> RileError {
 
 #[cfg(test)]
 mod tests {
-    use super::{Config, ThemeName};
+    use super::{CompletionMatching, CompletionStyle, Config, ThemeName};
 
     #[test]
     fn parses_minimal_toml_subset() {
@@ -174,6 +226,10 @@ mod tests {
             search_highlighting = false
             backup_on_save = true
             theme = "mono"
+            completion_style = "ido"
+            completion_max_candidates = 5
+            completion_show_annotations = false
+            completion_matching = "substring"
             "#,
         )
         .expect("config should parse");
@@ -184,6 +240,10 @@ mod tests {
         assert!(!config.search_highlighting);
         assert!(config.backup_on_save);
         assert_eq!(config.theme, ThemeName::Mono);
+        assert_eq!(config.completion.style, CompletionStyle::Ido);
+        assert_eq!(config.completion.max_candidates, 5);
+        assert!(!config.completion.show_annotations);
+        assert_eq!(config.completion.matching, CompletionMatching::Substring);
     }
 
     #[test]
@@ -192,6 +252,9 @@ mod tests {
         assert!(Config::parse("line_numbers = yes").is_err());
         assert!(Config::parse("backup_on_save = sometimes").is_err());
         assert!(Config::parse("theme = \"solarized\"").is_err());
+        assert!(Config::parse("completion_style = \"popup\"").is_err());
+        assert!(Config::parse("completion_max_candidates = 0").is_err());
+        assert!(Config::parse("completion_matching = \"fuzzy\"").is_err());
         assert!(Config::parse("unknown = true").is_err());
     }
 }
