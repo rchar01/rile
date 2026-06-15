@@ -293,6 +293,14 @@ Macro replay skips recording, rejects recursive or nested macro execution, and
 honors `C-u` repeat counts before `C-x e`. Emacs-style `C-u 0 C-x e` repeat until
 error behavior is deferred; Rile currently treats zero as zero executions.
 
+Post-Milestone 14 rectangle polish adds `C-x SPC` / `rectangle-mark-mode`.
+Rectangle mark mode stores a rectangular active region in display columns and
+renders it with the normal region face. `C-w` and `M-w` on a rectangle-marked
+region save typed rectangle kill-ring entries, and regular `C-y` yanks those
+entries back as columns, padding shorter target lines with spaces. Rectangle
+kill and yank operations are undoable as one grouped edit. Legacy `C-x r ...`
+rectangle commands and `M-y` rotation across rectangle entries are deferred.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
 unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal

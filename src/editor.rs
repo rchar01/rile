@@ -4,7 +4,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::buffer::undo::UndoRecord;
-use crate::buffer::{BufferId, Position, TextRange};
+use crate::buffer::{BufferId, Position, RectangleEdit, TextRange};
 use crate::buffers::BufferManager;
 use crate::command::{Command, CommandRegistry};
 use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
@@ -51,7 +51,7 @@ pub struct Editor {
     query_replace: Option<QueryReplaceState>,
     quoted_insert: bool,
     region: Option<RegionState>,
-    kill_ring: Vec<String>,
+    kill_ring: Vec<KillEntry>,
     yank_state: Option<YankState>,
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
@@ -70,6 +70,36 @@ struct RegionState {
     buffer: BufferId,
     mark: Position,
     active: bool,
+    shape: RegionShape,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RegionShape {
+    Linear,
+    Rectangle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RectangleBounds {
+    start_line: usize,
+    end_line: usize,
+    start_column: usize,
+    end_column: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum KillEntry {
+    Text(String),
+    Rectangle(Vec<String>),
+}
+
+impl KillEntry {
+    fn is_empty(&self) -> bool {
+        match self {
+            Self::Text(text) => text.is_empty(),
+            Self::Rectangle(lines) => lines.iter().all(String::is_empty),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -406,6 +436,7 @@ impl Editor {
 
         let region = RegionDecorator {
             range: self.active_region_range(),
+            rectangle: self.active_rectangle_bounds(),
         };
         let query_replace = QueryReplaceDecorator {
             enabled: self.search_highlighting,
@@ -1093,6 +1124,7 @@ impl Editor {
             PreviousLine => self.move_line_by_argument(argument, -1),
             QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
+            RectangleMarkMode => self.rectangle_mark_mode(),
             Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
@@ -1654,8 +1686,21 @@ impl Editor {
             buffer: self.current_buffer,
             mark: self.cursor,
             active: true,
+            shape: RegionShape::Linear,
         });
         self.minibuffer.set_message("Mark set");
+        Ok(())
+    }
+
+    fn rectangle_mark_mode(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.region = Some(RegionState {
+            buffer: self.current_buffer,
+            mark: self.cursor,
+            active: true,
+            shape: RegionShape::Rectangle,
+        });
+        self.minibuffer.set_message("Mark set (rectangle mode)");
         Ok(())
     }
 
@@ -1667,6 +1712,7 @@ impl Editor {
             buffer: self.current_buffer,
             mark,
             active: true,
+            shape: RegionShape::Linear,
         });
         self.goal_display_column = None;
         self.sync_current_window();
@@ -1694,12 +1740,25 @@ impl Editor {
 
     fn copy_region_as_kill(&mut self) -> Result<()> {
         self.clear_insert_group();
+        if let Some(bounds) = self.active_rectangle_bounds() {
+            let text = self.document().buffer().text_in_display_rectangle(
+                bounds.start_line,
+                bounds.end_line,
+                bounds.start_column,
+                bounds.end_column,
+            )?;
+            self.push_kill(KillEntry::Rectangle(text));
+            self.deactivate_region();
+            self.minibuffer.set_message("Copied rectangle");
+            return Ok(());
+        }
+
         let Some(range) = self.active_region_range() else {
             self.minibuffer.set_error("no active region");
             return Ok(());
         };
         let text = self.document().buffer().text_in_range(range)?;
-        self.push_kill(text);
+        self.push_kill(KillEntry::Text(text));
         self.deactivate_region();
         self.minibuffer.set_message("Copied region");
         Ok(())
@@ -1710,19 +1769,41 @@ impl Editor {
             return Ok(());
         }
         self.clear_insert_group();
+        if let Some(bounds) = self.active_rectangle_bounds() {
+            return self.kill_rectangle(bounds);
+        }
+
         let Some(range) = self.active_region_range() else {
             self.minibuffer.set_error("no active region");
             return Ok(());
         };
         let cursor_before = self.cursor;
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_command_kill(text.clone(), KillDirection::Forward);
+        self.push_command_kill(KillEntry::Text(text.clone()), KillDirection::Forward);
         self.cursor = range.start;
         self.goal_display_column = None;
         self.record_delete(range, text, cursor_before, self.cursor);
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed region");
+        Ok(())
+    }
+
+    fn kill_rectangle(&mut self, bounds: RectangleBounds) -> Result<()> {
+        let cursor_before = self.cursor;
+        let (text, deletes) = self.document_mut().buffer_mut().delete_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        self.push_command_kill(KillEntry::Rectangle(text), KillDirection::Forward);
+        self.cursor = self.rectangle_position(bounds.end_line, bounds.start_column)?;
+        self.goal_display_column = None;
+        self.record_batch_delete(deletes, cursor_before, self.cursor);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Killed rectangle");
         Ok(())
     }
 
@@ -1735,7 +1816,10 @@ impl Editor {
             self.minibuffer.set_error("kill ring is empty");
             return Ok(());
         };
-        let text = self.kill_ring[kill_index].clone();
+        let entry = self.kill_ring[kill_index].clone();
+        let KillEntry::Text(text) = entry else {
+            return self.yank_rectangle(kill_index);
+        };
         let cursor_before = self.cursor;
         self.cursor = self
             .document_mut()
@@ -1751,6 +1835,27 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Yanked");
+        Ok(())
+    }
+
+    fn yank_rectangle(&mut self, kill_index: usize) -> Result<()> {
+        let KillEntry::Rectangle(rectangle) = self.kill_ring[kill_index].clone() else {
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let column = self.document().buffer().display_column(cursor_before)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            cursor_before,
+            column,
+            &rectangle,
+        )?;
+        self.cursor = cursor_after;
+        self.record_batch_insert(inserts, cursor_before, cursor_after);
+        self.yank_state = None;
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Yanked rectangle");
         Ok(())
     }
 
@@ -1773,12 +1878,13 @@ impl Editor {
             return Ok(());
         }
 
-        let kill_index = if state.kill_index == 0 {
-            self.kill_ring.len() - 1
-        } else {
-            state.kill_index - 1
+        let Some(kill_index) = self.previous_text_kill_index(state.kill_index) else {
+            self.minibuffer.set_error("No text kill to yank-pop");
+            return Ok(());
         };
-        let text = self.kill_ring[kill_index].clone();
+        let KillEntry::Text(text) = self.kill_ring[kill_index].clone() else {
+            unreachable!("previous_text_kill_index returns text entries");
+        };
         let cursor_before = self.cursor;
         let old_text = self.document_mut().buffer_mut().delete_range(state.range)?;
         let cursor_after = self
@@ -1823,7 +1929,7 @@ impl Editor {
         };
         let range = TextRange::new(self.cursor, end);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_command_kill(text.clone(), KillDirection::Forward);
+        self.push_command_kill(KillEntry::Text(text.clone()), KillDirection::Forward);
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
         self.deactivate_region();
@@ -1845,7 +1951,7 @@ impl Editor {
 
         let range = TextRange::new(self.cursor, end);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_command_kill(text.clone(), KillDirection::Forward);
+        self.push_command_kill(KillEntry::Text(text.clone()), KillDirection::Forward);
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
         self.deactivate_region();
@@ -1867,7 +1973,7 @@ impl Editor {
 
         let range = TextRange::new(start, self.cursor);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_command_kill(text.clone(), KillDirection::Backward);
+        self.push_command_kill(KillEntry::Text(text.clone()), KillDirection::Backward);
         self.cursor = start;
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
@@ -1977,7 +2083,22 @@ impl Editor {
             return Ok(());
         };
         let entry = self.undo_stack.remove(index);
-        match entry.record {
+        self.undo_record(entry.record)?;
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.refresh_visible_buffer_list();
+        self.minibuffer.set_message("Undone");
+        Ok(())
+    }
+
+    fn undo_record(&mut self, record: UndoRecord) -> Result<()> {
+        match record {
+            UndoRecord::Batch(records) => {
+                for record in records.into_iter().rev() {
+                    self.undo_record(record)?;
+                }
+            }
             UndoRecord::Insert {
                 range,
                 cursor_before,
@@ -2010,11 +2131,6 @@ impl Editor {
                 self.cursor = cursor_before;
             }
         }
-        self.goal_display_column = None;
-        self.deactivate_region();
-        self.sync_current_window();
-        self.refresh_visible_buffer_list();
-        self.minibuffer.set_message("Undone");
         Ok(())
     }
 
@@ -2850,7 +2966,11 @@ impl Editor {
 
     fn active_region_range(&self) -> Option<TextRange> {
         let region = self.region?;
-        if !region.active || region.buffer != self.current_buffer || region.mark == self.cursor {
+        if !region.active
+            || region.buffer != self.current_buffer
+            || region.mark == self.cursor
+            || region.shape != RegionShape::Linear
+        {
             return None;
         }
         let (start, end) = if region.mark < self.cursor {
@@ -2861,39 +2981,151 @@ impl Editor {
         Some(TextRange::new(start, end))
     }
 
+    fn active_rectangle_bounds(&self) -> Option<RectangleBounds> {
+        let region = self.region?;
+        if !region.active
+            || region.buffer != self.current_buffer
+            || region.mark == self.cursor
+            || region.shape != RegionShape::Rectangle
+        {
+            return None;
+        }
+
+        let buffer = self.document().buffer();
+        let mark_column = buffer.display_column(region.mark).ok()?;
+        let cursor_column = buffer.display_column(self.cursor).ok()?;
+        let start_column = mark_column.min(cursor_column);
+        let end_column = mark_column.max(cursor_column);
+        if start_column == end_column {
+            return None;
+        }
+
+        Some(RectangleBounds {
+            start_line: region.mark.line.min(self.cursor.line),
+            end_line: region.mark.line.max(self.cursor.line),
+            start_column,
+            end_column,
+        })
+    }
+
+    fn rectangle_position(&self, line: usize, column: usize) -> Result<Position> {
+        Ok(Position::new(
+            line,
+            self.document()
+                .buffer()
+                .byte_for_display_column(line, column)?,
+        ))
+    }
+
     fn deactivate_region(&mut self) {
         if let Some(region) = &mut self.region {
             region.active = false;
         }
     }
 
-    fn push_kill(&mut self, text: String) {
-        if !text.is_empty() {
-            self.kill_ring.push(text);
+    fn push_kill(&mut self, entry: KillEntry) {
+        if !entry.is_empty() {
+            self.kill_ring.push(entry);
         }
     }
 
-    fn push_command_kill(&mut self, text: String, direction: KillDirection) {
-        if text.is_empty() {
+    fn push_command_kill(&mut self, entry: KillEntry, direction: KillDirection) {
+        if entry.is_empty() {
             return;
         }
 
         if self.last_command_was_kill
             && let Some(previous) = self.kill_ring.last_mut()
+            && let (KillEntry::Text(previous), KillEntry::Text(text)) = (previous, &entry)
         {
             match direction {
-                KillDirection::Forward => previous.push_str(&text),
+                KillDirection::Forward => previous.push_str(text),
                 KillDirection::Backward => {
-                    let mut combined = text;
+                    let mut combined = text.clone();
                     combined.push_str(previous);
                     *previous = combined;
                 }
             }
         } else {
-            self.kill_ring.push(text);
+            self.kill_ring.push(entry);
         }
 
         self.kill_recorded_this_command = true;
+    }
+
+    fn record_batch_delete(
+        &mut self,
+        deletes: Vec<RectangleEdit>,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) {
+        let records = deletes
+            .into_iter()
+            .filter(|(_, text)| !text.is_empty())
+            .map(|(range, text)| UndoRecord::Delete {
+                range,
+                text,
+                cursor_before,
+                cursor_after,
+            })
+            .collect::<Vec<_>>();
+        self.record_batch(records);
+    }
+
+    fn record_batch_insert(
+        &mut self,
+        inserts: Vec<RectangleEdit>,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) {
+        let records = inserts
+            .into_iter()
+            .filter(|(_, text)| !text.is_empty())
+            .map(|(range, text)| UndoRecord::Insert {
+                range,
+                text,
+                cursor_before,
+                cursor_after,
+            })
+            .collect::<Vec<_>>();
+        self.record_batch(records);
+    }
+
+    fn record_batch(&mut self, records: Vec<UndoRecord>) {
+        if records.is_empty() {
+            return;
+        }
+        self.undo_stack.push(UndoEntry {
+            buffer: self.current_buffer,
+            record: UndoRecord::Batch(records),
+        });
+        self.clear_insert_group();
+        self.refresh_visible_buffer_list();
+    }
+
+    fn previous_text_kill_index(&self, from: usize) -> Option<usize> {
+        if self.kill_ring.is_empty() || from >= self.kill_ring.len() {
+            return None;
+        }
+
+        let mut index = if from == 0 {
+            self.kill_ring.len() - 1
+        } else {
+            from - 1
+        };
+        loop {
+            if matches!(self.kill_ring[index], KillEntry::Text(_)) {
+                return Some(index);
+            }
+            if index == from {
+                return None;
+            }
+            index = if index == 0 {
+                self.kill_ring.len() - 1
+            } else {
+                index - 1
+            };
+        }
     }
 
     fn record_insert(
@@ -3208,10 +3440,23 @@ impl DecorationProvider for SyntaxDecorator {
 
 struct RegionDecorator {
     range: Option<TextRange>,
+    rectangle: Option<RectangleBounds>,
 }
 
 impl DecorationProvider for RegionDecorator {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
+        if let Some(rectangle) = self.rectangle {
+            if line_index < rectangle.start_line || line_index > rectangle.end_line {
+                return Vec::new();
+            }
+            let start = byte_for_display_column_in_line(line, rectangle.start_column);
+            let end = byte_for_display_column_in_line(line, rectangle.end_column);
+            if start == end {
+                return Vec::new();
+            }
+            return vec![Span::new(start, end, Face::Region)];
+        }
+
         let Some(range) = self.range else {
             return Vec::new();
         };
@@ -3233,6 +3478,18 @@ impl DecorationProvider for RegionDecorator {
         }
         vec![Span::new(start, end, Face::Region)]
     }
+}
+
+fn byte_for_display_column_in_line(line: &str, target_column: usize) -> usize {
+    let mut column = 0;
+    for (byte, character) in line.char_indices() {
+        let width = unicode_width::UnicodeWidthChar::width(character).unwrap_or(0);
+        if column + width > target_column {
+            return byte;
+        }
+        column += width;
+    }
+    line.len()
 }
 
 struct QueryReplaceDecorator {
@@ -3450,7 +3707,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{Editor, EditorOutcome};
+    use super::{Editor, EditorOutcome, KillEntry};
     use crate::buffer::{Position, TextRange};
     use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
@@ -6424,6 +6681,164 @@ M-g g           goto-line\n"
     }
 
     #[test]
+    fn rectangle_mark_mode_highlights_columns() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(" ".to_owned()))
+            .expect("rectangle mark mode should start");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Mark set (rectangle mode)")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+
+        assert_eq!(
+            editor.spans_for_line(0, "abcdef"),
+            vec![Span::new(1, 3, Face::Region)]
+        );
+        assert_eq!(
+            editor.spans_for_line(1, "123456"),
+            vec![Span::new(1, 3, Face::Region)]
+        );
+        assert_eq!(editor.active_region_range(), None);
+    }
+
+    #[test]
+    fn kill_region_uses_rectangle_mark_mode_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(" ".to_owned()))
+            .expect("rectangle mark mode should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        editor
+            .handle_key(KeyEvent::Ctrl('w'))
+            .expect("rectangle should kill");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "adef\n1456\nuvwxyz\n"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, 1));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Killed rectangle")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
+    fn copy_region_and_yank_preserve_rectangle_shape() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(" ".to_owned()))
+            .expect("rectangle mark mode should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        editor
+            .handle_key(KeyEvent::Meta('w'))
+            .expect("rectangle should copy");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Copied rectangle")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('e'))
+            .expect("cursor should move to line end");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("rectangle should yank");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyzbc\n      23"
+        );
+        assert_eq!(editor.cursor(), Position::new(3, 8));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove yanked rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
     fn kill_line_and_undo_restore_text() {
         let mut document = Document::scratch();
         document
@@ -6576,6 +6991,26 @@ M-g g           goto-line\n"
             .handle_key(KeyEvent::Meta('y'))
             .expect("M-y should wrap to latest kill");
         assert_eq!(editor.document().buffer().serialize(), "\ntwo\nthree");
+    }
+
+    #[test]
+    fn yank_pop_skips_rectangle_entries_for_text_yanks() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.kill_ring = vec![
+            KillEntry::Text("old".to_owned()),
+            KillEntry::Rectangle(vec!["rr".to_owned()]),
+            KillEntry::Text("new".to_owned()),
+        ];
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert latest text kill");
+        assert_eq!(editor.document().buffer().serialize(), "new");
+
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("yank-pop should skip rectangle entry");
+        assert_eq!(editor.document().buffer().serialize(), "old");
     }
 
     #[test]

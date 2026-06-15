@@ -42,6 +42,7 @@ pub enum Command {
     PreviousLine,
     QuotedInsert,
     QueryReplace,
+    RectangleMarkMode,
     Recenter,
     SaveBuffer,
     SaveBuffersKillTerminal,
@@ -286,6 +287,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             QueryReplace,
         ),
+        CommandSpec::new(
+            "rectangle-mark-mode",
+            "Mark a rectangular region",
+            true,
+            RectangleMarkMode,
+        ),
         CommandSpec::new("recenter", "Center cursor in window", true, Recenter),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
         CommandSpec::new(
@@ -416,6 +423,7 @@ mod tests {
         assert!(registry.contains("undo"));
         assert!(registry.contains("universal-argument"));
         assert!(registry.contains("query-replace"));
+        assert!(registry.contains("rectangle-mark-mode"));
         assert!(registry.contains("recenter"));
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));

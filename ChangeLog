@@ -1,5 +1,20 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/buffer/mod.rs, src/buffer/undo.rs, src/command.rs, src/keymap.rs,
+	src/editor.rs: Add rectangle-mark-mode on C-x SPC with rectangle-aware C-w,
+	M-w, and C-y behavior.
+	* tests/pty_insert.rs: Cover rectangle mark copy and regular yank in a real
+	PTY.
+	* tools/reference/emacs/scenarios/rectangle-mark-core.scenario,
+	tools/reference/zile/scenarios/rectangle-mark.scenario,
+	tools/reference/kg/scenarios/rectangle-mark.scenario: Add focused rectangle
+	mark reference scenarios for regular copy and yank behavior.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	rectangle mark mode.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add keyboard macros on
 	C-x (, C-x ), and C-x e, replaying recorded raw keys through normal key
 	handling and honoring C-u repeat counts.

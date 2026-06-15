@@ -5,6 +5,7 @@ use super::{Position, TextRange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UndoRecord {
+    Batch(Vec<UndoRecord>),
     Insert {
         range: TextRange,
         text: String,

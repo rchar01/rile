@@ -43,6 +43,8 @@ Initial inspection scenarios:
 - `find-file-completion`: file prompt completion after Tab.
 - `insert-file`: `C-x i` insert-file behavior.
 - `quoted-insert`: `C-q` quoted-insert behavior.
+- `rectangle-mark`: `C-x SPC` rectangle mark mode with regular `M-w` copy and
+  `C-y` yank behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.

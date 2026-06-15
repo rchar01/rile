@@ -207,6 +207,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "mark-whole-buffer",
         ),
         KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text(" ".to_owned())],
+            "rectangle-mark-mode",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')],
             "exchange-point-and-mark",
         ),
@@ -404,6 +408,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("h".to_owned())]),
             KeyResolution::Command("mark-whole-buffer")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(" ".to_owned())]),
+            KeyResolution::Command("rectangle-mark-mode")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')]),

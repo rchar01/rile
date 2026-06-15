@@ -31,6 +31,8 @@ pub struct TextRange {
     pub end: Position,
 }
 
+pub type RectangleEdit = (TextRange, String);
+
 impl TextRange {
     pub const fn new(start: Position, end: Position) -> Self {
         Self { start, end }
@@ -219,6 +221,111 @@ impl Buffer {
         Ok(text)
     }
 
+    pub fn text_in_display_rectangle(
+        &self,
+        start_line: usize,
+        end_line: usize,
+        start_column: usize,
+        end_column: usize,
+    ) -> Result<Vec<String>> {
+        self.validate_display_rectangle(start_line, end_line, start_column, end_column)?;
+
+        let mut text = Vec::new();
+        for line_index in start_line..=end_line {
+            let line = &self.lines[line_index];
+            let start = self.byte_for_display_column(line_index, start_column)?;
+            let end = self.byte_for_display_column(line_index, end_column)?;
+            text.push(line[start..end].to_owned());
+        }
+        Ok(text)
+    }
+
+    pub fn delete_display_rectangle(
+        &mut self,
+        start_line: usize,
+        end_line: usize,
+        start_column: usize,
+        end_column: usize,
+    ) -> Result<(Vec<String>, Vec<RectangleEdit>)> {
+        let text =
+            self.text_in_display_rectangle(start_line, end_line, start_column, end_column)?;
+        let mut deleted = Vec::new();
+
+        for line_index in start_line..=end_line {
+            let start = self.byte_for_display_column(line_index, start_column)?;
+            let end = self.byte_for_display_column(line_index, end_column)?;
+            if start == end {
+                continue;
+            }
+            let range = TextRange::new(
+                Position::new(line_index, start),
+                Position::new(line_index, end),
+            );
+            let line_text = self.lines[line_index][start..end].to_owned();
+            self.lines[line_index].replace_range(start..end, "");
+            deleted.push((range, line_text));
+        }
+
+        if !deleted.is_empty() {
+            self.dirty = true;
+            self.recompute_final_newline();
+        }
+
+        Ok((text, deleted))
+    }
+
+    pub fn insert_display_rectangle(
+        &mut self,
+        at: Position,
+        column: usize,
+        rectangle: &[String],
+    ) -> Result<(Vec<RectangleEdit>, Position)> {
+        self.validate_position(at)?;
+        let mut inserted = Vec::new();
+        let mut cursor_after = at;
+
+        for (offset, rectangle_line) in rectangle.iter().enumerate() {
+            let line_index = at.line + offset;
+            while line_index >= self.lines.len() {
+                self.lines.push(String::new());
+            }
+
+            let line_width = Self::display_width(&self.lines[line_index]);
+            let padding = column.saturating_sub(line_width);
+            let mut text = String::new();
+            text.extend(std::iter::repeat_n(' ', padding));
+            text.push_str(rectangle_line);
+
+            if text.is_empty() {
+                cursor_after = Position::new(
+                    line_index,
+                    self.byte_for_display_column(line_index, column)?,
+                );
+                continue;
+            }
+
+            let byte = if padding > 0 {
+                self.lines[line_index].len()
+            } else {
+                self.byte_for_display_column(line_index, column)?
+            };
+            self.lines[line_index].insert_str(byte, &text);
+            let range = TextRange::new(
+                Position::new(line_index, byte),
+                Position::new(line_index, byte + text.len()),
+            );
+            cursor_after = range.end;
+            inserted.push((range, text));
+        }
+
+        if !inserted.is_empty() {
+            self.dirty = true;
+            self.recompute_final_newline();
+        }
+
+        Ok((inserted, cursor_after))
+    }
+
     pub fn move_grapheme_forward(&self, position: Position) -> Result<Position> {
         self.validate_position(position)?;
         let line = &self.lines[position.line];
@@ -359,6 +466,32 @@ impl Buffer {
         Ok(start..end)
     }
 
+    fn validate_display_rectangle(
+        &self,
+        start_line: usize,
+        end_line: usize,
+        start_column: usize,
+        end_column: usize,
+    ) -> Result<()> {
+        if start_line > end_line {
+            return Err(RileError::InvalidPosition(
+                "rectangle start line must not be after end line".to_owned(),
+            ));
+        }
+        if start_column > end_column {
+            return Err(RileError::InvalidPosition(
+                "rectangle start column must not be after end column".to_owned(),
+            ));
+        }
+        if end_line >= self.lines.len() {
+            return Err(RileError::InvalidPosition(format!(
+                "line {end_line} is outside buffer with {} lines",
+                self.lines.len()
+            )));
+        }
+        Ok(())
+    }
+
     fn recompute_final_newline(&mut self) {
         self.final_newline =
             self.lines.len() > 1 && self.lines.last().is_some_and(String::is_empty);
@@ -492,6 +625,29 @@ mod tests {
                 .expect("visible range should compute"),
             1..4
         );
+    }
+
+    #[test]
+    fn display_rectangles_handle_short_lines_and_wide_characters() {
+        let mut buffer = Buffer::from_text("abcd\nx\na界b");
+        let text = buffer
+            .text_in_display_rectangle(0, 2, 1, 3)
+            .expect("rectangle text should compute");
+        assert_eq!(text, vec!["bc", "", "界"]);
+
+        let (deleted, edits) = buffer
+            .delete_display_rectangle(0, 2, 1, 3)
+            .expect("rectangle delete should work");
+        assert_eq!(deleted, vec!["bc", "", "界"]);
+        assert_eq!(edits.len(), 2);
+        assert_eq!(buffer.serialize(), "ad\nx\nab");
+
+        let (inserted, cursor) = buffer
+            .insert_display_rectangle(Position::new(1, 1), 3, &deleted)
+            .expect("rectangle insert should work");
+        assert_eq!(inserted.len(), 3);
+        assert_eq!(buffer.serialize(), "ad\nx  bc\nab \n   界");
+        assert_eq!(cursor, Position::new(3, "   界".len()));
     }
 
     #[test]

@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=rectangle-mark-core
+SCENARIO_DESCRIPTION='Observe base Emacs rectangle mark mode with regular copy and yank.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=rectangle-mark-core.txt
+FIXTURE_CONTENT=$'abcdef
+123456
+uvwxyz
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /abcdef/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+F
+Ctrl+X
+Type " "
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-rectangle-marked-bc-23.png
+Sleep 500ms
+Escape
+Type "w"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-regular-copy.png
+Sleep 500ms
+Ctrl+E
+Ctrl+N
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-regular-yank-rectangle.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

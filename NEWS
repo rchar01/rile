@@ -20,6 +20,8 @@ Editing features:
 * Delete characters, kill words and lines, set a mark, mark the whole buffer,
   kill/copy regions, yank coalesced consecutive kills, and rotate yanks with
   M-y.
+* Mark rectangular columns with C-x SPC; C-w and M-w kill or copy the rectangle,
+  and regular C-y yanks rectangle entries as columns.
 * Supply repeat counts with C-u for repeatable movement, insertion, deletion,
   kill, and open-line commands.
 * Record keyboard macros with C-x (, finish them with C-x ), and replay them

@@ -51,6 +51,8 @@ Basic editor keys:
   the join.
 - `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
+- `C-x SPC` starts rectangle mark mode; `C-w`, `M-w`, and `C-y` then kill,
+  copy, and yank rectangular columns.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.
