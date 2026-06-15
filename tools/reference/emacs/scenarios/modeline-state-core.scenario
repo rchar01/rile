@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=modeline-state-core
+SCENARIO_DESCRIPTION='Observe core Emacs mode-line state changes.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=modeline-state-core.txt
+FIXTURE_CONTENT=$'alpha\nbeta\ngamma\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-clean.png
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-modified.png
+Sleep 500ms
+Ctrl+X
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-saved.png
+Sleep 500ms
+Ctrl+X
+Ctrl+Q
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-read-only.png
+Sleep 500ms
+Ctrl+X
+Ctrl+Q
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-writable.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

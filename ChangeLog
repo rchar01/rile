@@ -1,5 +1,27 @@
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/emacs/build-in-container: Stage early-init.el for emacs-core,
+	run core captures with site files disabled instead of raw -Q, and validate the
+	core and modern staged profiles during build. Clean stale installed profile and
+	documentation artifacts before reinstalling them.
+	* tools/reference/emacs/profiles/early-init.el: Apply reference startup
+	suppression to all Emacs reference captures, inhibit default init, and avoid
+	the very visible terminal cursor.
+	* tools/reference/emacs/profiles/modern.el,
+	tools/reference/emacs/Containerfile: Enable short-answer prompts and remove the
+	Modus theme dependency from the modern Emacs reference profile.
+	* tools/reference/emacs/profiles/core.el,
+	tools/reference/emacs/scenarios/baseline-ui-core.scenario,
+	tools/reference/emacs/README.md, docs/reference-testing.md: Document core as
+	base Emacs behavior with project early init.
+	* tools/reference/emacs/scenarios/baseline-ui-modern.scenario: Add a baseline
+	modern-profile startup capture with Vertico and Marginalia enabled.
+	* tools/reference/emacs/scenarios/modeline-state-core.scenario: Add a focused
+	mode-line state capture for clean, modified, saved, read-only, and writable
+	core Emacs buffers.
+
+2026-06-14  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/emacs/profiles/early-init.el: Add modern Emacs reference
 	early init that suppresses startup UI, GUI bars, dialogs, and cursor blinking.
 	* tools/reference/emacs/build-in-container: Stage early-init.el and init.el in

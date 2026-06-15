@@ -3,6 +3,10 @@
 
 (setq ring-bell-function #'ignore)
 
+(if (boundp 'use-short-answers)
+    (setq use-short-answers t)
+  (defalias 'yes-or-no-p 'y-or-n-p))
+
 (defun rile-reference-add-elpa-package (name)
   "Add Debian ELPA package NAME to `load-path` when installed."
   (let ((elpa-root "/usr/share/emacs/site-lisp/elpa"))
@@ -11,20 +15,16 @@
         (when (file-directory-p directory)
           (add-to-list 'load-path directory))))))
 
-(dolist (package '("compat" "vertico" "marginalia" "modus-themes"))
+(dolist (package '("compat" "vertico" "marginalia"))
   (rile-reference-add-elpa-package package))
 
 (require 'vertico)
 (require 'marginalia)
-(require 'modus-themes nil t)
 
 (setq completion-styles '(basic substring))
 (setq completion-cycle-threshold nil)
 (setq read-file-name-completion-ignore-case nil)
 (setq read-buffer-completion-ignore-case nil)
-
-(when (member 'modus-vivendi-tinted (custom-available-themes))
-  (load-theme 'modus-vivendi-tinted t))
 
 (vertico-mode 1)
 (marginalia-mode 1)

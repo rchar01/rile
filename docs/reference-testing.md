@@ -17,7 +17,7 @@ The Zile reference tooling may download a pinned upstream GNU Zile release into 
 
 The kg reference tooling may clone a pinned upstream kg commit into ignored local artifacts. kg is BSD-2-Clause software by its upstream authors. Any local cloned source tree keeps its upstream license files and notices in `artifacts/reference/kg/`, which is ignored by Git.
 
-The Emacs reference tooling uses Debian-packaged GNU Emacs and ELPA packages in a container. It writes local wrapper scripts, profile copies, Debian package copyright files, and provenance under `artifacts/reference/emacs/`, which is ignored by Git. The `core` profile runs base `emacs -Q -nw`; the `modern` profile enables Vertico, Marginalia, and a Modus theme for modern completion UX evidence. Treat the modern profile as a curated reference profile, not canonical base Emacs behavior.
+The Emacs reference tooling uses Debian-packaged GNU Emacs and ELPA packages in a container. It writes local wrapper scripts, profile copies, Debian package copyright files, and provenance under `artifacts/reference/emacs/`, which is ignored by Git. Both `core` and `modern` use the shared reference early init for minimal terminal startup. The `core` profile otherwise stays empty, while the `modern` profile enables Vertico and Marginalia for modern completion UX evidence. Treat the modern profile as a curated reference profile, not canonical base Emacs behavior.
 
 Generated screenshots, GIFs, temporary files, downloaded tarballs, extracted sources, and installed reference binaries are review evidence only. They are ignored local artifacts unless explicitly distributed with their required upstream notices.
 
@@ -86,12 +86,12 @@ artifacts/reference/emacs/install/bin/emacs-core
 artifacts/reference/emacs/install/bin/emacs-modern
 ```
 
-The `emacs-core` wrapper runs `emacs -Q -nw`. The `emacs-modern` wrapper stages
-`early-init.el` and `init.el` in the scenario home, then runs `emacs -nw` with
-site files disabled. The staged early init suppresses startup UI, dialogs, GUI
-bars, and cursor blinking before the first frame. The init profile enables
-Vertico, Marginalia, and a Modus theme from Debian ELPA packages for visual
-completion comparison.
+Both Emacs wrappers stage `early-init.el` and `init.el` in the scenario home,
+then run `emacs -nw` with site files disabled. The staged early init suppresses
+startup UI, dialogs, GUI bars, and cursor blinking before the first frame. The
+`emacs-core` init profile is empty, while the `emacs-modern` init profile
+enables Vertico and Marginalia from Debian ELPA packages for visual completion
+comparison.
 
 ## Capture A Scenario
 
@@ -167,8 +167,8 @@ Supported placeholders in `vhs_steps` output:
 - `{{HOME}}`: temporary home directory for the scenario.
 
 Emacs scenarios must also set `EMACS_PROFILE` to `core` or `modern`. Use
-`core` for base `emacs -Q -nw` behavior and `modern` for the curated
-Vertico/Marginalia/Modus profile.
+`core` for base Emacs behavior with the shared reference early init and
+`modern` for the curated Vertico/Marginalia profile.
 
 ## How To Use Evidence
 

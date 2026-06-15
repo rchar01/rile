@@ -9,15 +9,17 @@ This directory contains optional tooling for capturing user-visible terminal
 GNU Emacs behavior as reference evidence for Rile feature work.
 
 The tooling uses Debian-packaged Emacs and ELPA packages inside a container. It
-does not vendor Emacs, Vertico, Marginalia, or Modus source into Rile and must
-not be used to copy, translate, or mechanically port their implementation code.
+does not vendor Emacs, Vertico, or Marginalia source into Rile and must not be
+used to copy, translate, or mechanically port their implementation code.
 
 ## Profiles
 
-- `core`: runs `emacs -Q -nw`; use this for baseline GNU Emacs behavior.
+- `core`: stages `early-init.el` and an empty `init.el` in the scenario home,
+  then runs `emacs -nw`; use this for base GNU Emacs behavior with the same
+  minimal startup UI as other Emacs captures.
 - `modern`: stages `early-init.el` and `init.el` in the scenario home, then runs
-  `emacs -nw` with Vertico, Marginalia, and a Modus theme; use this for modern
-  completion UX evidence only, not as canonical base Emacs behavior.
+  `emacs -nw` with Vertico and Marginalia; use this for modern completion UX
+  evidence only, not as canonical base Emacs behavior.
 
 ## Commands
 
@@ -37,7 +39,10 @@ Outputs are written under `artifacts/reference/emacs/`, which is ignored by Git.
 
 Initial inspection scenarios:
 
-- `baseline-ui-core`: base `emacs -Q -nw` screen layout.
+- `baseline-ui-core`: core Emacs screen layout with reference early init.
+- `baseline-ui-modern`: modern Emacs screen layout with Vertico/Marginalia.
+- `modeline-state-core`: core Emacs mode-line clean, modified, saved,
+  read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.

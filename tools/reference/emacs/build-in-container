@@ -11,8 +11,9 @@ profile_src=$root/tools/reference/emacs/profiles
 profile_dst=$prefix/share/rile-reference-emacs/profiles
 doc_dst=$prefix/share/doc/rile-reference-emacs
 provenance=$artifact_root/provenance.txt
-packages=(emacs-nox elpa-vertico elpa-marginalia elpa-modus-themes)
+packages=(emacs-nox elpa-vertico elpa-marginalia)
 
+rm -rf "$profile_dst" "$doc_dst"
 mkdir -p "$prefix/bin" "$profile_dst" "$doc_dst" "$artifact_root"
 install -m 644 "$profile_src/core.el" "$profile_dst/core.el"
 install -m 644 "$profile_src/early-init.el" "$profile_dst/early-init.el"
@@ -28,7 +29,13 @@ done
 cat > "$prefix/bin/emacs-core" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-exec /usr/bin/emacs -Q -nw "$@"
+script_dir=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+profile_dir=$(CDPATH= cd -- "$script_dir/../share/rile-reference-emacs/profiles" && pwd)
+user_emacs_dir=${HOME:?HOME must be set}/.emacs.d
+mkdir -p "$user_emacs_dir"
+install -m 644 "$profile_dir/early-init.el" "$user_emacs_dir/early-init.el"
+install -m 644 "$profile_dir/core.el" "$user_emacs_dir/init.el"
+exec /usr/bin/emacs -nw --no-site-file --no-site-lisp "$@"
 EOF
 
 cat > "$prefix/bin/emacs-modern" <<'EOF'
@@ -45,14 +52,24 @@ EOF
 
 chmod +x "$prefix/bin/emacs-core" "$prefix/bin/emacs-modern"
 
-test_home=$(mktemp -d)
-trap 'rm -rf "$test_home"' EXIT
-mkdir -p "$test_home/.emacs.d"
-install -m 644 "$profile_dst/early-init.el" "$test_home/.emacs.d/early-init.el"
-install -m 644 "$profile_dst/modern.el" "$test_home/.emacs.d/init.el"
-HOME=$test_home /usr/bin/emacs --batch --no-site-file --no-site-lisp \
-  --load "$test_home/.emacs.d/early-init.el" \
-  --load "$test_home/.emacs.d/init.el" \
+core_test_home=$(mktemp -d)
+modern_test_home=$(mktemp -d)
+trap 'rm -rf "$core_test_home" "$modern_test_home"' EXIT
+mkdir -p "$core_test_home/.emacs.d" "$modern_test_home/.emacs.d"
+install -m 644 "$profile_dst/early-init.el" "$core_test_home/.emacs.d/early-init.el"
+install -m 644 "$profile_dst/core.el" "$core_test_home/.emacs.d/init.el"
+install -m 644 "$profile_dst/early-init.el" "$modern_test_home/.emacs.d/early-init.el"
+install -m 644 "$profile_dst/modern.el" "$modern_test_home/.emacs.d/init.el"
+
+HOME=$core_test_home /usr/bin/emacs --batch --no-site-file --no-site-lisp \
+  --load "$core_test_home/.emacs.d/early-init.el" \
+  --load "$core_test_home/.emacs.d/init.el" \
+  --eval '(unless inhibit-startup-screen (kill-emacs 1))' \
+  --eval '(when (or (featurep '\''vertico) (featurep '\''marginalia)) (kill-emacs 1))'
+
+HOME=$modern_test_home /usr/bin/emacs --batch --no-site-file --no-site-lisp \
+  --load "$modern_test_home/.emacs.d/early-init.el" \
+  --load "$modern_test_home/.emacs.d/init.el" \
   --eval '(unless (and (featurep '\''vertico) (featurep '\''marginalia)) (kill-emacs 1))'
 
 {
@@ -62,8 +79,8 @@ HOME=$test_home /usr/bin/emacs --batch --no-site-file --no-site-lisp \
   printf '%s\n' 'packages:'
   dpkg-query -W -f='${binary:Package} ${Version}\n' "${packages[@]}"
   printf '%s\n' 'profiles:'
-  printf '%s\n' 'core: emacs -Q -nw'
-  printf '%s\n' 'modern: emacs -nw with early init, Vertico, Marginalia, and Modus'
+  printf '%s\n' 'core: emacs -nw with early init'
+  printf '%s\n' 'modern: emacs -nw with early init, Vertico, and Marginalia'
   printf '%s\n' 'copyright metadata:'
   printf '%s\n' "$doc_dst"/*.copyright
 } > "$provenance"

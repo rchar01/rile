@@ -11,11 +11,10 @@ RUN apt-get update \
     bash \
     ca-certificates \
     chromium \
-    curl \
-    emacs-nox \
-    elpa-marginalia \
-    elpa-modus-themes \
-    elpa-vertico \
+     curl \
+     emacs-nox \
+     elpa-marginalia \
+     elpa-vertico \
     ffmpeg \
     fontconfig \
     fonts-dejavu-core \
