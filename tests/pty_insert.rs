@@ -68,6 +68,47 @@ fn open_line_keeps_cursor_and_shifts_text_down() -> Result<()> {
 }
 
 #[test]
+fn quoted_insert_inserts_literal_text_tab_and_newline() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-q", keys::control('q'))?;
+    rile.assert_screen_contains("C-q-")?;
+    rile.send("quoted z", b"z")?;
+    rile.wait_for_screen_contains("zalpha")?;
+    rile.assert_cursor(0, 1)?;
+
+    rile.send("C-q", keys::control('q'))?;
+    rile.send("quoted Tab", keys::TAB)?;
+    rile.wait_for_screen_contains("z   alpha")?;
+    rile.assert_cursor(0, 4)?;
+
+    rile.send("C-q", keys::control('q'))?;
+    rile.send("quoted Enter", keys::ENTER)?;
+    rile.assert_screen_contains("z")?;
+    rile.assert_screen_contains("alpha")?;
+    rile.assert_cursor(1, 0)?;
+
+    rile.send("C-q", keys::control('q'))?;
+    rile.send("quoted C-a", keys::control('a'))?;
+    rile.assert_screen_contains("Error: quoted control insertion is not supported")?;
+    rile.assert_cursor(1, 0)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-q", keys::control('q'))?;
+    rile.send("cancel quoted insert", keys::control('g'))?;
+    rile.assert_screen_contains("Quit")?;
+    rile.assert_cursor(1, 0)?;
+
+    rile.send("normal x after cancel", b"x")?;
+    rile.wait_for_screen_contains("xalpha")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn exchange_point_and_mark_keeps_region_active() -> Result<()> {
     let file = fixtures::named_temp_file("abcdef\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

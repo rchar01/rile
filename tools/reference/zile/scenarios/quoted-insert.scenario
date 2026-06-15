@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=quoted-insert
+SCENARIO_DESCRIPTION='Observe Zile C-q quoted-insert behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=quoted-insert.txt
+FIXTURE_CONTENT=$'alpha\nbeta\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+Q
+Type "z"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-quoted-printable.png
+Sleep 500ms
+Ctrl+Q
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-quoted-tab.png
+Sleep 500ms
+Ctrl+Q
+Ctrl+A
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-quoted-control-a.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

@@ -35,6 +35,7 @@ pub enum Command {
     NextLine,
     OpenLine,
     PreviousLine,
+    QuotedInsert,
     QueryReplace,
     Recenter,
     SaveBuffer,
@@ -241,6 +242,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new(
+            "quoted-insert",
+            "Insert the next key literally",
+            true,
+            QuotedInsert,
+        ),
+        CommandSpec::new(
             "query-replace",
             "Interactively replace text",
             true,
@@ -346,6 +353,7 @@ mod tests {
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("insert-file"));
+        assert!(registry.contains("quoted-insert"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));
         assert!(registry.contains("kill-line"));

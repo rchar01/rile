@@ -44,6 +44,7 @@ Initial inspection scenarios:
 - `modeline-state-core`: core Emacs mode-line clean, modified, saved,
   read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
+- `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.

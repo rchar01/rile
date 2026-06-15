@@ -37,6 +37,7 @@ Initial inspection scenarios:
 - `m-x-completion`: command prompt completion after Tab.
 - `find-file-completion`: file prompt completion after Tab.
 - `insert-file`: `C-x i` insert-file behavior.
+- `quoted-insert`: `C-q` quoted-insert behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `incremental-search`: `C-s` search prompt, repeat, and accept flow.

@@ -35,6 +35,7 @@ Baseline inspection scenarios:
 - `find-file-completion`: file prompt completion after Tab.
 - `incremental-search-wrap`: incremental search wrapping behavior.
 - `insert-file`: `C-x i` insert-file behavior.
+- `quoted-insert`: `C-q` quoted-insert behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `help-describe`: `C-h k` and `C-h f` help behavior.

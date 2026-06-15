@@ -254,11 +254,19 @@ undo entry. Empty input reports `Error: missing file name` to match Rile's
 existing file prompts, even though base Emacs defaults empty `insert-file` input
 to the current file.
 
+Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
+next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
+Tab, or Enter literally. NUL and other control, Meta, or special keys are
+rejected with explicit errors because Rile's renderer writes buffer text directly
+to the terminal and should not store arbitrary C0 control bytes yet. Read-only
+buffers block quoted insert before entering the pending quoted state.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
 unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal
-yet. Search and query replace are exact line-local substring matching; they do
-not wrap around the buffer and do not match across line breaks.
+yet. Search and query replace are exact line-local substring matching; search
+wraps only after an explicit boundary failure, query replace does not wrap, and
+neither command matches across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

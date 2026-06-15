@@ -1,3 +1,17 @@
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add quoted-insert on C-q
+	for printable text, Tab, and Enter, with explicit rejection of NUL and other
+	control or special keys.
+	* tests/pty_insert.rs: Cover quoted insert in a real PTY.
+	* tools/reference/emacs/scenarios/quoted-insert-core.scenario,
+	tools/reference/zile/scenarios/quoted-insert.scenario,
+	tools/reference/kg/scenarios/quoted-insert.scenario: Add focused quoted-insert
+	reference scenarios.
+	* README.md, docs/development.md, NEWS, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	quoted-insert.
+
 2026-06-14  Robert Charusta  <rch-public@posteo.net>
 
 	* tools/reference/emacs/build-in-container: Stage early-init.el for emacs-core,

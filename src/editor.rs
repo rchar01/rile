@@ -43,6 +43,7 @@ pub struct Editor {
     prompt_histories: Vec<PromptHistory>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
+    quoted_insert: bool,
     region: Option<RegionState>,
     kill_ring: Vec<String>,
     undo_stack: Vec<UndoEntry>,
@@ -149,6 +150,7 @@ impl Editor {
             prompt_histories: Vec::new(),
             search: None,
             query_replace: None,
+            quoted_insert: false,
             region: None,
             kill_ring: Vec::new(),
             undo_stack: Vec::new(),
@@ -355,12 +357,12 @@ impl Editor {
             return self.handle_query_replace_key(key);
         }
 
+        if self.quoted_insert {
+            return self.handle_quoted_insert_key(key);
+        }
+
         if key == KeyEvent::Ctrl('g') {
-            self.describe_key = None;
-            self.clear_key_sequence();
-            self.deactivate_region();
-            self.clear_insert_group();
-            self.minibuffer.set_message("Quit");
+            self.quit_current_operation();
             return Ok(EditorOutcome::Continue);
         }
 
@@ -902,6 +904,7 @@ impl Editor {
             NextLine => self.move_line(1),
             OpenLine => self.open_line(),
             PreviousLine => self.move_line(-1),
+            QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
             Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
@@ -938,6 +941,45 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         Ok(())
+    }
+
+    fn start_quoted_insert(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.quoted_insert = true;
+        self.minibuffer.set_message("C-q-");
+        Ok(())
+    }
+
+    fn handle_quoted_insert_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        self.quoted_insert = false;
+        match key {
+            KeyEvent::Ctrl('g') => self.quit_current_operation(),
+            KeyEvent::Text(text) => self.insert_text(&text, false)?,
+            KeyEvent::Special(SpecialKey::Enter) => self.insert_text("\n", false)?,
+            KeyEvent::Special(SpecialKey::Tab) => self.insert_text("\t", false)?,
+            KeyEvent::Ctrl('@') => self
+                .minibuffer
+                .set_error("quoted NUL insertion is not supported"),
+            KeyEvent::Ctrl(_)
+            | KeyEvent::Meta(_)
+            | KeyEvent::MetaSpecial(_)
+            | KeyEvent::Special(_) => self
+                .minibuffer
+                .set_error("quoted control insertion is not supported"),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn quit_current_operation(&mut self) {
+        self.quoted_insert = false;
+        self.describe_key = None;
+        self.clear_key_sequence();
+        self.deactivate_region();
+        self.clear_insert_group();
+        self.minibuffer.set_message("Quit");
     }
 
     fn move_backward(&mut self) -> Result<()> {
@@ -2886,6 +2928,133 @@ mod tests {
                 .expect("current window should exist")
                 .first_visible_line,
             0
+        );
+    }
+
+    #[test]
+    fn quoted_insert_inserts_supported_literal_keys() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for next key");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("C-q-"));
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("quoted printable should insert");
+        assert_eq!(editor.document().buffer().serialize(), "z");
+        assert_eq!(editor.cursor(), Position::new(0, 1));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for tab");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("quoted tab should insert");
+        assert_eq!(editor.document().buffer().serialize(), "z\t");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for enter");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("quoted enter should insert newline");
+        assert_eq!(editor.document().buffer().serialize(), "z\t\n");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove quoted newline");
+        assert_eq!(editor.document().buffer().serialize(), "z\t");
+    }
+
+    #[test]
+    fn quoted_insert_cancel_uses_quit_cleanup() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "xy")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        assert!(editor.active_region_range().is_some());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for cancel");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel quoted insert");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+        assert!(editor.active_region_range().is_none());
+
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("next key should insert normally");
+        assert_eq!(editor.document().buffer().serialize(), "xzy");
+    }
+
+    #[test]
+    fn quoted_insert_rejects_control_keys_and_read_only_buffers() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for next key");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("unsupported control should be reported");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: quoted control insertion is not supported")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for next key after rejection");
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("quoted NUL should be reported separately");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: quoted NUL insertion is not supported")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("C-q should wait for cancel");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel quoted insert");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("x should insert normally after cancel");
+        assert_eq!(editor.document().buffer().serialize(), "x");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove x before read-only check");
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .handle_key(KeyEvent::Ctrl('q'))
+            .expect("read-only quoted insert should not error");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("x should not be consumed by quoted insert after read-only guard");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
         );
     }
 

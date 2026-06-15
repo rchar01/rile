@@ -19,6 +19,8 @@ Editing features:
   and word.
 * Delete characters, kill words and lines, set a mark, kill/copy regions,
   and yank.
+* Quote the next key with C-q to insert printable text, Tab, or Enter
+  literally.
 * Undo current-buffer edits with grouped normal typing.
 * Run commands through M-x with command-name completion.
 * Open files through C-x C-f with file-name completion.
