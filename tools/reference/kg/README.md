@@ -34,6 +34,7 @@ Initial inspection scenarios:
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
 - `consecutive-kills`: consecutive kill and yank behavior.
 - `join-line`: `M-^` join-line behavior.
+- `keyboard-macro`: keyboard macro and repeat behavior.
 - `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
 - `open-line`: `C-o` behavior with point in the first line.

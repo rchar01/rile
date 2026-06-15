@@ -284,6 +284,15 @@ current line to the previous line, trims trailing whitespace before the newline
 and leading indentation after it, inserts one separating space when both sides
 contain text, places point at the join, and records a single undoable edit.
 
+Post-Milestone 14 macro polish adds keyboard macros with `C-x (` /
+`start-kbd-macro`, `C-x )` / `end-kbd-macro`, and `C-x e` /
+`call-last-kbd-macro`. Rile records raw `KeyEvent` input after macro definition
+starts, trims the terminating `C-x )`, and replays the saved keys through normal
+editor key handling so prompt input and command dispatch behave like typed input.
+Macro replay skips recording, rejects recursive or nested macro execution, and
+honors `C-u` repeat counts before `C-x e`. Emacs-style `C-u 0 C-x e` repeat until
+error behavior is deferred; Rile currently treats zero as zero executions.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
 unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal

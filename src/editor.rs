@@ -32,6 +32,8 @@ pub struct Editor {
     cursor: Position,
     goal_display_column: Option<usize>,
     key_sequence: Vec<KeyEvent>,
+    current_command_sequence: Option<Vec<KeyEvent>>,
+    keyboard_macro_prompt_start: Option<usize>,
     keymap: KeyMap,
     commands: CommandRegistry,
     minibuffer: MinibufferState,
@@ -41,6 +43,9 @@ pub struct Editor {
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
     prompt_histories: Vec<PromptHistory>,
+    recording_keyboard_macro: Option<Vec<KeyEvent>>,
+    last_keyboard_macro: Option<Vec<KeyEvent>>,
+    replaying_keyboard_macro: bool,
     universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
@@ -199,6 +204,8 @@ impl Editor {
             cursor: Position::new(0, 0),
             goal_display_column: None,
             key_sequence: Vec::new(),
+            current_command_sequence: None,
+            keyboard_macro_prompt_start: None,
             keymap: KeyMap::default(),
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
@@ -208,6 +215,9 @@ impl Editor {
             completion_return: None,
             completion_config: config.completion,
             prompt_histories: Vec::new(),
+            recording_keyboard_macro: None,
+            last_keyboard_macro: None,
+            replaying_keyboard_macro: false,
             universal_argument: None,
             search: None,
             query_replace: None,
@@ -411,6 +421,8 @@ impl Editor {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        self.record_keyboard_macro_key(&key);
+
         if self.minibuffer.prompt().is_some() {
             return self.handle_prompt_key(key);
         }
@@ -525,8 +537,12 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             KeyResolution::Command(name) => {
+                let command_sequence = self.key_sequence.clone();
                 self.clear_key_sequence();
-                self.execute_command_by_name(name)
+                self.current_command_sequence = Some(command_sequence);
+                let result = self.execute_command_by_name(name);
+                self.current_command_sequence = None;
+                result
             }
         }
     }
@@ -635,6 +651,7 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
                 self.reset_current_prompt_history_navigation();
+                self.keyboard_macro_prompt_start = None;
                 if matches!(
                     self.minibuffer.prompt_kind(),
                     Some(PromptKind::QueryReplaceSearch | PromptKind::QueryReplaceReplacement)
@@ -695,6 +712,7 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
                 self.reset_current_prompt_history_navigation();
+                self.keyboard_macro_prompt_start = None;
                 self.minibuffer.cancel_prompt();
                 self.finish_completion_buffer();
                 self.completion = None;
@@ -979,7 +997,7 @@ impl Editor {
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
         match kind {
             PromptKind::DescribeFunction => Ok(self.describe_function(input.trim())),
-            PromptKind::ExtendedCommand => self.execute_command_by_name(input.trim()),
+            PromptKind::ExtendedCommand => self.submit_extended_command(input.trim()),
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
@@ -991,6 +1009,19 @@ impl Editor {
             PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
             PromptKind::WriteFile => self.write_file(input.trim()),
         }
+    }
+
+    fn submit_extended_command(&mut self, name: &str) -> Result<EditorOutcome> {
+        if self
+            .commands
+            .get(name)
+            .is_some_and(|spec| is_keyboard_macro_control_command(spec.command))
+        {
+            self.trim_keyboard_macro_prompt_invocation();
+        } else {
+            self.clear_keyboard_macro_prompt_start();
+        }
+        self.execute_command_by_name(name)
     }
 
     fn execute_command(
@@ -1022,6 +1053,7 @@ impl Editor {
             }
             BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
+            CallLastKeyboardMacro => return self.call_last_keyboard_macro(argument),
             CopyRegionAsKill => self.copy_region_as_kill(),
             DeleteBackwardChar => {
                 self.repeat_signed(argument, Self::delete_backward_char, Self::delete_char)
@@ -1033,6 +1065,7 @@ impl Editor {
             DeleteWindow => self.delete_window(),
             DescribeFunction => self.start_describe_function(),
             DescribeKey => self.start_describe_key(),
+            EndKeyboardMacro => self.end_keyboard_macro(),
             EndOfBuffer => self.move_end_of_buffer(),
             EndOfLine => self.move_end_of_line(),
             ExchangePointAndMark => self.exchange_point_and_mark(),
@@ -1064,6 +1097,7 @@ impl Editor {
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             SetMarkCommand => self.set_mark_command(),
+            StartKeyboardMacro => self.start_keyboard_macro(),
             KillBuffer => self.start_kill_buffer(),
             OtherWindow => self.other_window(),
             ScrollPageBackward => self.scroll_page_backward(),
@@ -1237,6 +1271,139 @@ impl Editor {
         self.universal_argument
             .take()
             .map(UniversalArgumentState::value)
+    }
+
+    fn record_keyboard_macro_key(&mut self, key: &KeyEvent) {
+        if self.replaying_keyboard_macro {
+            return;
+        }
+        if let Some(keys) = &mut self.recording_keyboard_macro {
+            keys.push(key.clone());
+        }
+    }
+
+    fn trim_current_command_from_keyboard_macro(&mut self) {
+        let Some(sequence) = &self.current_command_sequence else {
+            return;
+        };
+        let Some(keys) = &mut self.recording_keyboard_macro else {
+            return;
+        };
+        for _ in 0..sequence.len().min(keys.len()) {
+            keys.pop();
+        }
+    }
+
+    fn mark_keyboard_macro_prompt_start(&mut self) {
+        let Some(sequence) = &self.current_command_sequence else {
+            return;
+        };
+        let Some(keys) = &self.recording_keyboard_macro else {
+            return;
+        };
+        self.keyboard_macro_prompt_start = Some(keys.len().saturating_sub(sequence.len()));
+    }
+
+    fn trim_keyboard_macro_prompt_invocation(&mut self) {
+        let Some(start) = self.keyboard_macro_prompt_start.take() else {
+            return;
+        };
+        let Some(keys) = &mut self.recording_keyboard_macro else {
+            return;
+        };
+        keys.truncate(start.min(keys.len()));
+    }
+
+    fn clear_keyboard_macro_prompt_start(&mut self) {
+        self.keyboard_macro_prompt_start = None;
+    }
+
+    fn start_keyboard_macro(&mut self) -> Result<()> {
+        if self.replaying_keyboard_macro {
+            self.minibuffer
+                .set_error("Cannot define keyboard macro while executing one");
+            return Ok(());
+        }
+        if self.recording_keyboard_macro.is_some() {
+            self.trim_current_command_from_keyboard_macro();
+            self.minibuffer.set_error("Already defining keyboard macro");
+            return Ok(());
+        }
+
+        self.recording_keyboard_macro = Some(Vec::new());
+        self.minibuffer.set_message("Defining keyboard macro...");
+        Ok(())
+    }
+
+    fn end_keyboard_macro(&mut self) -> Result<()> {
+        if self.recording_keyboard_macro.is_none() {
+            self.minibuffer.set_error("Not defining keyboard macro");
+            return Ok(());
+        }
+
+        self.trim_current_command_from_keyboard_macro();
+        let keys = self
+            .recording_keyboard_macro
+            .take()
+            .expect("recording macro should exist");
+        if keys.is_empty() {
+            self.last_keyboard_macro = None;
+            self.minibuffer.set_message("Ignored empty keyboard macro");
+        } else {
+            let count = keys.len();
+            self.last_keyboard_macro = Some(keys);
+            self.minibuffer
+                .set_message(format!("Keyboard macro defined ({count} keys)"));
+        }
+        Ok(())
+    }
+
+    fn call_last_keyboard_macro(&mut self, argument: Option<i32>) -> Result<EditorOutcome> {
+        if self.recording_keyboard_macro.is_some() {
+            self.trim_current_command_from_keyboard_macro();
+            self.minibuffer
+                .set_error("Cannot execute keyboard macro while defining one");
+            return Ok(EditorOutcome::Continue);
+        }
+        if self.replaying_keyboard_macro {
+            self.minibuffer
+                .set_error("Cannot execute keyboard macro recursively");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        let Some(keys) = self.last_keyboard_macro.clone() else {
+            self.minibuffer.set_error("No keyboard macro defined");
+            return Ok(EditorOutcome::Continue);
+        };
+
+        let repeat_count = positive_argument_count(argument);
+        if repeat_count == 0 {
+            self.minibuffer
+                .set_message("Keyboard macro repeated 0 times");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        self.replaying_keyboard_macro = true;
+        let replay_result: Result<EditorOutcome> = (|| {
+            for _ in 0..repeat_count {
+                for key in &keys {
+                    let outcome = self.handle_key(key.clone())?;
+                    if outcome == EditorOutcome::Quit {
+                        return Ok(EditorOutcome::Quit);
+                    }
+                }
+            }
+            Ok(EditorOutcome::Continue)
+        })();
+        self.replaying_keyboard_macro = false;
+
+        if replay_result? == EditorOutcome::Quit {
+            return Ok(EditorOutcome::Quit);
+        }
+
+        self.minibuffer
+            .set_message(format!("Keyboard macro executed ({repeat_count} times)"));
+        Ok(EditorOutcome::Continue)
     }
 
     fn start_quoted_insert(&mut self) -> Result<()> {
@@ -1870,6 +2037,7 @@ impl Editor {
     }
 
     fn start_extended_command(&mut self) -> Result<()> {
+        self.mark_keyboard_macro_prompt_start();
         self.minibuffer
             .start_prompt(PromptKind::ExtendedCommand, "M-x ");
         self.completion = Some(CompletionSession::commands(
@@ -2893,6 +3061,13 @@ fn is_kill_command(command: Command) -> bool {
 
 fn is_yank_command(command: Command) -> bool {
     matches!(command, Command::Yank | Command::YankPop)
+}
+
+fn is_keyboard_macro_control_command(command: Command) -> bool {
+    matches!(
+        command,
+        Command::CallLastKeyboardMacro | Command::EndKeyboardMacro | Command::StartKeyboardMacro
+    )
 }
 
 fn positive_argument_count(argument: Option<i32>) -> usize {
@@ -5748,6 +5923,216 @@ M-g g           goto-line\n"
 
         assert_eq!(editor.document().buffer().serialize(), "x");
         assert_eq!(editor.cursor(), Position::new(0, 1));
+    }
+
+    #[test]
+    fn keyboard_macro_records_and_replays_raw_keys() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("(".to_owned()))
+            .expect("macro should start");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert while recording");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("movement should record");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(")".to_owned()))
+            .expect("macro should end");
+        assert_eq!(editor.document().buffer().serialize(), "xabc");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("macro should execute");
+
+        assert_eq!(editor.document().buffer().serialize(), "xaxbc");
+        assert_eq!(editor.cursor(), Position::new(0, 4));
+    }
+
+    #[test]
+    fn keyboard_macro_records_prompt_input() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("(".to_owned()))
+            .expect("macro should start");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should prompt");
+        for text in "forward-char".chars() {
+            editor
+                .handle_key(KeyEvent::Text(text.to_string()))
+                .expect("prompt input should record");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("prompt should submit");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(")".to_owned()))
+            .expect("macro should end");
+        assert_eq!(editor.cursor(), Position::new(0, 1));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("macro should replay prompt input");
+
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+    }
+
+    #[test]
+    fn keyboard_macro_replay_propagates_quit() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.last_keyboard_macro = Some(vec![KeyEvent::Ctrl('x'), KeyEvent::Ctrl('c')]);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        let outcome = editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("macro should execute");
+
+        assert_eq!(outcome, EditorOutcome::Quit);
+    }
+
+    #[test]
+    fn keyboard_macro_replay_clears_state_after_error() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.cursor = Position::new(99, 0);
+        editor.last_keyboard_macro = Some(vec![KeyEvent::Text("x".to_owned())]);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        assert!(editor.handle_key(KeyEvent::Text("e".to_owned())).is_err());
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("(".to_owned()))
+            .expect("macro should start after replay error");
+
+        assert!(editor.recording_keyboard_macro.is_some());
+        assert!(!editor.replaying_keyboard_macro);
+    }
+
+    #[test]
+    fn keyboard_macro_trims_m_x_macro_control_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("(".to_owned()))
+            .expect("macro should start");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert while recording");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should prompt");
+        for text in "end-kbd-macro".chars() {
+            editor
+                .handle_key(KeyEvent::Text(text.to_string()))
+                .expect("prompt input should record before trimming");
+        }
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("macro should end through M-x");
+        assert_eq!(editor.document().buffer().serialize(), "x");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("macro should execute");
+
+        assert_eq!(editor.document().buffer().serialize(), "xx");
+    }
+
+    #[test]
+    fn universal_argument_repeats_keyboard_macro_execution() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("(".to_owned()))
+            .expect("macro should start");
+        editor
+            .handle_key(KeyEvent::Text(">".to_owned()))
+            .expect("text should insert while recording");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("next-line should record");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("beginning-of-line should record");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text(")".to_owned()))
+            .expect("macro should end");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("macro should execute twice");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            ">one\n>two\n>three\n"
+        );
+        assert_eq!(editor.cursor(), Position::new(3, 0));
     }
 
     #[test]

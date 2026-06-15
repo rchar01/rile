@@ -43,6 +43,8 @@ Basic editor keys:
 - `C-q` quotes the next key, inserting printable text, Tab, or Enter literally.
 - `C-u` supplies a numeric argument for the next repeatable command; repeated
   `C-u` multiplies by four, and digits enter an explicit count.
+- `C-x (` starts recording a keyboard macro, `C-x )` ends it, and `C-x e`
+  replays the latest macro. `C-u` before `C-x e` repeats macro execution.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-^` joins the current line to the previous line, trimming indentation around

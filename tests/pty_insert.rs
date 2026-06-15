@@ -93,6 +93,35 @@ fn universal_argument_repeats_visible_movement_and_insert() -> Result<()> {
 }
 
 #[test]
+fn keyboard_macro_replays_visible_editing_with_repeat_count() -> Result<()> {
+    let file = fixtures::named_temp_file("one\ntwo\nthree\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("(", b"(")?;
+    rile.assert_screen_contains("Defining keyboard macro")?;
+    rile.send(">", b">")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send(")", b")")?;
+    rile.wait_for_screen_contains(">one")?;
+    rile.assert_screen_contains("Keyboard macro defined")?;
+
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("2", b"2")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("e", b"e")?;
+    rile.wait_for_screen_contains(">three")?;
+    rile.assert_screen_contains(">two")?;
+    rile.assert_cursor(3, 0)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn join_line_merges_current_line_with_previous() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\n  beta\n\n    gamma\nlast\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

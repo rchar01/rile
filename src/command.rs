@@ -9,6 +9,7 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     BeginningOfLine,
+    CallLastKeyboardMacro,
     CopyRegionAsKill,
     DeleteBackwardChar,
     DeleteChar,
@@ -16,6 +17,7 @@ pub enum Command {
     DeleteWindow,
     DescribeFunction,
     DescribeKey,
+    EndKeyboardMacro,
     EndOfBuffer,
     EndOfLine,
     ExchangePointAndMark,
@@ -44,6 +46,7 @@ pub enum Command {
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
+    StartKeyboardMacro,
     OtherWindow,
     SplitWindowBelow,
     SplitWindowRight,
@@ -155,6 +158,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             BeginningOfLine,
         ),
         CommandSpec::new(
+            "call-last-kbd-macro",
+            "Execute the last keyboard macro",
+            true,
+            CallLastKeyboardMacro,
+        ),
+        CommandSpec::new(
             "copy-region-as-kill",
             "Copy active region to kill ring",
             true,
@@ -186,6 +195,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             DescribeFunction,
         ),
         CommandSpec::new("describe-key", "Describe a key binding", true, DescribeKey),
+        CommandSpec::new(
+            "end-kbd-macro",
+            "Finish defining a keyboard macro",
+            true,
+            EndKeyboardMacro,
+        ),
         CommandSpec::new(
             "end-of-buffer",
             "Move cursor to end of buffer",
@@ -298,6 +313,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             SetMarkCommand,
         ),
         CommandSpec::new(
+            "start-kbd-macro",
+            "Start defining a keyboard macro",
+            true,
+            StartKeyboardMacro,
+        ),
+        CommandSpec::new(
             "split-window-below",
             "Split current window horizontally",
             true,
@@ -368,7 +389,9 @@ mod tests {
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));
         assert!(registry.contains("backward-word"));
+        assert!(registry.contains("call-last-kbd-macro"));
         assert!(registry.contains("end-of-buffer"));
+        assert!(registry.contains("end-kbd-macro"));
         assert!(registry.contains("exchange-point-and-mark"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
@@ -397,6 +420,7 @@ mod tests {
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));
+        assert!(registry.contains("start-kbd-macro"));
         assert!(registry.contains("toggle-line-numbers"));
         assert!(registry.contains("toggle-read-only"));
         assert!(registry.contains("toggle-search-highlighting"));

@@ -191,6 +191,18 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], "write-file"),
         KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
+            "start-kbd-macro",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())],
+            "end-kbd-macro",
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("e".to_owned())],
+            "call-last-kbd-macro",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("h".to_owned())],
             "mark-whole-buffer",
         ),
@@ -376,6 +388,18 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')]),
             KeyResolution::Command("write-file")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())]),
+            KeyResolution::Command("start-kbd-macro")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())]),
+            KeyResolution::Command("end-kbd-macro")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("e".to_owned())]),
+            KeyResolution::Command("call-last-kbd-macro")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("h".to_owned())]),

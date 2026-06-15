@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=keyboard-macro
+SCENARIO_DESCRIPTION='Observe kg keyboard macro and C-u repeat behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=keyboard-macro.txt
+FIXTURE_CONTENT=$'one
+two
+three
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Type "("
+Type ">"
+Ctrl+N
+Ctrl+A
+Ctrl+X
+Type ")"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-record-prefix-first-line.png
+Sleep 500ms
+Ctrl+U
+Type "2"
+Ctrl+X
+Type "e"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-c-u-2-call-last-macro.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
