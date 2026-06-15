@@ -193,6 +193,9 @@ clear on the next non-prompt command unless that command writes a new message.
 Post-Milestone 14 region polish adds `exchange-point-and-mark` on `C-x C-x`.
 It swaps point with the current buffer's mark, reactivates the region, and
 reports `No mark set in this buffer` when no mark exists for the current buffer.
+`mark-whole-buffer` on `C-x h` moves point to the beginning of the buffer, sets
+the mark at the buffer end, activates the region, reports `Mark set`, and does
+not modify read-only or writable buffer contents.
 
 Post-Milestone 14 word-kill polish adds `kill-word` on `M-d` and
 `backward-kill-word` on `M-Backspace`, using the same Unicode-aware word

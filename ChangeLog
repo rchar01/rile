@@ -1,5 +1,18 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add mark-whole-buffer on
+	C-x h, setting point to buffer start and mark to buffer end without editing.
+	* tests/pty_insert.rs: Cover mark-whole-buffer in a real PTY.
+	* tools/reference/emacs/scenarios/mark-whole-buffer-core.scenario,
+	tools/reference/zile/scenarios/mark-whole-buffer.scenario,
+	tools/reference/kg/scenarios/mark-whole-buffer.scenario: Add focused
+	mark-whole-buffer reference scenarios for C-x h behavior.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	mark-whole-buffer.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add join-line on M-^, joining
 	the current line to the previous line with whitespace cleanup and undo support.
 	* tests/pty_insert.rs: Cover join-line in a real PTY.

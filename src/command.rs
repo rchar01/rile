@@ -33,6 +33,7 @@ pub enum Command {
     KillBuffer,
     KillRegion,
     KillWord,
+    MarkWholeBuffer,
     NextLine,
     OpenLine,
     PreviousLine,
@@ -244,6 +245,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
         CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord),
+        CommandSpec::new(
+            "mark-whole-buffer",
+            "Mark the whole buffer",
+            true,
+            MarkWholeBuffer,
+        ),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
@@ -367,6 +374,7 @@ mod tests {
         assert!(registry.contains("kill-line"));
         assert!(registry.contains("kill-region"));
         assert!(registry.contains("kill-word"));
+        assert!(registry.contains("mark-whole-buffer"));
         assert!(registry.contains("copy-region-as-kill"));
         assert!(registry.contains("yank"));
         assert!(registry.contains("undo"));

@@ -17,8 +17,8 @@ Editing features:
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, visible page, beginning/end of line, indentation,
   and word.
-* Delete characters, kill words and lines, set a mark, kill/copy regions,
-  and yank.
+* Delete characters, kill words and lines, set a mark, mark the whole buffer,
+  kill/copy regions, and yank.
 * Join the current line to the previous line with M-^.
 * Quote the next key with C-q to insert printable text, Tab, or Enter
   literally.

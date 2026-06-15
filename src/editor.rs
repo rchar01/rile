@@ -902,6 +902,7 @@ impl Editor {
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
             KillWord => self.kill_word(),
+            MarkWholeBuffer => self.mark_whole_buffer(),
             NextLine => self.move_line(1),
             OpenLine => self.open_line(),
             PreviousLine => self.move_line(-1),
@@ -1192,6 +1193,21 @@ impl Editor {
             mark: self.cursor,
             active: true,
         });
+        self.minibuffer.set_message("Mark set");
+        Ok(())
+    }
+
+    fn mark_whole_buffer(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let mark = self.document().buffer().end_position();
+        self.cursor = Position::new(0, 0);
+        self.region = Some(RegionState {
+            buffer: self.current_buffer,
+            mark,
+            active: true,
+        });
+        self.goal_display_column = None;
+        self.sync_current_window();
         self.minibuffer.set_message("Mark set");
         Ok(())
     }
@@ -2790,7 +2806,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{Editor, EditorOutcome};
-    use crate::buffer::Position;
+    use crate::buffer::{Position, TextRange};
     use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
@@ -5078,6 +5094,72 @@ M-g g           goto-line\n"
         assert_eq!(spans[0].start_byte, 2);
         assert_eq!(spans[0].end_byte, 4);
         assert_eq!(spans[0].face, Face::Region);
+    }
+
+    #[test]
+    fn mark_whole_buffer_sets_point_to_start_and_mark_to_end() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n  beta\nlast line\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move right");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("h".to_owned()))
+            .expect("whole buffer should mark");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.active_region_range(),
+            Some(TextRange::new(Position::new(0, 0), Position::new(3, 0)))
+        );
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Mark set"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("point and mark should exchange");
+
+        assert_eq!(editor.cursor(), Position::new(3, 0));
+        assert_eq!(
+            editor.active_region_range(),
+            Some(TextRange::new(Position::new(0, 0), Position::new(3, 0)))
+        );
+    }
+
+    #[test]
+    fn mark_whole_buffer_does_not_modify_read_only_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        document.set_read_only(true);
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("read-only buffer can be marked");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.active_region_range(),
+            Some(TextRange::new(Position::new(0, 0), Position::new(0, 5)))
+        );
+        assert!(!editor.document().buffer().is_dirty());
     }
 
     #[test]

@@ -161,6 +161,35 @@ fn exchange_point_and_mark_keeps_region_active() -> Result<()> {
 }
 
 #[test]
+fn mark_whole_buffer_selects_entire_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n  beta\nlast line\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.assert_cursor(1, 1)?;
+
+    rile.send("C-x h", keys::control('x'))?;
+    rile.send("h", b"h")?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_screen_contains("Mark set")?;
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("C-x C-x", keys::control_sequence("xx"))?;
+    rile.assert_cursor(3, 0)?;
+    rile.assert_status_contains("Ln 004 Col 000")?;
+
+    rile.send("C-w", keys::control('w'))?;
+    rile.assert_screen_contains("Killed region")?;
+    rile.assert_status_contains("modified:true")?;
+    assert!(!rile.snapshot_text().contains("alpha"));
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn kill_word_and_backward_kill_word_edit_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("one two three")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

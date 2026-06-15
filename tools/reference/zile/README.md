@@ -30,6 +30,7 @@ Baseline inspection scenarios:
 - `baseline-ui`: basic screen layout and mode line.
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
 - `join-line`: `M-^` join-line behavior.
+- `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
 - `long-line`: horizontal clipping behavior.
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.
