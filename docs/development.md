@@ -297,9 +297,13 @@ Post-Milestone 14 rectangle polish adds `C-x SPC` / `rectangle-mark-mode`.
 Rectangle mark mode stores a rectangular active region in display columns and
 renders it with the normal region face. `C-w` and `M-w` on a rectangle-marked
 region save typed rectangle kill-ring entries, and regular `C-y` yanks those
-entries back as columns, padding shorter target lines with spaces. Rectangle
-kill and yank operations are undoable as one grouped edit. Legacy `C-x r ...`
-rectangle commands and `M-y` rotation across rectangle entries are deferred.
+entries back as columns, padding shorter target lines with spaces. The explicit
+rectangle command subset `C-x r k`, `C-x r M-w`, `C-x r y`, `C-x r d`,
+`C-x r c`, and `C-x r o` uses mark and point for kill, copy, yank, delete,
+clear, and open operations without implementing Emacs registers yet. Rectangle
+kill, yank, delete, clear, and open operations are undoable as one grouped edit.
+Register-backed `C-x r ...` commands, `string-rectangle`, rectangle line
+numbering, and `M-y` rotation across rectangle entries are deferred.
 
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no

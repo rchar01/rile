@@ -10,9 +10,12 @@ pub enum Command {
     BeginningOfBuffer,
     BeginningOfLine,
     CallLastKeyboardMacro,
+    ClearRectangle,
     CopyRegionAsKill,
+    CopyRectangleAsKill,
     DeleteBackwardChar,
     DeleteChar,
+    DeleteRectangle,
     DeleteOtherWindows,
     DeleteWindow,
     DescribeFunction,
@@ -35,10 +38,12 @@ pub enum Command {
     KillLine,
     KillBuffer,
     KillRegion,
+    KillRectangle,
     KillWord,
     MarkWholeBuffer,
     NextLine,
     OpenLine,
+    OpenRectangle,
     PreviousLine,
     QuotedInsert,
     QueryReplace,
@@ -62,6 +67,7 @@ pub enum Command {
     UniversalArgument,
     WriteFile,
     Yank,
+    YankRectangle,
     YankPop,
 }
 
@@ -165,10 +171,22 @@ pub fn default_commands() -> Vec<CommandSpec> {
             CallLastKeyboardMacro,
         ),
         CommandSpec::new(
+            "clear-rectangle",
+            "Replace rectangle contents with spaces",
+            true,
+            ClearRectangle,
+        ),
+        CommandSpec::new(
             "copy-region-as-kill",
             "Copy active region to kill ring",
             true,
             CopyRegionAsKill,
+        ),
+        CommandSpec::new(
+            "copy-rectangle-as-kill",
+            "Copy rectangle to kill ring",
+            true,
+            CopyRectangleAsKill,
         ),
         CommandSpec::new(
             "delete-backward-char",
@@ -181,6 +199,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Delete character at cursor",
             true,
             DeleteChar,
+        ),
+        CommandSpec::new(
+            "delete-rectangle",
+            "Delete rectangle without saving it",
+            true,
+            DeleteRectangle,
         ),
         CommandSpec::new(
             "delete-other-windows",
@@ -264,6 +288,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
+        CommandSpec::new(
+            "kill-rectangle",
+            "Kill rectangle to kill ring",
+            true,
+            KillRectangle,
+        ),
         CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord),
         CommandSpec::new(
             "mark-whole-buffer",
@@ -273,6 +303,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
         CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
+        CommandSpec::new(
+            "open-rectangle",
+            "Insert blank space into rectangle columns",
+            true,
+            OpenRectangle,
+        ),
         CommandSpec::new("other-window", "Select next window", true, OtherWindow),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine),
         CommandSpec::new(
@@ -376,6 +412,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
         ),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
         CommandSpec::new("yank", "Insert latest kill", true, Yank),
+        CommandSpec::new(
+            "yank-rectangle",
+            "Insert latest killed rectangle",
+            true,
+            YankRectangle,
+        ),
         CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop),
     ]
 }
@@ -397,6 +439,8 @@ mod tests {
         assert!(registry.contains("backward-kill-word"));
         assert!(registry.contains("backward-word"));
         assert!(registry.contains("call-last-kbd-macro"));
+        assert!(registry.contains("clear-rectangle"));
+        assert!(registry.contains("copy-rectangle-as-kill"));
         assert!(registry.contains("end-of-buffer"));
         assert!(registry.contains("end-kbd-macro"));
         assert!(registry.contains("exchange-point-and-mark"));
@@ -415,10 +459,13 @@ mod tests {
         assert!(registry.contains("kill-buffer"));
         assert!(registry.contains("kill-line"));
         assert!(registry.contains("kill-region"));
+        assert!(registry.contains("kill-rectangle"));
         assert!(registry.contains("kill-word"));
         assert!(registry.contains("mark-whole-buffer"));
+        assert!(registry.contains("open-rectangle"));
         assert!(registry.contains("copy-region-as-kill"));
         assert!(registry.contains("yank"));
+        assert!(registry.contains("yank-rectangle"));
         assert!(registry.contains("yank-pop"));
         assert!(registry.contains("undo"));
         assert!(registry.contains("universal-argument"));
@@ -436,6 +483,7 @@ mod tests {
         assert!(registry.contains("write-file"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
+        assert!(registry.contains("delete-rectangle"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
         assert!(registry.contains("describe-function"));

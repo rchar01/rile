@@ -150,6 +150,37 @@ fn rectangle_mark_copy_and_regular_yank_paste_columns() -> Result<()> {
 }
 
 #[test]
+fn c_x_r_rectangle_copy_and_yank_paste_columns() -> Result<()> {
+    let file = fixtures::named_temp_file("abcdef\n123456\nuvwxyz\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("abcdef")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("SPC", b" ")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("M-w", keys::meta('w'))?;
+    rile.assert_screen_contains("Copied rectangle")?;
+
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("y", b"y")?;
+    rile.wait_for_screen_contains("uvwxyzbc")?;
+    rile.assert_screen_contains("      23")?;
+    rile.assert_cursor(3, 8)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn join_line_merges_current_line_with_previous() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\n  beta\n\n    gamma\nlast\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

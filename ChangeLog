@@ -1,5 +1,14 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add C-x r rectangle kill,
+	copy, yank, delete, clear, and open commands without register storage.
+	* README.md, docs/development.md, NEWS: Document explicit rectangle commands
+	and defer register-backed rectangle commands.
+	* tools/reference/zile/README.md, tools/reference/kg/README.md: Clarify
+	focused rectangle-mark capture behavior.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/buffer/mod.rs, src/buffer/undo.rs, src/command.rs, src/keymap.rs,
 	src/editor.rs: Add rectangle-mark-mode on C-x SPC with rectangle-aware C-w,
 	M-w, and C-y behavior.

@@ -1085,13 +1085,16 @@ impl Editor {
             BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
             CallLastKeyboardMacro => return self.call_last_keyboard_macro(argument),
+            ClearRectangle => self.clear_rectangle(),
             CopyRegionAsKill => self.copy_region_as_kill(),
+            CopyRectangleAsKill => self.copy_rectangle_as_kill(),
             DeleteBackwardChar => {
                 self.repeat_signed(argument, Self::delete_backward_char, Self::delete_char)
             }
             DeleteChar => {
                 self.repeat_signed(argument, Self::delete_char, Self::delete_backward_char)
             }
+            DeleteRectangle => self.delete_rectangle_command(),
             DeleteOtherWindows => self.delete_other_windows(),
             DeleteWindow => self.delete_window(),
             DescribeFunction => self.start_describe_function(),
@@ -1115,12 +1118,14 @@ impl Editor {
             ListBuffers => self.list_buffers(),
             KillLine => self.repeat_positive_kill(argument, Self::kill_line),
             KillRegion => self.kill_region(),
+            KillRectangle => self.kill_rectangle_command(),
             KillWord => {
                 self.repeat_signed_kill(argument, Self::kill_word, Self::backward_kill_word)
             }
             MarkWholeBuffer => self.mark_whole_buffer(),
             NextLine => self.move_line_by_argument(argument, 1),
             OpenLine => self.repeat_positive(argument, Self::open_line),
+            OpenRectangle => self.open_rectangle(),
             PreviousLine => self.move_line_by_argument(argument, -1),
             QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
@@ -1145,6 +1150,7 @@ impl Editor {
             UniversalArgument => self.extend_universal_argument(),
             WriteFile => self.start_write_file(),
             Yank => self.yank(),
+            YankRectangle => self.yank_rectangle_command(),
             YankPop => self.yank_pop(),
         }?;
 
@@ -1764,6 +1770,24 @@ impl Editor {
         Ok(())
     }
 
+    fn copy_rectangle_as_kill(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        let text = self.document().buffer().text_in_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        self.push_kill(KillEntry::Rectangle(text));
+        self.deactivate_region();
+        self.minibuffer.set_message("Copied rectangle");
+        Ok(())
+    }
+
     fn kill_region(&mut self) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
@@ -1789,6 +1813,18 @@ impl Editor {
         Ok(())
     }
 
+    fn kill_rectangle_command(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        self.kill_rectangle(bounds)
+    }
+
     fn kill_rectangle(&mut self, bounds: RectangleBounds) -> Result<()> {
         let cursor_before = self.cursor;
         let (text, deletes) = self.document_mut().buffer_mut().delete_display_rectangle(
@@ -1804,6 +1840,91 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed rectangle");
+        Ok(())
+    }
+
+    fn delete_rectangle_command(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let (_, deletes) = self.document_mut().buffer_mut().delete_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        self.cursor = self.rectangle_position(bounds.end_line, bounds.start_column)?;
+        self.goal_display_column = None;
+        self.record_batch_delete(deletes, cursor_before, self.cursor);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Deleted rectangle");
+        Ok(())
+    }
+
+    fn clear_rectangle(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let width = bounds.end_column - bounds.start_column;
+        let replacement = vec![" ".repeat(width); bounds.end_line - bounds.start_line + 1];
+        let (_, deletes) = self.document_mut().buffer_mut().delete_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        let at = self.rectangle_position(bounds.start_line, bounds.start_column)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            at,
+            bounds.start_column,
+            &replacement,
+        )?;
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.record_rectangle_replace(deletes, inserts, cursor_before, cursor_after);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Cleared rectangle");
+        Ok(())
+    }
+
+    fn open_rectangle(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let width = bounds.end_column - bounds.start_column;
+        let blank = vec![" ".repeat(width); bounds.end_line - bounds.start_line + 1];
+        let at = self.rectangle_position(bounds.start_line, bounds.start_column)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            at,
+            bounds.start_column,
+            &blank,
+        )?;
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.record_batch_insert(inserts, cursor_before, cursor_after);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Opened rectangle");
         Ok(())
     }
 
@@ -1836,6 +1957,18 @@ impl Editor {
         self.sync_current_window();
         self.minibuffer.set_message("Yanked");
         Ok(())
+    }
+
+    fn yank_rectangle_command(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(kill_index) = self.latest_rectangle_kill_index() else {
+            self.minibuffer.set_error("no rectangle to yank");
+            return Ok(());
+        };
+        self.yank_rectangle(kill_index)
     }
 
     fn yank_rectangle(&mut self, kill_index: usize) -> Result<()> {
@@ -3008,6 +3141,29 @@ impl Editor {
         })
     }
 
+    fn rectangle_bounds_from_mark(&self) -> Option<RectangleBounds> {
+        let region = self.region?;
+        if region.buffer != self.current_buffer || region.mark == self.cursor {
+            return None;
+        }
+
+        let buffer = self.document().buffer();
+        let mark_column = buffer.display_column(region.mark).ok()?;
+        let cursor_column = buffer.display_column(self.cursor).ok()?;
+        let start_column = mark_column.min(cursor_column);
+        let end_column = mark_column.max(cursor_column);
+        if start_column == end_column {
+            return None;
+        }
+
+        Some(RectangleBounds {
+            start_line: region.mark.line.min(self.cursor.line),
+            end_line: region.mark.line.max(self.cursor.line),
+            start_column,
+            end_column,
+        })
+    }
+
     fn rectangle_position(&self, line: usize, column: usize) -> Result<Position> {
         Ok(Position::new(
             line,
@@ -3091,6 +3247,37 @@ impl Editor {
         self.record_batch(records);
     }
 
+    fn record_rectangle_replace(
+        &mut self,
+        deletes: Vec<RectangleEdit>,
+        inserts: Vec<RectangleEdit>,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) {
+        let mut records = deletes
+            .into_iter()
+            .filter(|(_, text)| !text.is_empty())
+            .map(|(range, text)| UndoRecord::Delete {
+                range,
+                text,
+                cursor_before,
+                cursor_after,
+            })
+            .collect::<Vec<_>>();
+        records.extend(
+            inserts
+                .into_iter()
+                .filter(|(_, text)| !text.is_empty())
+                .map(|(range, text)| UndoRecord::Insert {
+                    range,
+                    text,
+                    cursor_before,
+                    cursor_after,
+                }),
+        );
+        self.record_batch(records);
+    }
+
     fn record_batch(&mut self, records: Vec<UndoRecord>) {
         if records.is_empty() {
             return;
@@ -3101,6 +3288,12 @@ impl Editor {
         });
         self.clear_insert_group();
         self.refresh_visible_buffer_list();
+    }
+
+    fn latest_rectangle_kill_index(&self) -> Option<usize> {
+        self.kill_ring
+            .iter()
+            .rposition(|entry| matches!(entry, KillEntry::Rectangle(_)))
     }
 
     fn previous_text_kill_index(&self, from: usize) -> Option<usize> {
@@ -3287,7 +3480,11 @@ fn parse_goto_line_input(input: &str) -> std::result::Result<(usize, usize), ()>
 fn is_kill_command(command: Command) -> bool {
     matches!(
         command,
-        Command::BackwardKillWord | Command::KillLine | Command::KillRegion | Command::KillWord
+        Command::BackwardKillWord
+            | Command::KillLine
+            | Command::KillRegion
+            | Command::KillRectangle
+            | Command::KillWord
     )
 }
 
@@ -3741,6 +3938,36 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    fn send_c_x_r(editor: &mut Editor, key: KeyEvent) {
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("r".to_owned()))
+            .expect("C-x r prefix should start");
+        editor.handle_key(key).expect("C-x r command should run");
+    }
+
+    fn mark_columns_one_to_three_across_two_lines(editor: &mut Editor) {
+        editor.cursor = Position::new(0, 0);
+        editor.deactivate_region();
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
     }
 
     #[test]
@@ -6832,6 +7059,119 @@ M-g g           goto-line\n"
         editor
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should remove yanked rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
+    fn c_x_r_copy_and_yank_use_mark_rectangle_without_registers() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Meta('w'));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Copied rectangle")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('e'))
+            .expect("cursor should move to line end");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        send_c_x_r(&mut editor, KeyEvent::Text("y".to_owned()));
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyzbc\n      23"
+        );
+        assert_eq!(editor.cursor(), Position::new(3, 8));
+    }
+
+    #[test]
+    fn c_x_r_kill_delete_clear_and_open_are_undoable_rectangles() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("k".to_owned()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "adef\n1456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Killed rectangle")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore killed rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("d".to_owned()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "adef\n1456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Deleted rectangle")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore deleted rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("c".to_owned()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "a  def\n1  456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Cleared rectangle")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore cleared rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("o".to_owned()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "a  bcdef\n1  23456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Opened rectangle")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore opened rectangle");
         assert_eq!(
             editor.document().buffer().serialize(),
             "abcdef\n123456\nuvwxyz\n"

@@ -211,6 +211,54 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "rectangle-mark-mode",
         ),
         KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("c".to_owned()),
+            ],
+            "clear-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("d".to_owned()),
+            ],
+            "delete-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("k".to_owned()),
+            ],
+            "kill-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Meta('w'),
+            ],
+            "copy-rectangle-as-kill",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("o".to_owned()),
+            ],
+            "open-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("y".to_owned()),
+            ],
+            "yank-rectangle",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')],
             "exchange-point-and-mark",
         ),
@@ -412,6 +460,58 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(" ".to_owned())]),
             KeyResolution::Command("rectangle-mark-mode")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("r".to_owned())]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("c".to_owned())
+            ]),
+            KeyResolution::Command("clear-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("d".to_owned())
+            ]),
+            KeyResolution::Command("delete-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("k".to_owned())
+            ]),
+            KeyResolution::Command("kill-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Meta('w')
+            ]),
+            KeyResolution::Command("copy-rectangle-as-kill")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("o".to_owned())
+            ]),
+            KeyResolution::Command("open-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("y".to_owned())
+            ]),
+            KeyResolution::Command("yank-rectangle")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')]),

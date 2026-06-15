@@ -53,6 +53,9 @@ Basic editor keys:
 - `C-@` sets the mark at point.
 - `C-x SPC` starts rectangle mark mode; `C-w`, `M-w`, and `C-y` then kill,
   copy, and yank rectangular columns.
+- `C-x r k`, `C-x r M-w`, and `C-x r y` kill, copy, and yank rectangles
+  using mark and point. `C-x r d` deletes a rectangle without saving it,
+  `C-x r c` clears it to spaces, and `C-x r o` opens blank columns.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.
