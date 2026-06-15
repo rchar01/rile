@@ -32,6 +32,7 @@ Initial inspection scenarios:
 
 - `baseline-ui`: basic screen layout and mode line.
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
+- `join-line`: `M-^` join-line behavior.
 - `open-line`: `C-o` behavior with point in the first line.
 - `goto-line`: `M-g` prompt and `line:col` navigation behavior.
 - `m-x-completion`: command prompt completion after Tab.

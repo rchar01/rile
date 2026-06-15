@@ -1,5 +1,18 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add join-line on M-^, joining
+	the current line to the previous line with whitespace cleanup and undo support.
+	* tests/pty_insert.rs: Cover join-line in a real PTY.
+	* tools/reference/emacs/scenarios/join-line-core.scenario,
+	tools/reference/zile/scenarios/join-line.scenario,
+	tools/reference/kg/scenarios/join-line.scenario: Add focused join-line
+	reference scenarios for M-^ behavior.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	join-line.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add quoted-insert on C-q
 	for printable text, Tab, and Enter, with explicit rejection of NUL and other
 	control or special keys.

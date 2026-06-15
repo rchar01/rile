@@ -95,6 +95,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], "forward-char"),
         KeyBinding::new([KeyEvent::Meta('b')], "backward-word"),
         KeyBinding::new([KeyEvent::Meta('f')], "forward-word"),
+        KeyBinding::new([KeyEvent::Meta('^')], "join-line"),
         KeyBinding::new([KeyEvent::Meta('d')], "kill-word"),
         KeyBinding::new([KeyEvent::Meta('m')], "back-to-indentation"),
         KeyBinding::new(
@@ -282,6 +283,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('o')]),
             KeyResolution::Command("open-line")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('^')]),
+            KeyResolution::Command("join-line")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('q')]),

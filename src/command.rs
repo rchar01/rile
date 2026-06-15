@@ -28,6 +28,7 @@ pub enum Command {
     IncrementalSearchBackward,
     IncrementalSearchForward,
     InsertFile,
+    JoinLine,
     KillLine,
     KillBuffer,
     KillRegion,
@@ -233,6 +234,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             InsertFile,
         ),
+        CommandSpec::new(
+            "join-line",
+            "Join current line to previous line",
+            true,
+            JoinLine,
+        ),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
@@ -353,6 +360,7 @@ mod tests {
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("insert-file"));
+        assert!(registry.contains("join-line"));
         assert!(registry.contains("quoted-insert"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));

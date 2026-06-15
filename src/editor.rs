@@ -898,6 +898,7 @@ impl Editor {
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             InsertFile => self.start_insert_file(),
+            JoinLine => self.join_line(),
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
             KillWord => self.kill_word(),
@@ -1353,6 +1354,73 @@ impl Editor {
             .insert(cursor_before, "\n")?;
         self.record_insert(cursor_before, end, "\n", false);
         self.cursor = cursor_before;
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn join_line(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        if self.cursor.line == 0 {
+            self.minibuffer.set_message("Beginning of buffer");
+            return Ok(());
+        }
+
+        let previous_line_index = self.cursor.line - 1;
+        let previous_line = self
+            .document()
+            .buffer()
+            .line(previous_line_index)
+            .unwrap_or("");
+        let current_line = self
+            .document()
+            .buffer()
+            .line(self.cursor.line)
+            .unwrap_or("");
+
+        let previous_trimmed_end = previous_line
+            .char_indices()
+            .rev()
+            .find_map(|(byte, character)| {
+                (!character.is_whitespace()).then_some(byte + character.len_utf8())
+            })
+            .unwrap_or(0);
+        let current_trimmed_start = current_line
+            .char_indices()
+            .find_map(|(byte, character)| (!character.is_whitespace()).then_some(byte))
+            .unwrap_or(current_line.len());
+
+        let previous_has_text = previous_trimmed_end > 0;
+        let current_has_text = current_trimmed_start < current_line.len();
+        let replacement = if previous_has_text && current_has_text {
+            " "
+        } else {
+            ""
+        };
+
+        let range = TextRange::new(
+            Position::new(previous_line_index, previous_trimmed_end),
+            Position::new(self.cursor.line, current_trimmed_start),
+        );
+        let cursor_before = self.cursor;
+        let old_text = self.document_mut().buffer_mut().delete_range(range)?;
+        let cursor_after = self
+            .document_mut()
+            .buffer_mut()
+            .insert(range.start, replacement)?;
+        self.cursor = cursor_after;
+        self.record_replace(
+            TextRange::new(range.start, cursor_after),
+            old_text,
+            replacement.to_owned(),
+            cursor_before,
+            cursor_after,
+        );
         self.goal_display_column = None;
         self.minibuffer.clear();
         self.deactivate_region();
@@ -5184,6 +5252,73 @@ M-g g           goto-line\n"
             .expect("undo should remove inserted newline");
         assert_eq!(editor.document().buffer().serialize(), "alpha beta\nsecond");
         assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+    }
+
+    #[test]
+    fn join_line_joins_with_trimmed_separator_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha  \n  beta\nlast")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .handle_key(KeyEvent::Meta('^'))
+            .expect("join-line should join current line to previous");
+        assert_eq!(editor.document().buffer().serialize(), "alpha beta\nlast");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha ".len()));
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore joined line");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "alpha  \n  beta\nlast"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn join_line_handles_blank_previous_line_first_line_and_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n\n    gamma\nlast")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(2, 0);
+
+        editor
+            .execute_command_by_name("join-line")
+            .expect("join-line command should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\ngamma\nlast");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .execute_command_by_name("join-line")
+            .expect("first-line join-line should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\ngamma\nlast");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Beginning of buffer")
+        );
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor.cursor = Position::new(1, 0);
+        editor
+            .execute_command_by_name("join-line")
+            .expect("read-only join-line should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\ngamma\nlast");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
     }
 
     #[test]

@@ -261,6 +261,11 @@ rejected with explicit errors because Rile's renderer writes buffer text directl
 to the terminal and should not store arbitrary C0 control bytes yet. Read-only
 buffers block quoted insert before entering the pending quoted state.
 
+Post-Milestone 14 editing polish also adds `M-^` / `join-line`. It joins the
+current line to the previous line, trims trailing whitespace before the newline
+and leading indentation after it, inserts one separating space when both sides
+contain text, places point at the join, and records a single undoable edit.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
 unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal

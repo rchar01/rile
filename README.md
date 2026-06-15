@@ -43,6 +43,8 @@ Basic editor keys:
 - `C-q` quotes the next key, inserting printable text, Tab, or Enter literally.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
+- `M-^` joins the current line to the previous line, trimming indentation around
+  the join.
 - `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
 - `C-x C-x` exchanges point and mark.
