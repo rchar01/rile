@@ -49,6 +49,7 @@ Initial inspection scenarios:
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
+- `yank-pop-core`: base Emacs `M-y` yank-pop behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.

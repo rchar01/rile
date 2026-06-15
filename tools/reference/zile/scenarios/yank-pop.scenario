@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=yank-pop
+SCENARIO_DESCRIPTION='Observe Zile M-y yank-pop behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=yank-pop.txt
+FIXTURE_CONTENT=$'one
+two
+three
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-yank-pop-without-yank.png
+Sleep 500ms
+Ctrl+K
+Ctrl+N
+Ctrl+K
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-yank-latest-kill.png
+Sleep 500ms
+Escape
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-first-yank-pop.png
+Sleep 500ms
+Escape
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-second-yank-pop.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

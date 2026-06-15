@@ -147,6 +147,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "delete-backward-char",
         ),
         KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
+        KeyBinding::new([KeyEvent::Meta('y')], "yank-pop"),
         KeyBinding::new(
             [KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())],
             "goto-line",

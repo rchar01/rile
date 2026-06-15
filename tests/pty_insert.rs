@@ -228,3 +228,28 @@ fn consecutive_kill_words_yank_as_one_entry() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn yank_pop_rotates_visible_yank() -> Result<()> {
+    let file = fixtures::named_temp_file("one\ntwo\nthree")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one")?;
+    rile.send("C-k", keys::control('k'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-k", keys::control('k'))?;
+    rile.send("C-y", keys::control('y'))?;
+    rile.assert_screen_contains("two")?;
+    assert!(!rile.snapshot_text().contains("one"));
+
+    rile.send("M-y", keys::meta('y'))?;
+    rile.assert_screen_contains("one")?;
+    assert!(!rile.snapshot_text().contains("two"));
+
+    rile.send("M-y again", keys::meta('y'))?;
+    rile.assert_screen_contains("two")?;
+    assert!(!rile.snapshot_text().contains("one"));
+
+    rile.quit()?;
+    Ok(())
+}

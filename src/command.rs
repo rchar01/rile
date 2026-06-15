@@ -57,6 +57,7 @@ pub enum Command {
     Undo,
     WriteFile,
     Yank,
+    YankPop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -340,6 +341,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("undo", "Undo last edit", true, Undo),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
         CommandSpec::new("yank", "Insert latest kill", true, Yank),
+        CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop),
     ]
 }
 
@@ -380,6 +382,7 @@ mod tests {
         assert!(registry.contains("mark-whole-buffer"));
         assert!(registry.contains("copy-region-as-kill"));
         assert!(registry.contains("yank"));
+        assert!(registry.contains("yank-pop"));
         assert!(registry.contains("undo"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("recenter"));

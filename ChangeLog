@@ -1,5 +1,18 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add yank-pop on M-y,
+	replacing the just-yanked range with earlier kill-ring entries.
+	* tests/pty_insert.rs: Cover yank-pop in a real PTY.
+	* tools/reference/emacs/scenarios/yank-pop-core.scenario,
+	tools/reference/zile/scenarios/yank-pop.scenario,
+	tools/reference/kg/scenarios/yank-pop.scenario: Add focused yank-pop reference
+	scenarios for M-y behavior.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	yank-pop.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Coalesce consecutive kill commands into the latest kill-ring
 	entry, appending forward kills and prepending backward kills.
 	* tests/pty_insert.rs: Cover consecutive word kills through the real PTY path.

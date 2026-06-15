@@ -126,6 +126,9 @@ Milestone 10 adds region, kill/yank, and undo:
 - `M-w` and `copy-region-as-kill` copy the active region without deleting it;
 - `C-y` and `yank` insert the latest kill-ring entry, including coalesced
   consecutive kills;
+- `M-y` and `yank-pop` replace the just-yanked range with earlier kill-ring
+  entries, wrapping through the ring while repeated immediately after `C-y` or
+  `M-y`;
 - `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
 - `C-o` and `open-line` insert a newline at point without moving point;
 - `C-_` and `undo` reverse current-buffer insert/delete/yank/kill operations;

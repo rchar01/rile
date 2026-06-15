@@ -46,6 +46,7 @@ pub struct Editor {
     quoted_insert: bool,
     region: Option<RegionState>,
     kill_ring: Vec<String>,
+    yank_state: Option<YankState>,
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
@@ -69,6 +70,13 @@ struct RegionState {
 struct UndoEntry {
     buffer: BufferId,
     record: UndoRecord,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct YankState {
+    buffer: BufferId,
+    range: TextRange,
+    kill_index: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,6 +169,7 @@ impl Editor {
             quoted_insert: false,
             region: None,
             kill_ring: Vec::new(),
+            yank_state: None,
             last_command_was_kill: false,
             kill_recorded_this_command: false,
             undo_stack: Vec::new(),
@@ -397,23 +406,27 @@ impl Editor {
                 self.clear_key_sequence();
                 self.clear_insert_group();
                 self.last_command_was_kill = false;
+                self.yank_state = None;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
+                self.yank_state = None;
                 self.insert_text(&text, true)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Enter) => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
+                self.yank_state = None;
                 self.insert_text("\n", false)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
+                self.yank_state = None;
                 self.insert_text("\t", false)?;
                 Ok(EditorOutcome::Continue)
             }
@@ -442,6 +455,7 @@ impl Editor {
             KeyResolution::NoMatch => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
+                self.yank_state = None;
                 self.minibuffer.set_message("Key is not bound");
                 Ok(EditorOutcome::Continue)
             }
@@ -923,10 +937,14 @@ impl Editor {
         use Command::*;
 
         let kill_command = is_kill_command(command);
+        let yank_command = is_yank_command(command);
         if kill_command {
             self.kill_recorded_this_command = false;
         } else {
             self.last_command_was_kill = false;
+        }
+        if !yank_command {
+            self.yank_state = None;
         }
 
         match command {
@@ -984,6 +1002,7 @@ impl Editor {
             Undo => self.undo(),
             WriteFile => self.start_write_file(),
             Yank => self.yank(),
+            YankPop => self.yank_pop(),
         }?;
 
         if kill_command {
@@ -1332,20 +1351,77 @@ impl Editor {
             return Ok(());
         }
         self.clear_insert_group();
-        let Some(text) = self.kill_ring.last().cloned() else {
+        let Some(kill_index) = self.kill_ring.len().checked_sub(1) else {
             self.minibuffer.set_error("kill ring is empty");
             return Ok(());
         };
+        let text = self.kill_ring[kill_index].clone();
         let cursor_before = self.cursor;
         self.cursor = self
             .document_mut()
             .buffer_mut()
             .insert(cursor_before, &text)?;
         self.record_insert(cursor_before, self.cursor, &text, false);
+        self.yank_state = Some(YankState {
+            buffer: self.current_buffer,
+            range: TextRange::new(cursor_before, self.cursor),
+            kill_index,
+        });
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Yanked");
+        Ok(())
+    }
+
+    fn yank_pop(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        if self.kill_ring.is_empty() {
+            self.minibuffer.set_error("Kill ring is empty");
+            return Ok(());
+        }
+        let Some(state) = self.yank_state else {
+            self.minibuffer.set_error("Previous command was not a yank");
+            return Ok(());
+        };
+        if state.buffer != self.current_buffer {
+            self.yank_state = None;
+            self.minibuffer.set_error("Previous command was not a yank");
+            return Ok(());
+        }
+
+        let kill_index = if state.kill_index == 0 {
+            self.kill_ring.len() - 1
+        } else {
+            state.kill_index - 1
+        };
+        let text = self.kill_ring[kill_index].clone();
+        let cursor_before = self.cursor;
+        let old_text = self.document_mut().buffer_mut().delete_range(state.range)?;
+        let cursor_after = self
+            .document_mut()
+            .buffer_mut()
+            .insert(state.range.start, &text)?;
+        self.cursor = cursor_after;
+        self.record_replace(
+            TextRange::new(state.range.start, cursor_after),
+            old_text,
+            text,
+            cursor_before,
+            cursor_after,
+        );
+        self.yank_state = Some(YankState {
+            buffer: self.current_buffer,
+            range: TextRange::new(state.range.start, cursor_after),
+            kill_index,
+        });
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Yanked previous kill");
         Ok(())
     }
 
@@ -2600,6 +2676,10 @@ fn is_kill_command(command: Command) -> bool {
         command,
         Command::BackwardKillWord | Command::KillLine | Command::KillRegion | Command::KillWord
     )
+}
+
+fn is_yank_command(command: Command) -> bool {
+    matches!(command, Command::Yank | Command::YankPop)
 }
 
 fn format_key_sequence(sequence: &[KeyEvent]) -> String {
@@ -5689,6 +5769,141 @@ M-g g           goto-line\n"
             .handle_key(KeyEvent::Ctrl('y'))
             .expect("yank should restore only the original region kill");
         assert_eq!(editor.document().buffer().serialize(), "abc");
+    }
+
+    #[test]
+    fn yank_pop_rotates_previous_kills_after_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("first C-k should kill one");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("movement should break kill coalescing");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("second C-k should kill two");
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("C-y should yank latest kill");
+        assert_eq!(editor.document().buffer().serialize(), "\ntwo\nthree");
+
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("M-y should rotate to previous kill");
+        assert_eq!(editor.document().buffer().serialize(), "\none\nthree");
+
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("M-y should wrap to latest kill");
+        assert_eq!(editor.document().buffer().serialize(), "\ntwo\nthree");
+    }
+
+    #[test]
+    fn yank_pop_requires_preceding_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("empty kill ring should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Kill ring is empty")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("C-k should populate kill ring");
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("M-y without yank should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Previous command was not a yank")
+        );
+    }
+
+    #[test]
+    fn movement_breaks_yank_pop_chain() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("first C-k should kill one");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("movement should break kill coalescing");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("second C-k should kill two");
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("C-y should yank latest kill");
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("movement should break yank-pop chain");
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("M-y after movement should be reported");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Previous command was not a yank")
+        );
+        assert_eq!(editor.document().buffer().serialize(), "\ntwo");
+    }
+
+    #[test]
+    fn yank_pop_handles_multiline_entries_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree\nfour")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("first C-k should kill text");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("second C-k should coalesce newline");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("movement should break kill coalescing");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("third C-k should create another kill entry");
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("C-y should yank latest kill");
+        assert_eq!(editor.document().buffer().serialize(), "two\nthree\nfour");
+
+        editor
+            .handle_key(KeyEvent::Meta('y'))
+            .expect("M-y should rotate to multi-line kill");
+        assert_eq!(editor.document().buffer().serialize(), "two\none\n\nfour");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore previous yank text");
+        assert_eq!(editor.document().buffer().serialize(), "two\nthree\nfour");
     }
 
     #[test]

@@ -18,7 +18,8 @@ Editing features:
 * Move by character, line, visible page, beginning/end of line, indentation,
   and word.
 * Delete characters, kill words and lines, set a mark, mark the whole buffer,
-  kill/copy regions, and yank coalesced consecutive kills.
+  kill/copy regions, yank coalesced consecutive kills, and rotate yanks with
+  M-y.
 * Join the current line to the previous line with M-^.
 * Quote the next key with C-q to insert printable text, Tab, or Enter
   literally.

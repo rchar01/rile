@@ -53,6 +53,8 @@ Basic editor keys:
 - `M-w` copies the active region.
 - `C-y` yanks the latest kill or copy; consecutive kill commands coalesce into
   one yankable entry.
+- `M-y` immediately after `C-y` or another `M-y` rotates through earlier kill-ring
+  entries.
 - `C-k` kills to the end of the line, or the line break at end of line.
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
