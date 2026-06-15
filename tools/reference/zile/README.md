@@ -34,6 +34,7 @@ Baseline inspection scenarios:
 - `keyboard-macro`: keyboard macro and repeat behavior.
 - `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
+- `newline-and-indent`: `C-j` newline-and-indent behavior.
 - `long-line`: horizontal clipping behavior.
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.

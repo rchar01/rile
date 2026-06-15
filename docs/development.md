@@ -131,8 +131,10 @@ Milestone 10 adds region, kill/yank, and undo:
   `M-y`;
 - `C-u` and `universal-argument` supply a numeric argument to the next
   repeatable command, including self-insert, line/character/word movement,
-  character deletion, word kills, `C-k`, and `C-o`;
+  character deletion, word kills, `C-k`, `C-j`, and `C-o`;
 - `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
+- `C-j` and `newline-and-indent` insert a newline and leave point at the start
+  of the new line in the current plain-text mode;
 - `C-o` and `open-line` insert a newline at point without moving point;
 - `C-_` and `undo` reverse current-buffer insert/delete/yank/kill operations;
 - normal printable typing is grouped into a single undo record until another command interrupts it;

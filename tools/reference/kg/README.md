@@ -37,6 +37,7 @@ Initial inspection scenarios:
 - `keyboard-macro`: keyboard macro and repeat behavior.
 - `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
+- `newline-and-indent`: focused `C-j` capture; current scenario shows no edit.
 - `open-line`: `C-o` behavior with point in the first line.
 - `goto-line`: `M-g` prompt and `line:col` navigation behavior.
 - `m-x-completion`: command prompt completion after Tab.

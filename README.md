@@ -49,6 +49,8 @@ Basic editor keys:
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-^` joins the current line to the previous line, trimming indentation around
   the join.
+- `C-j` inserts a newline and leaves point at the start of the new line in the
+  current plain-text mode.
 - `C-o` opens a line at point without moving point.
 - `C-@` sets the mark at point.
 - `C-x SPC` starts rectangle mark mode; `C-w`, `M-w`, and `C-y` then kill,

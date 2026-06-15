@@ -1,5 +1,18 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/input.rs: Parse LF as C-j while keeping CR as Enter.
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add newline-and-indent on
+	C-j with repeat-count support.
+	* tools/reference/emacs/scenarios/newline-and-indent-core.scenario,
+	tools/reference/zile/scenarios/newline-and-indent.scenario,
+	tools/reference/kg/scenarios/newline-and-indent.scenario: Add focused
+	newline-and-indent reference scenarios.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	newline-and-indent.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add C-x r rectangle kill,
 	copy, yank, delete, clear, and open commands without register storage.
 	* README.md, docs/development.md, NEWS: Document explicit rectangle commands

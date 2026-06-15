@@ -124,6 +124,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('e')], "end-of-line"),
         KeyBinding::new([KeyEvent::Special(SpecialKey::End)], "end-of-line"),
         KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
+        KeyBinding::new([KeyEvent::Ctrl('j')], "newline-and-indent"),
         KeyBinding::new([KeyEvent::Ctrl('o')], "open-line"),
         KeyBinding::new([KeyEvent::Ctrl('q')], "quoted-insert"),
         KeyBinding::new([KeyEvent::Ctrl('u')], "universal-argument"),
@@ -350,6 +351,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('k')]),
             KeyResolution::Command("kill-line")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('j')]),
+            KeyResolution::Command("newline-and-indent")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('o')]),

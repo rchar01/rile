@@ -1123,6 +1123,7 @@ impl Editor {
                 self.repeat_signed_kill(argument, Self::kill_word, Self::backward_kill_word)
             }
             MarkWholeBuffer => self.mark_whole_buffer(),
+            NewlineAndIndent => self.repeat_positive(argument, Self::newline_and_indent),
             NextLine => self.move_line_by_argument(argument, 1),
             OpenLine => self.repeat_positive(argument, Self::open_line),
             OpenRectangle => self.open_rectangle(),
@@ -2133,6 +2134,10 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         Ok(())
+    }
+
+    fn newline_and_indent(&mut self) -> Result<()> {
+        self.insert_text("\n", false)
     }
 
     fn join_line(&mut self) -> Result<()> {
@@ -7523,6 +7528,37 @@ M-g g           goto-line\n"
             .expect("undo should remove inserted newline");
         assert_eq!(editor.document().buffer().serialize(), "alpha beta\nsecond");
         assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+    }
+
+    #[test]
+    fn newline_and_indent_inserts_newline_without_carrying_indentation() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "    alpha\n    \n  beta\nplain")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "    alpha".len());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('j'))
+            .expect("newline-and-indent should insert newline");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "    alpha\n\n    \n  beta\nplain"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted newline");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "    alpha\n    \n  beta\nplain"
+        );
+        assert_eq!(editor.cursor(), Position::new(0, "    alpha".len()));
     }
 
     #[test]

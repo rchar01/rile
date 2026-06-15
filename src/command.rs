@@ -35,6 +35,7 @@ pub enum Command {
     InsertFile,
     JoinLine,
     ListBuffers,
+    NewlineAndIndent,
     KillLine,
     KillBuffer,
     KillRegion,
@@ -285,6 +286,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             JoinLine,
         ),
         CommandSpec::new("list-buffers", "List active buffers", true, ListBuffers),
+        CommandSpec::new(
+            "newline-and-indent",
+            "Insert newline and indent according to mode",
+            true,
+            NewlineAndIndent,
+        ),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
@@ -454,6 +461,7 @@ mod tests {
         assert!(registry.contains("insert-file"));
         assert!(registry.contains("join-line"));
         assert!(registry.contains("list-buffers"));
+        assert!(registry.contains("newline-and-indent"));
         assert!(registry.contains("quoted-insert"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));

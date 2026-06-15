@@ -91,7 +91,8 @@ pub fn parse_key_sequence_with_erase_byte(
     };
 
     let event = match first {
-        b'\r' | b'\n' => KeyEvent::Special(SpecialKey::Enter),
+        b'\r' => KeyEvent::Special(SpecialKey::Enter),
+        b'\n' => KeyEvent::Ctrl('j'),
         b'\t' => KeyEvent::Special(SpecialKey::Tab),
         0x7f => KeyEvent::Special(SpecialKey::Backspace),
         0x08 if erase_byte == 0x08 => KeyEvent::Special(SpecialKey::Backspace),
@@ -270,6 +271,7 @@ mod tests {
     fn parses_ctrl_key() {
         assert_eq!(parse(&[0x00]).event, KeyEvent::Ctrl('@'));
         assert_eq!(parse(&[0x01]).event, KeyEvent::Ctrl('a'));
+        assert_eq!(parse(&[0x0a]).event, KeyEvent::Ctrl('j'));
         assert_eq!(parse(&[0x1a]).event, KeyEvent::Ctrl('z'));
         assert_eq!(parse(&[0x08]).event, KeyEvent::Ctrl('h'));
         assert_eq!(parse(&[0x1f]).event, KeyEvent::Ctrl('_'));

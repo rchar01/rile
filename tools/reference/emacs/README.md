@@ -49,6 +49,7 @@ Initial inspection scenarios:
 - `keyboard-macro-core`: base Emacs keyboard macro and repeat behavior.
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
+- `newline-and-indent-core`: base Emacs `C-j` newline-and-indent behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
 - `rectangle-mark-core`: base Emacs `C-x SPC` rectangle mark mode with regular
   `M-w` copy and `C-y` yank behavior.

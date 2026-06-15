@@ -1,0 +1,51 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=newline-and-indent-core
+SCENARIO_DESCRIPTION='Observe base Emacs C-j newline-and-indent behavior.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=newline-and-indent-core.txt
+FIXTURE_CONTENT=$'    alpha
+    
+  beta
+plain
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+E
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-before-c-j-after-indented-text.png
+Sleep 500ms
+Ctrl+J
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-c-j-after-indented-text.png
+Sleep 500ms
+Ctrl+N
+Ctrl+E
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-before-c-j-after-whitespace-only-line.png
+Sleep 500ms
+Ctrl+J
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-c-j-after-whitespace-only-line.png
+Sleep 500ms
+Ctrl+N
+Ctrl+E
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-before-c-j-after-less-indented-text.png
+Sleep 500ms
+Ctrl+J
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-c-j-after-less-indented-text.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
