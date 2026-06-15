@@ -167,6 +167,23 @@ impl BufferManager {
         id
     }
 
+    pub fn open_buffer_list(&mut self, text: impl AsRef<str>) -> BufferId {
+        let name = "*Buffer List*";
+        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.name == name) {
+            entry.document = Document::buffer_list(text);
+            return entry.id;
+        }
+
+        let id = BufferId(self.next_id);
+        self.next_id += 1;
+        self.entries.push(BufferEntry {
+            id,
+            name: name.to_owned(),
+            document: Document::buffer_list(text),
+        });
+        id
+    }
+
     pub fn kill(&mut self, id: BufferId) -> Result<BufferId> {
         let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
             return Err(RileError::InvalidInput(format!("no such buffer: {}", id.0)));

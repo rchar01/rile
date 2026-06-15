@@ -98,3 +98,29 @@ fn split_commands_preserve_active_pane_and_buffer_text() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn list_buffers_opens_in_inactive_lower_window() -> Result<()> {
+    let file = fixtures::named_temp_file("list buffers fixture\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 120)?;
+
+    rile.wait_for_screen_contains("list buffers fixture")?;
+    rile.send("C-x C-b", keys::control_sequence("xb"))?;
+    rile.assert_screen_contains("CRM Buffer")?;
+    rile.assert_screen_contains("*Buffer List*")?;
+    rile.assert_screen_contains("window 0 ACTIVE")?;
+    rile.assert_screen_contains("window 1 inactive *Buffer List*")?;
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_screen_contains("window 1 ACTIVE *Buffer List*")?;
+    rile.send("q", b"q")?;
+    assert!(
+        !rile.snapshot_text().contains("*Buffer List*"),
+        "buffer list window still rendered\n{}",
+        rile.screen_dump()
+    );
+
+    rile.quit()?;
+    Ok(())
+}

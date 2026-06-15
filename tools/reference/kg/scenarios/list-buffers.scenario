@@ -1,0 +1,30 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=list-buffers
+SCENARIO_DESCRIPTION='Observe kg C-x C-b list-buffers behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=list-buffers.txt
+FIXTURE_CONTENT=$'list buffers fixture
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /list buffers fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+B
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-list-buffers.png
+Sleep 500ms
+Type "q"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-q.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

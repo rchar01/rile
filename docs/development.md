@@ -246,8 +246,14 @@ Normal file-backed documents now carry an explicit read-only flag. Read-only
 file buffers show `RO` in the normal mode line, block editing through the same
 read-only guard used for special buffers, and reject save/write-file attempts.
 `C-x C-q` / `toggle-read-only` toggles that flag for normal buffers; special
-buffers such as `*Rile*`, `*Help*`, and `*Completions*` remain structurally
-read-only.
+buffers such as `*Rile*`, `*Help*`, `*Completions*`, and `*Buffer List*` remain
+structurally read-only.
+
+Post-Milestone 14 buffer polish adds `C-x C-b` / `list-buffers`. It refreshes a
+read-only `*Buffer List*` special buffer with `CRM Buffer Size Mode File`
+columns and displays it in another window while leaving the original buffer
+selected. Repeating `C-x C-b` reuses the existing list window. If the buffer list
+window is explicitly selected, `q` closes that window.
 
 Post-Milestone 14 file polish also adds `C-x i` / `insert-file`, prompting
 with `Insert file: ` and using the shared file-completion and relative-path

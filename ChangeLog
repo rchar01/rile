@@ -1,5 +1,19 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/file.rs, src/buffers.rs, src/window.rs,
+	src/editor.rs: Add list-buffers on C-x C-b, displaying a read-only
+	*Buffer List* in another window while leaving the original buffer selected.
+	* tests/pty_split_pane.rs: Cover list-buffers in a real PTY.
+	* tools/reference/emacs/scenarios/list-buffers-core.scenario,
+	tools/reference/zile/scenarios/list-buffers.scenario,
+	tools/reference/kg/scenarios/list-buffers.scenario: Add focused list-buffers
+	reference scenarios for C-x C-b behavior.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	list-buffers.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add mark-whole-buffer on
 	C-x h, setting point to buffer start and mark to buffer end without editing.
 	* tests/pty_insert.rs: Cover mark-whole-buffer in a real PTY.

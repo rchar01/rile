@@ -45,6 +45,7 @@ Initial inspection scenarios:
   read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `join-line-core`: base Emacs `M-^` join-line behavior.
+- `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.

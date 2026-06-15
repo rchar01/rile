@@ -374,6 +374,10 @@ impl Editor {
             return Ok(self.restore_help_buffer());
         }
 
+        if self.document().is_buffer_list() && key == KeyEvent::Text("q".to_owned()) {
+            return Ok(self.close_buffer_list_window());
+        }
+
         if !self.key_sequence.is_empty() {
             return self.handle_bound_key(key);
         }
@@ -488,6 +492,37 @@ impl Editor {
         self.clear_insert_group();
         *self.windows.current_mut().viewport_mut() = viewport;
         self.minibuffer.clear();
+
+        EditorOutcome::Continue
+    }
+
+    fn close_buffer_list_window(&mut self) -> EditorOutcome {
+        if self.windows.len() > 1 {
+            self.sync_current_window();
+            self.windows.delete_current();
+            self.load_current_window();
+            return EditorOutcome::Continue;
+        }
+
+        let fallback = self
+            .buffers
+            .entries()
+            .iter()
+            .find(|entry| !entry.document().is_buffer_list())
+            .map(|entry| entry.id());
+        let buffer = fallback.unwrap_or_else(|| {
+            self.buffers
+                .kill(self.current_buffer)
+                .expect("scratch fallback should be created")
+        });
+        self.current_buffer = buffer;
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        self.sync_current_window();
 
         EditorOutcome::Continue
     }
@@ -899,6 +934,7 @@ impl Editor {
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             InsertFile => self.start_insert_file(),
             JoinLine => self.join_line(),
+            ListBuffers => self.list_buffers(),
             KillLine => self.kill_line(),
             KillRegion => self.kill_region(),
             KillWord => self.kill_word(),
@@ -1494,15 +1530,18 @@ impl Editor {
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
+        self.refresh_visible_buffer_list();
         self.minibuffer.set_message("Undone");
         Ok(())
     }
 
     fn save_buffer(&mut self) -> Result<()> {
         match self.document_mut().save() {
-            Ok(()) => self
-                .minibuffer
-                .set_message(format!("Wrote {}", self.document().display_name())),
+            Ok(()) => {
+                self.refresh_visible_buffer_list();
+                self.minibuffer
+                    .set_message(format!("Wrote {}", self.document().display_name()));
+            }
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(())
@@ -1646,6 +1685,73 @@ impl Editor {
         Ok(())
     }
 
+    fn list_buffers(&mut self) -> Result<()> {
+        self.sync_current_window();
+        let text = self.format_buffer_list();
+        let buffer_list = self.buffers.open_buffer_list(text);
+        let target = self
+            .windows
+            .window_showing_buffer(buffer_list)
+            .unwrap_or_else(|| {
+                if self.windows.len() == 1 {
+                    self.windows.split_current(SplitAxis::Horizontal)
+                } else {
+                    self.windows.next_window_id()
+                }
+            });
+
+        if let Some(window) = self.windows.window_mut(target) {
+            *window.viewport_mut() = Viewport::new(buffer_list);
+        }
+        self.minibuffer.clear();
+        Ok(())
+    }
+
+    fn format_buffer_list(&self) -> String {
+        let mut text =
+            String::from("CRM Buffer                           Size Mode         File\n");
+        text.push_str("--- ------                           ---- ----         ----\n");
+        for entry in self
+            .buffers
+            .entries()
+            .iter()
+            .filter(|entry| !entry.document().is_buffer_list())
+        {
+            let document = entry.document();
+            let current = if entry.id() == self.current_buffer {
+                '.'
+            } else {
+                ' '
+            };
+            let read_only = if document.is_read_only() { '%' } else { ' ' };
+            let modified = if document.is_dirty() { '*' } else { ' ' };
+            let size = document.buffer().serialize().len();
+            let mode = MajorMode::for_path(document.path()).name();
+            let file = document
+                .path()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default();
+            text.push_str(&format!(
+                "{current}{read_only}{modified} {:<32} {:>4} {:<12} {file}\n",
+                entry.name(),
+                size,
+                mode,
+            ));
+        }
+        text
+    }
+
+    fn refresh_visible_buffer_list(&mut self) {
+        let Some(buffer_list) = self.buffers.find_by_name("*Buffer List*") else {
+            return;
+        };
+        if self.windows.window_showing_buffer(buffer_list).is_none() {
+            return;
+        }
+        let text = self.format_buffer_list();
+        self.buffers.open_buffer_list(text);
+    }
+
     fn find_file(&mut self, path: &str) -> Result<EditorOutcome> {
         self.open_file_path(path, false)
     }
@@ -1677,6 +1783,7 @@ impl Editor {
                 self.deactivate_region();
                 self.clear_insert_group();
                 self.sync_current_window();
+                self.refresh_visible_buffer_list();
                 let mode = if read_only { " read-only" } else { "" };
                 self.minibuffer
                     .set_message(format!("Opened{mode} {}", self.document().display_name()));
@@ -1715,9 +1822,11 @@ impl Editor {
         }
 
         match self.document_mut().save_as(path) {
-            Ok(()) => self
-                .minibuffer
-                .set_message(format!("Wrote {}", self.document().display_name())),
+            Ok(()) => {
+                self.refresh_visible_buffer_list();
+                self.minibuffer
+                    .set_message(format!("Wrote {}", self.document().display_name()));
+            }
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(EditorOutcome::Continue)
@@ -1789,6 +1898,7 @@ impl Editor {
                 self.deactivate_region();
                 self.clear_insert_group();
                 self.sync_current_window();
+                self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Switched to buffer {name}"));
             }
@@ -1825,6 +1935,7 @@ impl Editor {
                     self.clear_insert_group();
                     self.sync_current_window();
                 }
+                self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Killed buffer {target_name}"));
             }
@@ -2235,6 +2346,7 @@ impl Editor {
         let read_only = !self.document().is_read_only();
         self.document_mut().set_read_only(read_only);
         let status = if read_only { "read-only" } else { "writable" };
+        self.refresh_visible_buffer_list();
         self.minibuffer
             .set_message(format!("Buffer is now {status}"));
         Ok(())
@@ -2306,6 +2418,7 @@ impl Editor {
             existing_text.push_str(text);
             *cursor_after = end;
             self.grouping_insert = true;
+            self.refresh_visible_buffer_list();
             return;
         }
         self.undo_stack.push(UndoEntry {
@@ -2318,6 +2431,7 @@ impl Editor {
             },
         });
         self.grouping_insert = group_with_previous && !text.contains('\n');
+        self.refresh_visible_buffer_list();
     }
 
     fn record_delete(
@@ -2340,6 +2454,7 @@ impl Editor {
             },
         });
         self.clear_insert_group();
+        self.refresh_visible_buffer_list();
     }
 
     fn record_replace(
@@ -2364,6 +2479,7 @@ impl Editor {
             },
         });
         self.clear_insert_group();
+        self.refresh_visible_buffer_list();
     }
 
     fn clear_insert_group(&mut self) {
@@ -3712,6 +3828,158 @@ mod tests {
                 .serialize()
                 .contains("Possible Completions for Switch to buffer:")
         );
+    }
+
+    #[test]
+    fn list_buffers_opens_read_only_buffer_list_in_other_window() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let source = directory.path().join("main.rs");
+        fs::write(&start, "start\n").expect("start fixture should write");
+        fs::write(&source, "fn main() {}\n").expect("source fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        let start_buffer = editor.current_buffer_id();
+        editor
+            .find_file(source.to_str().unwrap())
+            .expect("source should open");
+        editor
+            .switch_to_buffer("start.txt")
+            .expect("start buffer should switch");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("buffers should list");
+
+        assert_eq!(editor.current_buffer_id(), start_buffer);
+        assert_eq!(editor.current_buffer_name(), "start.txt");
+        assert_eq!(editor.window_count(), 2);
+
+        let list_window = editor
+            .window_layouts(12, 80)
+            .into_iter()
+            .find(|layout| layout.id != editor.current_window_id())
+            .expect("other window should exist")
+            .id;
+        let list_buffer = editor
+            .window_viewport(list_window)
+            .expect("list window should have viewport")
+            .buffer;
+        let list_document = editor
+            .document_for_buffer(list_buffer)
+            .expect("list buffer should exist");
+        let text = list_document.buffer().serialize();
+
+        assert_eq!(list_document.display_name(), "*Buffer List*");
+        assert!(list_document.is_read_only());
+        assert!(text.contains("CRM Buffer"));
+        assert!(text.contains(".   start.txt"));
+        assert!(text.contains("main.rs"));
+        assert!(text.contains("Rust"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("buffers should refresh");
+        assert_eq!(editor.window_count(), 2);
+    }
+
+    #[test]
+    fn q_closes_selected_buffer_list_window() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        assert_eq!(editor.window_count(), 2);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+        assert_eq!(editor.current_buffer_name(), "*Buffer List*");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should close buffer list window");
+
+        assert_eq!(editor.window_count(), 1);
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+    }
+
+    #[test]
+    fn visible_buffer_list_refreshes_after_opening_buffer() {
+        let directory = TestDir::new();
+        let source = directory.path().join("main.rs");
+        fs::write(&source, "fn main() {}\n").expect("source fixture should write");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        let buffer_list = editor
+            .buffers
+            .find_by_name("*Buffer List*")
+            .expect("buffer list should exist");
+        assert!(
+            !editor
+                .document_for_buffer(buffer_list)
+                .expect("buffer list should exist")
+                .buffer()
+                .serialize()
+                .contains("main.rs")
+        );
+
+        editor
+            .find_file(source.to_str().unwrap())
+            .expect("source should open");
+
+        let text = editor
+            .document_for_buffer(buffer_list)
+            .expect("buffer list should still exist")
+            .buffer()
+            .serialize();
+        assert!(text.contains(".   main.rs"));
+        assert!(text.contains("Rust"));
+    }
+
+    #[test]
+    fn q_leaves_buffer_list_when_it_is_the_only_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+        editor
+            .execute_command_by_name("delete-other-windows")
+            .expect("only buffer list window should remain");
+        editor
+            .kill_buffer("*scratch*")
+            .expect("scratch should be killed");
+
+        assert_eq!(editor.window_count(), 1);
+        assert_eq!(editor.buffer_count(), 1);
+        assert_eq!(editor.current_buffer_name(), "*Buffer List*");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should leave buffer list");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.buffer_count(), 1);
     }
 
     #[test]

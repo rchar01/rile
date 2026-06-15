@@ -120,6 +120,25 @@ impl WindowSet {
             .expect("current window must exist")
     }
 
+    pub fn next_window_id(&self) -> WindowId {
+        let Some(index) = self
+            .windows
+            .iter()
+            .position(|window| window.id == self.current)
+        else {
+            return self.current;
+        };
+        let next = (index + 1) % self.windows.len();
+        self.windows[next].id
+    }
+
+    pub fn window_showing_buffer(&self, buffer: BufferId) -> Option<WindowId> {
+        self.windows
+            .iter()
+            .find(|window| window.viewport.buffer == buffer)
+            .map(Window::id)
+    }
+
     pub fn window(&self, id: WindowId) -> Option<&Window> {
         self.windows.iter().find(|window| window.id == id)
     }

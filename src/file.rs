@@ -17,6 +17,7 @@ pub enum DocumentKind {
     Welcome,
     Help,
     Completions,
+    BufferList,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,18 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Completions*".to_owned()),
             kind: DocumentKind::Completions,
+            read_only: false,
+            missing_on_open: false,
+            backup_on_save: false,
+        }
+    }
+
+    pub fn buffer_list(text: impl AsRef<str>) -> Self {
+        Self {
+            buffer: Buffer::from_text(text.as_ref()),
+            path: None,
+            name: Some("*Buffer List*".to_owned()),
+            kind: DocumentKind::BufferList,
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
@@ -151,6 +164,10 @@ Rile is free software under GPL-3.0-or-later.\n",
 
     pub fn is_completions(&self) -> bool {
         self.kind == DocumentKind::Completions
+    }
+
+    pub fn is_buffer_list(&self) -> bool {
+        self.kind == DocumentKind::BufferList
     }
 
     pub fn is_dirty(&self) -> bool {

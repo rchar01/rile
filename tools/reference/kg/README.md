@@ -33,6 +33,7 @@ Initial inspection scenarios:
 - `baseline-ui`: basic screen layout and mode line.
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
 - `join-line`: `M-^` join-line behavior.
+- `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
 - `open-line`: `C-o` behavior with point in the first line.
 - `goto-line`: `M-g` prompt and `line:col` navigation behavior.
