@@ -29,6 +29,7 @@ Baseline inspection scenarios:
 
 - `baseline-ui`: basic screen layout and mode line.
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
+- `consecutive-kills`: consecutive kill and yank behavior.
 - `join-line`: `M-^` join-line behavior.
 - `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.

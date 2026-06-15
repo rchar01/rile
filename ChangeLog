@@ -1,5 +1,18 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Coalesce consecutive kill commands into the latest kill-ring
+	entry, appending forward kills and prepending backward kills.
+	* tests/pty_insert.rs: Cover consecutive word kills through the real PTY path.
+	* tools/reference/emacs/scenarios/consecutive-kills-core.scenario,
+	tools/reference/zile/scenarios/consecutive-kills.scenario,
+	tools/reference/kg/scenarios/consecutive-kills.scenario: Add focused
+	consecutive-kill reference scenarios.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	consecutive kill coalescing.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/file.rs, src/buffers.rs, src/window.rs,
 	src/editor.rs: Add list-buffers on C-x C-b, displaying a read-only
 	*Buffer List* in another window while leaving the original buffer selected.

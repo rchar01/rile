@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=consecutive-kills
+SCENARIO_DESCRIPTION='Observe kg consecutive kill and yank behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=consecutive-kills.txt
+FIXTURE_CONTENT=$'alpha
+beta
+one two three
+back one two three
+region one two
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+K
+Ctrl+K
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-two-kill-lines-and-yank.png
+Sleep 500ms
+Ctrl+N
+Ctrl+A
+Escape
+Type "d"
+Escape
+Type "d"
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-two-kill-words-and-yank.png
+Sleep 500ms
+Ctrl+N
+Ctrl+E
+Escape
+Backspace
+Escape
+Backspace
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-two-backward-kill-words-and-yank.png
+Sleep 500ms
+Ctrl+N
+Ctrl+A
+Ctrl+Space
+Escape
+Type "f"
+Escape
+Type "f"
+Ctrl+W
+Ctrl+W
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-region-kill-retry-and-yank.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

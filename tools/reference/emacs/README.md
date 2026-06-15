@@ -44,6 +44,7 @@ Initial inspection scenarios:
 - `modeline-state-core`: core Emacs mode-line clean, modified, saved,
   read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
+- `consecutive-kills-core`: base Emacs consecutive kill and yank behavior.
 - `join-line-core`: base Emacs `M-^` join-line behavior.
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.

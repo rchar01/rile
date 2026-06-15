@@ -124,7 +124,8 @@ Milestone 10 adds region, kill/yank, and undo:
 - active regions render through `render::Face::Region` and terminal ANSI highlighting;
 - `C-w` and `kill-region` delete the active region into the kill ring;
 - `M-w` and `copy-region-as-kill` copy the active region without deleting it;
-- `C-y` and `yank` insert the latest kill-ring entry;
+- `C-y` and `yank` insert the latest kill-ring entry, including coalesced
+  consecutive kills;
 - `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
 - `C-o` and `open-line` insert a newline at point without moving point;
 - `C-_` and `undo` reverse current-buffer insert/delete/yank/kill operations;
@@ -199,8 +200,10 @@ not modify read-only or writable buffer contents.
 
 Post-Milestone 14 word-kill polish adds `kill-word` on `M-d` and
 `backward-kill-word` on `M-Backspace`, using the same Unicode-aware word
-boundaries as `M-f` and `M-b`. Word kills use the existing kill-ring behavior:
-each kill is a separate entry, and consecutive kill coalescing remains deferred.
+boundaries as `M-f` and `M-b`. Consecutive kill commands coalesce into one
+kill-ring entry: forward kills append text and backward kills prepend text so
+`C-y` restores the killed text in buffer order. A non-kill command or failed kill
+breaks the coalescing chain.
 
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that

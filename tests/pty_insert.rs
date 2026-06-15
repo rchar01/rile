@@ -209,3 +209,22 @@ fn kill_word_and_backward_kill_word_edit_visible_buffer() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn consecutive_kill_words_yank_as_one_entry() -> Result<()> {
+    let file = fixtures::named_temp_file("one two three")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one two three")?;
+    rile.send("M-d", keys::meta('d'))?;
+    rile.send("M-d", keys::meta('d'))?;
+    rile.assert_screen_contains("three")?;
+    assert!(!rile.snapshot_text().contains("one two three"));
+
+    rile.send("C-y", keys::control('y'))?;
+    rile.assert_screen_contains("one two three")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}

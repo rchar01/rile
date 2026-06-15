@@ -46,6 +46,8 @@ pub struct Editor {
     quoted_insert: bool,
     region: Option<RegionState>,
     kill_ring: Vec<String>,
+    last_command_was_kill: bool,
+    kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
     grouping_insert: bool,
     syntax_enabled: bool,
@@ -67,6 +69,12 @@ struct RegionState {
 struct UndoEntry {
     buffer: BufferId,
     record: UndoRecord,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum KillDirection {
+    Forward,
+    Backward,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +161,8 @@ impl Editor {
             quoted_insert: false,
             region: None,
             kill_ring: Vec::new(),
+            last_command_was_kill: false,
+            kill_recorded_this_command: false,
             undo_stack: Vec::new(),
             grouping_insert: false,
             syntax_enabled: config.syntax_highlighting,
@@ -386,20 +396,24 @@ impl Editor {
             KeyEvent::Special(SpecialKey::Escape) => {
                 self.clear_key_sequence();
                 self.clear_insert_group();
+                self.last_command_was_kill = false;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
                 self.clear_key_sequence();
+                self.last_command_was_kill = false;
                 self.insert_text(&text, true)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Enter) => {
                 self.clear_key_sequence();
+                self.last_command_was_kill = false;
                 self.insert_text("\n", false)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.clear_key_sequence();
+                self.last_command_was_kill = false;
                 self.insert_text("\t", false)?;
                 Ok(EditorOutcome::Continue)
             }
@@ -427,6 +441,7 @@ impl Editor {
         match self.keymap.resolve(&self.key_sequence) {
             KeyResolution::NoMatch => {
                 self.clear_key_sequence();
+                self.last_command_was_kill = false;
                 self.minibuffer.set_message("Key is not bound");
                 Ok(EditorOutcome::Continue)
             }
@@ -907,6 +922,13 @@ impl Editor {
     fn execute_command(&mut self, command: Command) -> Result<EditorOutcome> {
         use Command::*;
 
+        let kill_command = is_kill_command(command);
+        if kill_command {
+            self.kill_recorded_this_command = false;
+        } else {
+            self.last_command_was_kill = false;
+        }
+
         match command {
             BackToIndentation => self.move_back_to_indentation(),
             BackwardChar => self.move_backward(),
@@ -963,6 +985,11 @@ impl Editor {
             WriteFile => self.start_write_file(),
             Yank => self.yank(),
         }?;
+
+        if kill_command {
+            self.last_command_was_kill = self.kill_recorded_this_command;
+            self.kill_recorded_this_command = false;
+        }
 
         Ok(EditorOutcome::Continue)
     }
@@ -1290,7 +1317,7 @@ impl Editor {
         };
         let cursor_before = self.cursor;
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_kill(text.clone());
+        self.push_command_kill(text.clone(), KillDirection::Forward);
         self.cursor = range.start;
         self.goal_display_column = None;
         self.record_delete(range, text, cursor_before, self.cursor);
@@ -1340,7 +1367,7 @@ impl Editor {
         };
         let range = TextRange::new(self.cursor, end);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_kill(text.clone());
+        self.push_command_kill(text.clone(), KillDirection::Forward);
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
         self.deactivate_region();
@@ -1362,7 +1389,7 @@ impl Editor {
 
         let range = TextRange::new(self.cursor, end);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_kill(text.clone());
+        self.push_command_kill(text.clone(), KillDirection::Forward);
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
         self.deactivate_region();
@@ -1384,7 +1411,7 @@ impl Editor {
 
         let range = TextRange::new(start, self.cursor);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
-        self.push_kill(text.clone());
+        self.push_command_kill(text.clone(), KillDirection::Backward);
         self.cursor = start;
         self.record_delete(range, text, cursor_before, self.cursor);
         self.goal_display_column = None;
@@ -2389,6 +2416,29 @@ impl Editor {
         }
     }
 
+    fn push_command_kill(&mut self, text: String, direction: KillDirection) {
+        if text.is_empty() {
+            return;
+        }
+
+        if self.last_command_was_kill
+            && let Some(previous) = self.kill_ring.last_mut()
+        {
+            match direction {
+                KillDirection::Forward => previous.push_str(&text),
+                KillDirection::Backward => {
+                    let mut combined = text;
+                    combined.push_str(previous);
+                    *previous = combined;
+                }
+            }
+        } else {
+            self.kill_ring.push(text);
+        }
+
+        self.kill_recorded_this_command = true;
+    }
+
     fn record_insert(
         &mut self,
         start: Position,
@@ -2543,6 +2593,13 @@ fn parse_goto_line_input(input: &str) -> std::result::Result<(usize, usize), ()>
     };
 
     Ok((line, column))
+}
+
+fn is_kill_command(command: Command) -> bool {
+    matches!(
+        command,
+        Command::BackwardKillWord | Command::KillLine | Command::KillRegion | Command::KillWord
+    )
 }
 
 fn format_key_sequence(sequence: &[KeyEvent]) -> String {
@@ -5531,6 +5588,107 @@ M-g g           goto-line\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should restore line");
         assert_eq!(editor.document().buffer().serialize(), "abc\ndef");
+    }
+
+    #[test]
+    fn consecutive_kill_lines_coalesce_for_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc\ndef")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("first C-k should kill text");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("second C-k should kill newline");
+        assert_eq!(editor.document().buffer().serialize(), "def");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert coalesced line kill");
+        assert_eq!(editor.document().buffer().serialize(), "abc\ndef");
+    }
+
+    #[test]
+    fn consecutive_forward_word_kills_coalesce_for_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two three")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('d'))
+            .expect("first M-d should kill word");
+        editor
+            .handle_key(KeyEvent::Meta('d'))
+            .expect("second M-d should kill next word");
+        assert_eq!(editor.document().buffer().serialize(), " three");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert coalesced word kill");
+        assert_eq!(editor.document().buffer().serialize(), "one two three");
+    }
+
+    #[test]
+    fn consecutive_backward_word_kills_prepend_for_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two three")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('>'))
+            .expect("M-> should move to end");
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Backspace))
+            .expect("first M-Backspace should kill word backward");
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Backspace))
+            .expect("second M-Backspace should kill word backward");
+        assert_eq!(editor.document().buffer().serialize(), "one ");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should insert coalesced backward word kill");
+        assert_eq!(editor.document().buffer().serialize(), "one two three");
+    }
+
+    #[test]
+    fn failed_repeat_kill_region_does_not_duplicate_kill_ring() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abc")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('w'))
+            .expect("region should kill");
+        editor
+            .handle_key(KeyEvent::Ctrl('w'))
+            .expect("missing region should be reported");
+        assert_eq!(editor.document().buffer().serialize(), "bc");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should restore only the original region kill");
+        assert_eq!(editor.document().buffer().serialize(), "abc");
     }
 
     #[test]

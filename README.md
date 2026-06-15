@@ -51,7 +51,8 @@ Basic editor keys:
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.
 - `M-w` copies the active region.
-- `C-y` yanks the latest kill or copy.
+- `C-y` yanks the latest kill or copy; consecutive kill commands coalesce into
+  one yankable entry.
 - `C-k` kills to the end of the line, or the line break at end of line.
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
