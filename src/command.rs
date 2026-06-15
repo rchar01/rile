@@ -55,6 +55,7 @@ pub enum Command {
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
     Undo,
+    UniversalArgument,
     WriteFile,
     Yank,
     YankPop,
@@ -339,6 +340,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ToggleSyntaxHighlighting,
         ),
         CommandSpec::new("undo", "Undo last edit", true, Undo),
+        CommandSpec::new(
+            "universal-argument",
+            "Set a numeric argument for the next command",
+            true,
+            UniversalArgument,
+        ),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
         CommandSpec::new("yank", "Insert latest kill", true, Yank),
         CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop),
@@ -384,6 +391,7 @@ mod tests {
         assert!(registry.contains("yank"));
         assert!(registry.contains("yank-pop"));
         assert!(registry.contains("undo"));
+        assert!(registry.contains("universal-argument"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("recenter"));
         assert!(registry.contains("scroll-page-backward"));

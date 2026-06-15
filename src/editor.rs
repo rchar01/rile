@@ -41,6 +41,7 @@ pub struct Editor {
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
     prompt_histories: Vec<PromptHistory>,
+    universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     quoted_insert: bool,
@@ -77,6 +78,49 @@ struct YankState {
     buffer: BufferId,
     range: TextRange,
     kill_index: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct UniversalArgumentState {
+    value: i32,
+    entered_digits: bool,
+    negative: bool,
+}
+
+impl UniversalArgumentState {
+    fn new() -> Self {
+        Self {
+            value: 4,
+            entered_digits: false,
+            negative: false,
+        }
+    }
+
+    fn multiply(&mut self) {
+        if !self.entered_digits {
+            self.value = self.value.saturating_mul(4);
+        }
+    }
+
+    fn push_digit(&mut self, digit: u32) {
+        if !self.entered_digits {
+            self.value = 0;
+            self.entered_digits = true;
+        }
+        self.value = self.value.saturating_mul(10).saturating_add(digit as i32);
+    }
+
+    fn negate(&mut self) {
+        self.negative = !self.negative;
+    }
+
+    fn value(self) -> i32 {
+        if self.negative {
+            -self.value
+        } else {
+            self.value
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -164,6 +208,7 @@ impl Editor {
             completion_return: None,
             completion_config: config.completion,
             prompt_histories: Vec::new(),
+            universal_argument: None,
             search: None,
             query_replace: None,
             quoted_insert: false,
@@ -401,9 +446,14 @@ impl Editor {
             return self.handle_bound_key(key);
         }
 
+        if self.universal_argument.is_some() && self.handle_universal_argument_key(&key) {
+            return Ok(EditorOutcome::Continue);
+        }
+
         match key {
             KeyEvent::Special(SpecialKey::Escape) => {
                 self.clear_key_sequence();
+                self.universal_argument = None;
                 self.clear_insert_group();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
@@ -413,21 +463,24 @@ impl Editor {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
-                self.insert_text(&text, true)?;
+                let argument = self.take_universal_argument();
+                self.insert_text_with_argument(&text, true, argument)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Enter) => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
-                self.insert_text("\n", false)?;
+                let argument = self.take_universal_argument();
+                self.insert_text_with_argument("\n", false, argument)?;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.clear_key_sequence();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
-                self.insert_text("\t", false)?;
+                let argument = self.take_universal_argument();
+                self.insert_text_with_argument("\t", false, argument)?;
                 Ok(EditorOutcome::Continue)
             }
             key => self.handle_bound_key(key),
@@ -441,7 +494,13 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         };
 
-        self.execute_command(command.command)
+        if command.command == Command::UniversalArgument {
+            self.extend_universal_argument()?;
+            return Ok(EditorOutcome::Continue);
+        }
+
+        let argument = self.take_universal_argument();
+        self.execute_command(command.command, argument)
     }
 
     fn handle_bound_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -454,6 +513,7 @@ impl Editor {
         match self.keymap.resolve(&self.key_sequence) {
             KeyResolution::NoMatch => {
                 self.clear_key_sequence();
+                self.universal_argument = None;
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 self.minibuffer.set_message("Key is not bound");
@@ -933,7 +993,11 @@ impl Editor {
         }
     }
 
-    fn execute_command(&mut self, command: Command) -> Result<EditorOutcome> {
+    fn execute_command(
+        &mut self,
+        command: Command,
+        argument: Option<i32>,
+    ) -> Result<EditorOutcome> {
         use Command::*;
 
         let kill_command = is_kill_command(command);
@@ -949,14 +1013,22 @@ impl Editor {
 
         match command {
             BackToIndentation => self.move_back_to_indentation(),
-            BackwardChar => self.move_backward(),
-            BackwardKillWord => self.backward_kill_word(),
-            BackwardWord => self.move_word_backward(),
+            BackwardChar => self.repeat_signed(argument, Self::move_backward, Self::move_forward),
+            BackwardKillWord => {
+                self.repeat_signed_kill(argument, Self::backward_kill_word, Self::kill_word)
+            }
+            BackwardWord => {
+                self.repeat_signed(argument, Self::move_word_backward, Self::move_word_forward)
+            }
             BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
             CopyRegionAsKill => self.copy_region_as_kill(),
-            DeleteBackwardChar => self.delete_backward_char(),
-            DeleteChar => self.delete_char(),
+            DeleteBackwardChar => {
+                self.repeat_signed(argument, Self::delete_backward_char, Self::delete_char)
+            }
+            DeleteChar => {
+                self.repeat_signed(argument, Self::delete_char, Self::delete_backward_char)
+            }
             DeleteOtherWindows => self.delete_other_windows(),
             DeleteWindow => self.delete_window(),
             DescribeFunction => self.start_describe_function(),
@@ -967,21 +1039,25 @@ impl Editor {
             ExecuteExtendedCommand => self.start_extended_command(),
             FindFile => self.start_find_file(),
             FindFileReadOnly => self.start_find_file_read_only(),
-            ForwardChar => self.move_forward(),
-            ForwardWord => self.move_word_forward(),
+            ForwardChar => self.repeat_signed(argument, Self::move_forward, Self::move_backward),
+            ForwardWord => {
+                self.repeat_signed(argument, Self::move_word_forward, Self::move_word_backward)
+            }
             GotoLine => self.start_goto_line(),
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             InsertFile => self.start_insert_file(),
             JoinLine => self.join_line(),
             ListBuffers => self.list_buffers(),
-            KillLine => self.kill_line(),
+            KillLine => self.repeat_positive_kill(argument, Self::kill_line),
             KillRegion => self.kill_region(),
-            KillWord => self.kill_word(),
+            KillWord => {
+                self.repeat_signed_kill(argument, Self::kill_word, Self::backward_kill_word)
+            }
             MarkWholeBuffer => self.mark_whole_buffer(),
-            NextLine => self.move_line(1),
-            OpenLine => self.open_line(),
-            PreviousLine => self.move_line(-1),
+            NextLine => self.move_line_by_argument(argument, 1),
+            OpenLine => self.repeat_positive(argument, Self::open_line),
+            PreviousLine => self.move_line_by_argument(argument, -1),
             QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
             Recenter => self.recenter(),
@@ -1000,6 +1076,7 @@ impl Editor {
             ToggleSearchHighlighting => self.toggle_search_highlighting(),
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
+            UniversalArgument => self.extend_universal_argument(),
             WriteFile => self.start_write_file(),
             Yank => self.yank(),
             YankPop => self.yank_pop(),
@@ -1025,6 +1102,141 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         Ok(())
+    }
+
+    fn insert_text_with_argument(
+        &mut self,
+        text: &str,
+        group_with_previous: bool,
+        argument: Option<i32>,
+    ) -> Result<()> {
+        let count = positive_argument_count(argument);
+        if count == 0 {
+            return Ok(());
+        }
+        self.insert_text(&text.repeat(count), group_with_previous)
+    }
+
+    fn repeat_positive(
+        &mut self,
+        argument: Option<i32>,
+        action: fn(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        for _ in 0..positive_argument_count(argument) {
+            action(self)?;
+        }
+        Ok(())
+    }
+
+    fn repeat_positive_kill(
+        &mut self,
+        argument: Option<i32>,
+        action: fn(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        for _ in 0..positive_argument_count(argument) {
+            action(self)?;
+            if self.kill_recorded_this_command {
+                self.last_command_was_kill = true;
+            }
+        }
+        Ok(())
+    }
+
+    fn repeat_signed(
+        &mut self,
+        argument: Option<i32>,
+        positive: fn(&mut Self) -> Result<()>,
+        negative: fn(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        let argument = argument.unwrap_or(1);
+        let count = argument.unsigned_abs() as usize;
+        let action = if argument >= 0 { positive } else { negative };
+        for _ in 0..count {
+            action(self)?;
+        }
+        Ok(())
+    }
+
+    fn repeat_signed_kill(
+        &mut self,
+        argument: Option<i32>,
+        positive: fn(&mut Self) -> Result<()>,
+        negative: fn(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        let argument = argument.unwrap_or(1);
+        let count = argument.unsigned_abs() as usize;
+        let action = if argument >= 0 { positive } else { negative };
+        for _ in 0..count {
+            action(self)?;
+            if self.kill_recorded_this_command {
+                self.last_command_was_kill = true;
+            }
+        }
+        Ok(())
+    }
+
+    fn move_line_by_argument(&mut self, argument: Option<i32>, direction: isize) -> Result<()> {
+        let count = argument.unwrap_or(1).saturating_mul(direction as i32);
+        self.move_line(count as isize)
+    }
+
+    fn extend_universal_argument(&mut self) -> Result<()> {
+        if let Some(argument) = &mut self.universal_argument {
+            argument.multiply();
+        } else {
+            self.universal_argument = Some(UniversalArgumentState::new());
+        }
+        self.set_universal_argument_message();
+        Ok(())
+    }
+
+    fn handle_universal_argument_key(&mut self, key: &KeyEvent) -> bool {
+        match key {
+            KeyEvent::Ctrl('u') => {
+                if let Some(argument) = &mut self.universal_argument {
+                    argument.multiply();
+                }
+                self.set_universal_argument_message();
+                true
+            }
+            KeyEvent::Text(text) if text.chars().count() == 1 => {
+                let character = text.chars().next().expect("text must contain one char");
+                if character == '-' {
+                    if let Some(argument) = &mut self.universal_argument {
+                        argument.negate();
+                    }
+                    self.set_universal_argument_message();
+                    return true;
+                }
+                if let Some(digit) = character.to_digit(10) {
+                    if let Some(argument) = &mut self.universal_argument {
+                        argument.push_digit(digit);
+                    }
+                    self.set_universal_argument_message();
+                    return true;
+                }
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn set_universal_argument_message(&mut self) {
+        let Some(argument) = self.universal_argument else {
+            return;
+        };
+        if argument == UniversalArgumentState::new() {
+            self.minibuffer.set_message("C-u-");
+        } else {
+            self.minibuffer
+                .set_message(format!("C-u {}-", argument.value()));
+        }
+    }
+
+    fn take_universal_argument(&mut self) -> Option<i32> {
+        self.universal_argument
+            .take()
+            .map(UniversalArgumentState::value)
     }
 
     fn start_quoted_insert(&mut self) -> Result<()> {
@@ -1061,6 +1273,7 @@ impl Editor {
         self.quoted_insert = false;
         self.describe_key = None;
         self.clear_key_sequence();
+        self.universal_argument = None;
         self.deactivate_region();
         self.clear_insert_group();
         self.minibuffer.set_message("Quit");
@@ -2680,6 +2893,10 @@ fn is_kill_command(command: Command) -> bool {
 
 fn is_yank_command(command: Command) -> bool {
     matches!(command, Command::Yank | Command::YankPop)
+}
+
+fn positive_argument_count(argument: Option<i32>) -> usize {
+    argument.unwrap_or(1).max(0) as usize
 }
 
 fn format_key_sequence(sequence: &[KeyEvent]) -> String {
@@ -5403,6 +5620,177 @@ M-g g           goto-line\n"
             .handle_key(KeyEvent::Text("o".to_owned()))
             .expect("other-window should execute");
         assert_eq!(editor.cursor(), Position::new(0, 3));
+    }
+
+    #[test]
+    fn universal_argument_repeats_movement_and_self_insert() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("C-f should move by argument");
+        assert_eq!(editor.cursor(), Position::new(0, 4));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("cursor should move to beginning");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("3".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should repeat by argument");
+
+        assert_eq!(editor.document().buffer().serialize(), "xxxabcdef");
+        assert_eq!(editor.cursor(), Position::new(0, 3));
+    }
+
+    #[test]
+    fn repeated_universal_argument_multiplies_by_four() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdefghijklmnopqr")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("first C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("second C-u should multiply argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("C-f should move by multiplied argument");
+
+        assert_eq!(editor.cursor(), Position::new(0, 16));
+    }
+
+    #[test]
+    fn universal_argument_handles_negative_and_zero_counts() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        for _ in 0..4 {
+            editor
+                .handle_key(KeyEvent::Ctrl('f'))
+                .expect("cursor should move forward");
+        }
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("minus should negate argument");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("negative C-f should move backward");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("0".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("zero self-insert should be a no-op");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("0".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('d'))
+            .expect("zero delete should be a no-op");
+
+        assert_eq!(editor.document().buffer().serialize(), "abcdef");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+    }
+
+    #[test]
+    fn universal_argument_does_not_leak_after_prompt_cancel() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert once after prompt cancel");
+
+        assert_eq!(editor.document().buffer().serialize(), "x");
+        assert_eq!(editor.cursor(), Position::new(0, 1));
+    }
+
+    #[test]
+    fn universal_argument_preserves_pending_key_prefixes() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start key prefix");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("C-x 2 should split window");
+
+        assert_eq!(editor.window_count(), 2);
+    }
+
+    #[test]
+    fn universal_argument_repeats_kill_line_as_one_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("digit should update argument");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("C-k should repeat by argument");
+        assert_eq!(editor.document().buffer().serialize(), "two\nthree");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('y'))
+            .expect("yank should restore coalesced kill");
+        assert_eq!(editor.document().buffer().serialize(), "one\ntwo\nthree");
     }
 
     #[test]

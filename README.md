@@ -41,6 +41,8 @@ Basic editor keys:
   type `q` in the help buffer to restore the previous buffer.
 - Printable UTF-8 text inserts at point.
 - `C-q` quotes the next key, inserting printable text, Tab, or Enter literally.
+- `C-u` supplies a numeric argument for the next repeatable command; repeated
+  `C-u` multiplies by four, and digits enter an explicit count.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-^` joins the current line to the previous line, trimming indentation around

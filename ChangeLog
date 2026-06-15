@@ -1,5 +1,19 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add universal-argument on
+	C-u, applying numeric counts to repeatable movement, insertion, deletion,
+	kill, and open-line commands.
+	* tests/pty_insert.rs: Cover universal-argument in a real PTY.
+	* tools/reference/emacs/scenarios/universal-argument-core.scenario,
+	tools/reference/zile/scenarios/universal-argument.scenario,
+	tools/reference/kg/scenarios/universal-argument.scenario: Add focused
+	universal-argument reference scenarios.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md, README.md, docs/development.md, NEWS: Document
+	universal-argument.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add yank-pop on M-y,
 	replacing the just-yanked range with earlier kill-ring entries.
 	* tests/pty_insert.rs: Cover yank-pop in a real PTY.

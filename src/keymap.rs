@@ -126,6 +126,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
         KeyBinding::new([KeyEvent::Ctrl('o')], "open-line"),
         KeyBinding::new([KeyEvent::Ctrl('q')], "quoted-insert"),
+        KeyBinding::new([KeyEvent::Ctrl('u')], "universal-argument"),
         KeyBinding::new([KeyEvent::Ctrl('@')], "set-mark-command"),
         KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())],

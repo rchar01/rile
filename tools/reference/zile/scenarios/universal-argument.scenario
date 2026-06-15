@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=universal-argument
+SCENARIO_DESCRIPTION='Observe Zile C-u universal-argument behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=universal-argument.txt
+FIXTURE_CONTENT=$'abcdef
+one
+two
+three
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /abcdef/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+U
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-c-u-c-f.png
+Sleep 500ms
+Ctrl+A
+Ctrl+U
+Type "3"
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-c-u-3-self-insert.png
+Sleep 500ms
+Ctrl+N
+Ctrl+A
+Ctrl+U
+Type "2"
+Ctrl+K
+Ctrl+Y
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-c-u-2-kill-line-yank.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

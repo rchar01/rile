@@ -68,6 +68,31 @@ fn open_line_keeps_cursor_and_shifts_text_down() -> Result<()> {
 }
 
 #[test]
+fn universal_argument_repeats_visible_movement_and_insert() -> Result<()> {
+    let file = fixtures::named_temp_file("abcdef\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("abcdef")?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.assert_screen_contains("C-u-")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.assert_cursor(0, 4)?;
+    rile.assert_status_contains("Ln 001 Col 004")?;
+
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("3", b"3")?;
+    rile.assert_screen_contains("C-u 3-")?;
+    rile.send("x", b"x")?;
+    rile.wait_for_screen_contains("xxxabcdef")?;
+    rile.assert_cursor(0, 3)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn join_line_merges_current_line_with_previous() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\n  beta\n\n    gamma\nlast\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
