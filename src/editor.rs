@@ -2771,9 +2771,7 @@ impl Editor {
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
                 self.finish_query_replace(true);
             }
-            _ => self
-                .minibuffer
-                .set_message("Query replace: type y, n, !, or q"),
+            _ => self.set_query_replace_choice_message(),
         }
         Ok(EditorOutcome::Continue)
     }
@@ -2797,8 +2795,7 @@ impl Editor {
             self.cursor = range.start;
             self.goal_display_column = None;
             self.sync_current_window();
-            self.minibuffer
-                .set_message("Query replace: type y, n, !, or q");
+            self.set_query_replace_choice_message();
         } else if self
             .query_replace
             .as_ref()
@@ -2811,6 +2808,18 @@ impl Editor {
             self.finish_query_replace(false);
         }
         Ok(())
+    }
+
+    fn set_query_replace_choice_message(&mut self) {
+        let Some(state) = &self.query_replace else {
+            self.minibuffer
+                .set_message("Query replace: type y, n, !, or q");
+            return;
+        };
+        self.minibuffer.set_message(format!(
+            "Query replacing {} with {}: (y, n, !, q)?",
+            state.query, state.replacement
+        ));
     }
 
     fn replace_query_replace_current(&mut self) -> Result<Position> {
@@ -2862,8 +2871,13 @@ impl Editor {
             self.minibuffer
                 .set_message(format!("Quit query replace ({replacements} {noun})"));
         } else {
+            let noun = if replacements == 1 {
+                "occurrence"
+            } else {
+                "occurrences"
+            };
             self.minibuffer
-                .set_message(format!("Query replace done ({replacements} {noun})"));
+                .set_message(format!("Replaced {replacements} {noun}"));
         }
     }
 
@@ -7922,6 +7936,10 @@ M-g g           goto-line\n"
             Some("Query replace é with: ")
         );
         submit_prompt_text(&mut editor, "e");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Query replacing é with e: (y, n, !, q)?")
+        );
 
         let spans = editor.spans_for_line(0, "é a é");
         assert_eq!(spans.len(), 1);
@@ -7968,7 +7986,7 @@ M-g g           goto-line\n"
         assert_eq!(editor.document().buffer().serialize(), "foo bar bar");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("Query replace done (2 replacements)")
+            Some("Replaced 2 occurrences")
         );
     }
 

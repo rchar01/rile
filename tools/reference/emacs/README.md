@@ -51,6 +51,8 @@ Initial inspection scenarios:
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
 - `newline-and-indent-core`: base Emacs `C-j` newline-and-indent behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
+- `query-replace-core`: base Emacs `M-%` query-replace prompts, choices, and
+  completion status.
 - `rectangle-mark-core`: base Emacs `C-x SPC` rectangle mark mode with regular
   `M-w` copy and `C-y` yank behavior.
 - `yank-pop-core`: base Emacs `M-y` yank-pop behavior.

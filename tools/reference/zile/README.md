@@ -42,6 +42,7 @@ Baseline inspection scenarios:
 - `incremental-search-wrap`: incremental search wrapping behavior.
 - `insert-file`: `C-x i` insert-file behavior.
 - `quoted-insert`: `C-q` quoted-insert behavior.
+- `query-replace`: `M-%` query-replace prompts, choices, and completion status.
 - `rectangle-mark`: `C-x SPC` rectangle mark mode; focused capture shows no
   usable mark for the subsequent regular `M-w`/`C-y` sequence.
 - `yank-pop`: `M-y` yank-pop behavior.

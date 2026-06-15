@@ -1,0 +1,53 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=query-replace-core
+SCENARIO_DESCRIPTION='Observe base Emacs query-replace prompts and choice-key workflow.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=query-replace-core.txt
+FIXTURE_CONTENT=$'red one
+blue two
+red three
+red four
+red five
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /red one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "%"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-search-prompt.png
+Sleep 500ms
+Type "red"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-replacement-prompt.png
+Sleep 500ms
+Type "green"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-first-candidate.png
+Sleep 500ms
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-replace-one.png
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-skip-one.png
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-replace-all.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

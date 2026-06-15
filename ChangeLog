@@ -1,5 +1,17 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Show query-replace choice prompts with the active query and
+	replacement, and report completed replacements with Emacs/Zile-style
+	occurrence wording.
+	* tools/reference/emacs/scenarios/query-replace-core.scenario,
+	tools/reference/zile/scenarios/query-replace.scenario: Add focused
+	query-replace captures for prompts, choices, replace-all, and completion
+	status.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md: Document
+	the query-replace reference scenarios.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/input.rs: Parse LF as C-j while keeping CR as Enter.
 	* src/command.rs, src/keymap.rs, src/editor.rs: Add newline-and-indent on
 	C-j with repeat-count support.
