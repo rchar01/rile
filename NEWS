@@ -25,6 +25,9 @@ Editing features:
   C-x r y, C-x r d, C-x r c, C-x r o, C-x r t, and C-x r N for explicit
   rectangle kill, copy, yank, delete, clear, open, string replacement, and line
   numbering operations without registers.
+* Store point, text, rectangle, and number registers with C-x r SPC, C-x r s,
+  C-x r r, and C-x r n; jump or insert them with C-x r j and C-x r i, and
+  increment number registers with C-x r +.
 * Supply repeat counts with C-u for repeatable movement, insertion, deletion,
   kill, and open-line commands.
 * Record keyboard macros with C-x (, finish them with C-x ), and replay them

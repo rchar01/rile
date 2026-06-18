@@ -1,0 +1,134 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=registers
+SCENARIO_DESCRIPTION='Observe Zile point, text, rectangle, and number registers.'
+TYPING_SPEED=80ms
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=registers.txt
+FIXTURE_CONTENT=$'POINT
+alpha
+beta
+TEXT
+abcdef
+TEXT-TARGET
+------
+RECT
+abcdef
+123456
+RECT-TARGET
+------
+------
+NUMBER
+value:
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /POINT/
+Screenshot {{FRAME_DIR}}/00-open.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/01-prompt-search-point.png
+Type "POINT"
+Screenshot {{FRAME_DIR}}/02-typed-search-point.png
+Enter
+Screenshot {{FRAME_DIR}}/03-after-enter-search-point.png
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+F
+Screenshot {{FRAME_DIR}}/04-before-point-register-probe.png
+Ctrl+X
+Type "r"
+Ctrl+Space
+Screenshot {{FRAME_DIR}}/05-after-point-register-command-key.png
+Type "p"
+Screenshot {{FRAME_DIR}}/06-after-point-register-probe.png
+Ctrl+N
+Ctrl+A
+Screenshot {{FRAME_DIR}}/07-before-jump-register-probe.png
+Ctrl+X
+Type "r"
+Type "j"
+Screenshot {{FRAME_DIR}}/08-after-jump-register-command-key.png
+Type "p"
+Screenshot {{FRAME_DIR}}/09-after-jump-register-probe.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/10-prompt-search-text.png
+Type "TEXT"
+Screenshot {{FRAME_DIR}}/11-typed-search-text.png
+Enter
+Screenshot {{FRAME_DIR}}/12-after-enter-search-text.png
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Screenshot {{FRAME_DIR}}/13-before-copy-text-register.png
+Ctrl+X
+Type "r"
+Type "s"
+Screenshot {{FRAME_DIR}}/14-prompt-copy-text-register-key.png
+Type "t"
+Screenshot {{FRAME_DIR}}/15-after-copy-text-register.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/16-prompt-search-text-target.png
+Type "TEXT-TARGET"
+Screenshot {{FRAME_DIR}}/17-typed-search-text-target.png
+Enter
+Screenshot {{FRAME_DIR}}/18-after-enter-search-text-target.png
+Ctrl+A
+Ctrl+N
+Screenshot {{FRAME_DIR}}/19-before-insert-text-register.png
+Ctrl+X
+Type "r"
+Type "i"
+Screenshot {{FRAME_DIR}}/20-prompt-insert-text-register-key.png
+Type "t"
+Screenshot {{FRAME_DIR}}/21-after-insert-text-register.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/22-prompt-search-rect.png
+Type "RECT"
+Screenshot {{FRAME_DIR}}/23-typed-search-rect.png
+Enter
+Screenshot {{FRAME_DIR}}/24-after-enter-search-rect.png
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Screenshot {{FRAME_DIR}}/25-before-copy-rectangle-register-probe.png
+Ctrl+X
+Type "r"
+Type "r"
+Screenshot {{FRAME_DIR}}/26-after-copy-rectangle-command-key.png
+Type "r"
+Screenshot {{FRAME_DIR}}/27-after-copy-rectangle-probe.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/28-prompt-search-number.png
+Type "NUMBER"
+Screenshot {{FRAME_DIR}}/29-typed-search-number.png
+Enter
+Screenshot {{FRAME_DIR}}/30-after-enter-search-number.png
+Ctrl+A
+Ctrl+N
+Ctrl+E
+Screenshot {{FRAME_DIR}}/31-before-number-register-probe.png
+Ctrl+U
+Screenshot {{FRAME_DIR}}/32-prompt-number-prefix.png
+Type "7"
+Screenshot {{FRAME_DIR}}/33-typed-number-prefix.png
+Ctrl+X
+Type "r"
+Type "n"
+Screenshot {{FRAME_DIR}}/34-after-number-register-command-key.png
+Type "n"
+Screenshot {{FRAME_DIR}}/35-after-number-register-probe.png
+Ctrl+X
+Ctrl+C
+EOF
+}

@@ -30,6 +30,10 @@ source "$scenario_path"
 : "${FIXTURE_NAME:?scenario must set FIXTURE_NAME}"
 : "${FIXTURE_CONTENT:?scenario must set FIXTURE_CONTENT}"
 : "${EMACS_PROFILE:?scenario must set EMACS_PROFILE to core or modern}"
+: "${TYPING_SPEED:=}"
+: "${AUTO_INPUT_PAUSES:=1}"
+: "${INPUT_PAUSE:=500ms}"
+: "${SCREENSHOT_PAUSE:=}"
 
 if ! declare -F vhs_steps >/dev/null; then
   printf 'scenario must define vhs_steps function: %s\n' "$scenario_path" >&2
@@ -78,6 +82,19 @@ steps=${steps//\{\{FRAME_DIR\}\}/$frame_rel}
 steps=${steps//\{\{FIXTURE\}\}/$fixture_rel}
 steps=${steps//\{\{EMACS\}\}/$emacs_rel}
 steps=${steps//\{\{HOME\}\}/$home_rel}
+effective_input_pause=${REFERENCE_INPUT_PAUSE:-$INPUT_PAUSE}
+effective_screenshot_pause=${REFERENCE_SCREENSHOT_PAUSE:-${SCREENSHOT_PAUSE:-$effective_input_pause}}
+steps=$(
+  REFERENCE_AUTO_PAUSES="${REFERENCE_AUTO_PAUSES:-$AUTO_INPUT_PAUSES}" \
+    REFERENCE_INPUT_PAUSE="$effective_input_pause" \
+    REFERENCE_SCREENSHOT_PAUSE="$effective_screenshot_pause" \
+    bash "$root/tools/reference/lib/expand-vhs-steps" <<<"$steps"
+)
+
+typing_speed_line=
+if [[ -n $TYPING_SPEED ]]; then
+  typing_speed_line="Set TypingSpeed $TYPING_SPEED"
+fi
 
 cat > "$tape" <<EOF
 Output $gif_rel
@@ -87,6 +104,7 @@ Set Height 720
 Set FontSize 18
 Set Padding 12
 Set CursorBlink false
+$typing_speed_line
 
 Require $emacs_rel
 

@@ -59,6 +59,8 @@ Initial inspection scenarios:
   `M-w` copy and `C-y` yank behavior.
 - `rectangle-string-number-core`: base Emacs `string-rectangle` and
   `rectangle-number-lines` behavior.
+- `registers-core`: base Emacs point, text, rectangle, and number register
+  behavior.
 - `yank-pop-core`: base Emacs `M-y` yank-pop behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.

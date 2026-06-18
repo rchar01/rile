@@ -59,6 +59,10 @@ Basic editor keys:
   using mark and point. `C-x r d` deletes a rectangle without saving it,
   `C-x r c` clears it to spaces, `C-x r o` opens blank columns, `C-x r t`
   replaces it with a prompted string, and `C-x r N` inserts line numbers.
+- Single printable-character registers support `C-x r SPC` to save point,
+  `C-x r j` to jump, `C-x r s` to copy the active region, `C-x r r` to copy a
+  rectangle, `C-x r i` to insert text, rectangle, or number values, and
+  `C-x r n` / `C-x r +` to store and increment number registers.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.

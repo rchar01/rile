@@ -215,6 +215,22 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text(" ".to_owned()),
+            ],
+            "point-to-register",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("+".to_owned()),
+            ],
+            "increment-register",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("N".to_owned()),
             ],
             "rectangle-number-lines",
@@ -239,9 +255,33 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("i".to_owned()),
+            ],
+            "insert-register",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("j".to_owned()),
+            ],
+            "jump-to-register",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("k".to_owned()),
             ],
             "kill-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("n".to_owned()),
+            ],
+            "number-to-register",
         ),
         KeyBinding::new(
             [
@@ -258,6 +298,22 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("o".to_owned()),
             ],
             "open-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("r".to_owned()),
+            ],
+            "copy-rectangle-to-register",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("s".to_owned()),
+            ],
+            "copy-to-register",
         ),
         KeyBinding::new(
             [
@@ -490,6 +546,22 @@ mod tests {
             keymap.resolve(&[
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text(" ".to_owned())
+            ]),
+            KeyResolution::Command("point-to-register")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("+".to_owned())
+            ]),
+            KeyResolution::Command("increment-register")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("N".to_owned())
             ]),
             KeyResolution::Command("rectangle-number-lines")
@@ -514,9 +586,33 @@ mod tests {
             keymap.resolve(&[
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("i".to_owned())
+            ]),
+            KeyResolution::Command("insert-register")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("j".to_owned())
+            ]),
+            KeyResolution::Command("jump-to-register")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("k".to_owned())
             ]),
             KeyResolution::Command("kill-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("n".to_owned())
+            ]),
+            KeyResolution::Command("number-to-register")
         );
         assert_eq!(
             keymap.resolve(&[
@@ -533,6 +629,22 @@ mod tests {
                 KeyEvent::Text("o".to_owned())
             ]),
             KeyResolution::Command("open-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("r".to_owned())
+            ]),
+            KeyResolution::Command("copy-rectangle-to-register")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("s".to_owned())
+            ]),
+            KeyResolution::Command("copy-to-register")
         );
         assert_eq!(
             keymap.resolve(&[

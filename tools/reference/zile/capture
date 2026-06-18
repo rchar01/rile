@@ -22,5 +22,9 @@ podman=${PODMAN:-podman}
   --userns=keep-id \
   -v "$root":/workspace:z \
   -w /workspace \
+  -e REFERENCE_AUTO_PAUSES \
+  -e REFERENCE_INPUT_PAUSE \
+  -e REFERENCE_SCREENSHOT_PAUSE \
+  -e TYPING_SPEED \
   "$image" \
   tools/reference/zile/capture-in-container "$1"

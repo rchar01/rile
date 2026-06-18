@@ -101,6 +101,24 @@ Capture the smoke scenario:
 tools/reference/zile/capture smoke-open
 ```
 
+The Makefile also provides a repo-level wrapper for targeted captures:
+
+```sh
+make reference-capture REF_EDITOR=zile REF_SCENARIO=smoke-open
+```
+
+Capture all scenarios for all reference editors:
+
+```sh
+make reference-capture-all
+```
+
+Capture all scenarios for one reference editor:
+
+```sh
+make reference-capture-all REF_EDITOR=emacs
+```
+
 Capture another scenario:
 
 ```sh
@@ -169,6 +187,54 @@ Supported placeholders in `vhs_steps` output:
 Emacs scenarios must also set `EMACS_PROFILE` to `core` or `modern`. Use
 `core` for base Emacs behavior with the shared reference early init and
 `modern` for the curated Vertico/Marginalia profile.
+
+## Scenario Timing
+
+Capture scripts expand scenario steps before running VHS. By default they add
+`Sleep 500ms` after input commands such as `Ctrl+X`, `Type "r"`, `Enter`,
+and `Tab`, and around each `Screenshot` when the neighboring meaningful step
+was not already a sleep. This keeps prompt transitions, prefix-key states,
+captured frames, and command results visible without requiring every scenario to
+hand-code waits after each key.
+
+The expander does not add a pause after `Escape` because existing scenarios use
+`Escape` followed by another key to express Meta-key input.
+
+Scenarios may still include explicit `Sleep` lines for transitions that need a
+longer or feature-specific delay. The expander does not add another automatic
+pause next to an existing sleep, including before or after screenshots.
+
+Screenshots should record semantic evidence, not every keystroke. For each
+feature command, capture the stable state before the command, prompt or
+key-reading states that affect behavior, typed minibuffer text before `Enter`,
+state immediately after an executing `Enter`, and the final visible result.
+Avoid adjacent before/after screenshots when no command or prompt transition
+happens between them.
+
+Prefer frame names that describe the observable state:
+
+- `before-...`: state before starting a feature command.
+- `prompt-...`: minibuffer prompt or command waiting for input.
+- `typed-...`: typed query, argument, or minibuffer content before execution.
+- `after-enter-...`: state immediately after `Enter` confirms or executes.
+- `after-...`: final command result.
+
+When a reference editor does not support a command, name the frames as probes
+instead of prompts, such as `before-...-probe`, `after-...-command-key`, and
+`after-...-probe`. This keeps fall-through text insertion, unknown-command
+messages, and other differences visible without implying the editor entered the
+same prompt state as Emacs.
+
+Timing controls are optional:
+
+- `INPUT_PAUSE`: per-scenario post-input pause, default `500ms`.
+- `SCREENSHOT_PAUSE`: per-scenario pause around screenshots, default `INPUT_PAUSE`.
+- `AUTO_INPUT_PAUSES=0`: disables automatic pause expansion for a scenario.
+- `TYPING_SPEED`: optional VHS typing speed for typed text animation.
+
+The same controls can be overridden from the environment with
+`REFERENCE_INPUT_PAUSE`, `REFERENCE_SCREENSHOT_PAUSE`, and
+`REFERENCE_AUTO_PAUSES`.
 
 ## How To Use Evidence
 

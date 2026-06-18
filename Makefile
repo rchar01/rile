@@ -6,10 +6,13 @@ SHELL := /bin/sh
 
 IMAGE ?= rile-dev
 VISUAL_IMAGE ?= rile-visual
+REFERENCE_EDITORS ?= emacs zile kg
+REF_EDITOR ?=
+REF_SCENARIO ?=
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run visual-demos visual-frames clean
+.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run reference-capture reference-capture-all visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -77,6 +80,29 @@ verify:
 ## Run the Rile binary in the dev container; pass ARGS='--help'
 run:
 	$(IN_CONTAINER) ./scripts/run $(ARGS)
+
+## Capture one reference scenario; set REF_EDITOR=zile REF_SCENARIO=smoke-open
+reference-capture:
+	@test -n "$(strip $(REF_EDITOR))" || { printf '%s\n' 'REF_EDITOR is required, e.g. REF_EDITOR=zile' >&2; exit 2; }
+	@test -n "$(strip $(REF_SCENARIO))" || { printf '%s\n' 'REF_SCENARIO is required, e.g. REF_SCENARIO=registers' >&2; exit 2; }
+	@test -x "tools/reference/$(REF_EDITOR)/capture" || { printf 'unknown reference editor: %s\n' "$(REF_EDITOR)" >&2; exit 2; }
+	tools/reference/$(REF_EDITOR)/capture "$(REF_SCENARIO)"
+
+## Capture all reference scenarios; optionally set REF_EDITOR=zile
+reference-capture-all:
+	@editors="$(strip $(REF_EDITOR))"; \
+	if [ -z "$$editors" ]; then editors="$(REFERENCE_EDITORS)"; fi; \
+	for editor in $$editors; do \
+		if [ ! -x "tools/reference/$$editor/capture" ]; then \
+			printf 'unknown reference editor: %s\n' "$$editor" >&2; \
+			exit 2; \
+		fi; \
+		for scenario in tools/reference/$$editor/scenarios/*.scenario; do \
+			name=$$(basename "$$scenario" .scenario); \
+			printf 'Capturing %s/%s\n' "$$editor" "$$name"; \
+			"tools/reference/$$editor/capture" "$$name"; \
+		done; \
+	done
 
 ## Generate optional VHS visual demo GIFs; pass ARGS='demos/name.tape'
 visual-demos:

@@ -304,10 +304,12 @@ entries back as columns, padding shorter target lines with spaces. The explicit
 rectangle command subset `C-x r k`, `C-x r M-w`, `C-x r y`, `C-x r d`,
 `C-x r c`, `C-x r o`, `C-x r t`, and `C-x r N` uses mark and point for kill,
 copy, yank, delete, clear, open, string replacement, and line numbering
-operations without implementing Emacs registers yet. Rectangle kill, yank,
-delete, clear, open, string replacement, and numbering operations are undoable
-as one grouped edit. Register-backed `C-x r ...` commands and `M-y` rotation
-across rectangle entries are deferred.
+operations. Rectangle kill, yank, delete, clear, open, string replacement, and
+numbering operations are undoable as one grouped edit. Register-backed `C-x r`
+commands support single printable-character point registers (`C-x r SPC`,
+`C-x r j`), text registers (`C-x r s`, `C-x r i`), rectangle registers
+(`C-x r r`, `C-x r i`), and number registers (`C-x r n`, `C-x r +`,
+`C-x r i`). `M-y` rotation across rectangle entries is deferred.
 
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no

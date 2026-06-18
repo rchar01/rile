@@ -52,8 +52,10 @@ pub struct Editor {
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
+    pending_register: Option<PendingRegisterCommand>,
     quoted_insert: bool,
     region: Option<RegionState>,
+    registers: HashMap<char, RegisterValue>,
     kill_ring: Vec<KillEntry>,
     yank_state: Option<YankState>,
     last_command_was_kill: bool,
@@ -94,6 +96,28 @@ struct RectangleBounds {
 enum KillEntry {
     Text(String),
     Rectangle(Vec<String>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RegisterValue {
+    Point {
+        buffer: BufferId,
+        position: Position,
+    },
+    Text(String),
+    Rectangle(Vec<String>),
+    Number(i32),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingRegisterCommand {
+    CopyRectangle,
+    CopyText,
+    IncrementNumber { amount: i32 },
+    Insert,
+    Jump,
+    Number { value: i32 },
+    Point,
 }
 
 impl KillEntry {
@@ -264,8 +288,10 @@ impl Editor {
             search: None,
             query_replace: None,
             rectangle_number_prompt: None,
+            pending_register: None,
             quoted_insert: false,
             region: None,
+            registers: HashMap::new(),
             kill_ring: Vec::new(),
             yank_state: None,
             last_command_was_kill: false,
@@ -484,6 +510,10 @@ impl Editor {
         if key == KeyEvent::Ctrl('g') {
             self.quit_current_operation();
             return Ok(EditorOutcome::Continue);
+        }
+
+        if self.pending_register.is_some() {
+            return self.handle_pending_register_key(key);
         }
 
         if self.describe_key.is_some() {
@@ -1110,6 +1140,8 @@ impl Editor {
             ClearRectangle => self.clear_rectangle(),
             CopyRegionAsKill => self.copy_region_as_kill(),
             CopyRectangleAsKill => self.copy_rectangle_as_kill(),
+            CopyRectangleToRegister => self.start_copy_rectangle_to_register(),
+            CopyToRegister => self.start_copy_to_register(),
             DeleteBackwardChar => {
                 self.repeat_signed(argument, Self::delete_backward_char, Self::delete_char)
             }
@@ -1136,7 +1168,10 @@ impl Editor {
             IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
             IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
             InsertFile => self.start_insert_file(),
+            IncrementRegister => self.start_increment_register(argument),
+            InsertRegister => self.start_insert_register(),
             JoinLine => self.join_line(),
+            JumpToRegister => self.start_jump_to_register(),
             ListBuffers => self.list_buffers(),
             KillLine => self.repeat_positive_kill(argument, Self::kill_line),
             KillRegion => self.kill_region(),
@@ -1147,8 +1182,10 @@ impl Editor {
             MarkWholeBuffer => self.mark_whole_buffer(),
             NewlineAndIndent => self.repeat_positive(argument, Self::newline_and_indent),
             NextLine => self.move_line_by_argument(argument, 1),
+            NumberToRegister => self.start_number_to_register(argument),
             OpenLine => self.repeat_positive(argument, Self::open_line),
             OpenRectangle => self.open_rectangle(),
+            PointToRegister => self.start_point_to_register(),
             PreviousLine => self.move_line_by_argument(argument, -1),
             QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
@@ -1502,6 +1539,7 @@ impl Editor {
     fn quit_current_operation(&mut self) {
         self.quoted_insert = false;
         self.describe_key = None;
+        self.pending_register = None;
         self.clear_key_sequence();
         self.universal_argument = None;
         self.deactivate_region();
@@ -1766,6 +1804,241 @@ impl Editor {
         region.active = true;
         self.goal_display_column = None;
         self.sync_current_window();
+        Ok(())
+    }
+
+    fn start_point_to_register(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.pending_register = Some(PendingRegisterCommand::Point);
+        self.minibuffer.set_message("Point to register: ");
+        Ok(())
+    }
+
+    fn start_jump_to_register(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.pending_register = Some(PendingRegisterCommand::Jump);
+        self.minibuffer.set_message("Jump to register: ");
+        Ok(())
+    }
+
+    fn start_copy_to_register(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        if self.active_region_range().is_none() {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        }
+        self.pending_register = Some(PendingRegisterCommand::CopyText);
+        self.minibuffer.set_message("Copy to register: ");
+        Ok(())
+    }
+
+    fn start_copy_rectangle_to_register(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        if self.rectangle_bounds_from_mark().is_none() {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        }
+        self.pending_register = Some(PendingRegisterCommand::CopyRectangle);
+        self.minibuffer.set_message("Copy rectangle to register: ");
+        Ok(())
+    }
+
+    fn start_insert_register(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        self.pending_register = Some(PendingRegisterCommand::Insert);
+        self.minibuffer.set_message("Insert register: ");
+        Ok(())
+    }
+
+    fn start_number_to_register(&mut self, argument: Option<i32>) -> Result<()> {
+        self.clear_insert_group();
+        self.pending_register = Some(PendingRegisterCommand::Number {
+            value: argument.unwrap_or(0),
+        });
+        self.minibuffer.set_message("Number to register: ");
+        Ok(())
+    }
+
+    fn start_increment_register(&mut self, argument: Option<i32>) -> Result<()> {
+        self.clear_insert_group();
+        self.pending_register = Some(PendingRegisterCommand::IncrementNumber {
+            amount: argument.unwrap_or(1),
+        });
+        self.minibuffer.set_message("Increment register: ");
+        Ok(())
+    }
+
+    fn handle_pending_register_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        let Some(command) = self.pending_register.take() else {
+            return Ok(EditorOutcome::Continue);
+        };
+        let Some(register) = register_key_from_event(&key) else {
+            self.minibuffer.set_error("invalid register key");
+            return Ok(EditorOutcome::Continue);
+        };
+
+        match command {
+            PendingRegisterCommand::CopyRectangle => self.copy_rectangle_to_register(register)?,
+            PendingRegisterCommand::CopyText => self.copy_to_register(register)?,
+            PendingRegisterCommand::IncrementNumber { amount } => {
+                self.increment_register(register, amount)
+            }
+            PendingRegisterCommand::Insert => self.insert_register(register)?,
+            PendingRegisterCommand::Jump => self.jump_to_register(register),
+            PendingRegisterCommand::Number { value } => self.number_to_register(register, value),
+            PendingRegisterCommand::Point => self.point_to_register(register),
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn point_to_register(&mut self, register: char) {
+        self.registers.insert(
+            register,
+            RegisterValue::Point {
+                buffer: self.current_buffer,
+                position: self.cursor,
+            },
+        );
+        self.minibuffer
+            .set_message(format!("Point saved to register {register}"));
+    }
+
+    fn jump_to_register(&mut self, register: char) {
+        let Some(RegisterValue::Point { buffer, position }) =
+            self.registers.get(&register).cloned()
+        else {
+            self.minibuffer
+                .set_error("register does not contain a point");
+            return;
+        };
+        let Some(document) = self.buffers.document(buffer) else {
+            self.minibuffer.set_error("register buffer is gone");
+            return;
+        };
+        if let Err(error) = document.buffer().validate_position(position) {
+            self.minibuffer.set_error(error.to_string());
+            return;
+        }
+
+        if buffer != self.current_buffer {
+            self.sync_current_window();
+            self.current_buffer = buffer;
+        }
+        self.restore_buffer_in_current_window(buffer);
+        self.cursor = position;
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer
+            .set_message(format!("Jumped to register {register}"));
+    }
+
+    fn copy_to_register(&mut self, register: char) -> Result<()> {
+        let Some(range) = self.active_region_range() else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        let text = self.document().buffer().text_in_range(range)?;
+        self.registers.insert(register, RegisterValue::Text(text));
+        self.deactivate_region();
+        self.minibuffer
+            .set_message(format!("Copied region to register {register}"));
+        Ok(())
+    }
+
+    fn copy_rectangle_to_register(&mut self, register: char) -> Result<()> {
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        let text = self.document().buffer().text_in_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        self.registers
+            .insert(register, RegisterValue::Rectangle(text));
+        self.deactivate_region();
+        self.minibuffer
+            .set_message(format!("Copied rectangle to register {register}"));
+        Ok(())
+    }
+
+    fn number_to_register(&mut self, register: char, value: i32) {
+        self.registers
+            .insert(register, RegisterValue::Number(value));
+        self.minibuffer
+            .set_message(format!("Number saved to register {register}"));
+    }
+
+    fn increment_register(&mut self, register: char, amount: i32) {
+        let Some(RegisterValue::Number(value)) = self.registers.get_mut(&register) else {
+            self.minibuffer
+                .set_error("register does not contain a number");
+            return;
+        };
+        *value = value.saturating_add(amount);
+        self.minibuffer
+            .set_message(format!("Incremented register {register}"));
+    }
+
+    fn insert_register(&mut self, register: char) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        let Some(value) = self.registers.get(&register).cloned() else {
+            self.minibuffer.set_error("register is empty");
+            return Ok(());
+        };
+        match value {
+            RegisterValue::Text(text) => self.insert_register_text(register, &text)?,
+            RegisterValue::Rectangle(rectangle) => {
+                self.insert_register_rectangle(register, &rectangle)?
+            }
+            RegisterValue::Number(number) => {
+                self.insert_register_text(register, &number.to_string())?;
+            }
+            RegisterValue::Point { .. } => {
+                self.minibuffer.set_error("register does not contain text")
+            }
+        }
+        Ok(())
+    }
+
+    fn insert_register_text(&mut self, register: char, text: &str) -> Result<()> {
+        let cursor_before = self.cursor;
+        self.cursor = self
+            .document_mut()
+            .buffer_mut()
+            .insert(cursor_before, text)?;
+        self.record_insert(cursor_before, self.cursor, text, false);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer
+            .set_message(format!("Inserted register {register}"));
+        Ok(())
+    }
+
+    fn insert_register_rectangle(&mut self, register: char, rectangle: &[String]) -> Result<()> {
+        let cursor_before = self.cursor;
+        let column = self.document().buffer().display_column(cursor_before)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            cursor_before,
+            column,
+            rectangle,
+        )?;
+        self.cursor = cursor_after;
+        self.record_batch_insert(inserts, cursor_before, cursor_after);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer
+            .set_message(format!("Inserted register {register}"));
         Ok(())
     }
 
@@ -3714,6 +3987,13 @@ fn is_keyboard_macro_control_command(command: Command) -> bool {
 
 fn positive_argument_count(argument: Option<i32>) -> usize {
     argument.unwrap_or(1).max(0) as usize
+}
+
+fn register_key_from_event(key: &KeyEvent) -> Option<char> {
+    match key {
+        KeyEvent::Text(text) if text.chars().count() == 1 => text.chars().next(),
+        _ => None,
+    }
 }
 
 fn format_key_sequence(sequence: &[KeyEvent]) -> String {
@@ -7515,6 +7795,242 @@ M-g g           goto-line\n"
             editor.document().buffer().serialize(),
             "abcdef\n123456\nuvwxyz\n"
         );
+    }
+
+    #[test]
+    fn point_register_saves_and_jumps_to_point() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\nbeta\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        send_c_x_r(&mut editor, KeyEvent::Text(" ".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("p".to_owned()))
+            .expect("register key should save point");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Point saved to register p")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("cursor should move to line start");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        send_c_x_r(&mut editor, KeyEvent::Text("j".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("p".to_owned()))
+            .expect("register key should jump");
+
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Jumped to register p")
+        );
+    }
+
+    #[test]
+    fn text_register_copies_inserts_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n------\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("cursor should move");
+        send_c_x_r(&mut editor, KeyEvent::Text("s".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("t".to_owned()))
+            .expect("register key should copy text");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Copied region to register t")
+        );
+
+        editor.cursor = Position::new(1, 0);
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("t".to_owned()))
+            .expect("register key should insert text");
+
+        assert_eq!(editor.document().buffer().serialize(), "abcdef\nbc------\n");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted register text");
+        assert_eq!(editor.document().buffer().serialize(), "abcdef\n------\n");
+    }
+
+    #[test]
+    fn rectangle_register_copies_inserts_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\n------\n------\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("r".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("r".to_owned()))
+            .expect("register key should copy rectangle");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Copied rectangle to register r")
+        );
+
+        editor.cursor = Position::new(2, 0);
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("r".to_owned()))
+            .expect("register key should insert rectangle");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nbc------\n23------\n"
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted register rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\n------\n------\n"
+        );
+    }
+
+    #[test]
+    fn number_register_stores_increments_inserts_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "value:\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('e'))
+            .expect("cursor should move to end");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("7".to_owned()))
+            .expect("argument should accept digit");
+        send_c_x_r(&mut editor, KeyEvent::Text("n".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("register key should store number");
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("register key should insert number");
+
+        assert_eq!(editor.document().buffer().serialize(), "value:7\n");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("5".to_owned()))
+            .expect("argument should accept digit");
+        send_c_x_r(&mut editor, KeyEvent::Text("+".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("register key should increment number");
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("register key should insert incremented number");
+
+        assert_eq!(editor.document().buffer().serialize(), "value:712\n");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove inserted number");
+        assert_eq!(editor.document().buffer().serialize(), "value:7\n");
+    }
+
+    #[test]
+    fn pending_register_can_be_cancelled_and_reports_invalid_key() {
+        let mut editor = Editor::new(Document::scratch());
+
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Insert register: ")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel pending register command");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("normal text should insert after cancel");
+        assert_eq!(editor.document().buffer().serialize(), "x");
+
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("invalid register key should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: invalid register key")
+        );
+    }
+
+    #[test]
+    fn insert_register_reports_empty_and_wrong_type_registers() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("empty register should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: register is empty")
+        );
+
+        send_c_x_r(&mut editor, KeyEvent::Text(" ".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("p".to_owned()))
+            .expect("register key should save point");
+        send_c_x_r(&mut editor, KeyEvent::Text("i".to_owned()));
+        editor
+            .handle_key(KeyEvent::Text("p".to_owned()))
+            .expect("point register should not insert as text");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: register does not contain text")
+        );
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
     }
 
     #[test]

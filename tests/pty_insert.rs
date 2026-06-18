@@ -181,6 +181,93 @@ fn c_x_r_rectangle_copy_and_yank_paste_columns() -> Result<()> {
 }
 
 #[test]
+fn c_x_r_registers_store_jump_and_insert_visible_values() -> Result<()> {
+    let file =
+        fixtures::named_temp_file("abcdef\n123456\nTEXT-TARGET\n------\n------\nNUMBER\nvalue:\n")?;
+    let mut rile = RilePty::spawn(file.path(), 16, 80)?;
+
+    rile.wait_for_screen_contains("abcdef")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("SPC", b" ")?;
+    rile.send("p", b"p")?;
+    rile.assert_screen_contains("Point saved to register p")?;
+
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-@", b"\0")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("s", b"s")?;
+    rile.send("t", b"t")?;
+    rile.assert_screen_contains("Copied region to register t")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("i", b"i")?;
+    rile.send("t", b"t")?;
+    rile.wait_for_screen_contains("bcTEXT-TARGET")?;
+
+    rile.send("M-<", keys::meta('<'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-@", b"\0")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("r", b"r")?;
+    rile.send("r register", b"r")?;
+    rile.assert_screen_contains("Copied rectangle to register r")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("i", b"i")?;
+    rile.send("r register", b"r")?;
+    rile.wait_for_screen_contains("bc------")?;
+    rile.assert_screen_contains("23------")?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("7", b"7")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("n", b"n")?;
+    rile.send("n register", b"n")?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("5", b"5")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("+", b"+")?;
+    rile.send("n register", b"n")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("i", b"i")?;
+    rile.send("n register", b"n")?;
+    rile.wait_for_screen_contains("value:12")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("r", b"r")?;
+    rile.send("j", b"j")?;
+    rile.send("p", b"p")?;
+    rile.assert_cursor(0, 2)?;
+    rile.assert_status_contains("Ln 001 Col 002")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn join_line_merges_current_line_with_previous() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\n  beta\n\n    gamma\nlast\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

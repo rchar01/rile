@@ -50,6 +50,8 @@ Initial inspection scenarios:
   `M-w`/`C-y` copying and yanking a linear region rather than rectangle columns.
 - `rectangle-string-number`: `C-x r t` and `C-x r N` probes; focused capture
   shows `C-x r t` is undefined in this kg build.
+- `registers`: point, text, rectangle, and number register probes; focused
+  capture shows `C-x r j` and `C-x r i` are undefined in this kg build.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.

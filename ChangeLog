@@ -1,3 +1,17 @@
+2026-06-18  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs, src/keymap.rs, src/editor.rs: Add point, text,
+	rectangle, and number register commands under C-x r, including jump,
+	insert, increment, and undo-backed text/rectangle insertion.
+	* README.md, NEWS, docs/development.md: Document the register command
+	subset.
+	* tools/reference/emacs/scenarios/registers-core.scenario,
+	tools/reference/zile/scenarios/registers.scenario,
+	tools/reference/kg/scenarios/registers.scenario: Add focused register
+	reference captures.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md: Document register scenario coverage.
+
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
 	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add

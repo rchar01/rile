@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+auto_pauses=${REFERENCE_AUTO_PAUSES:-1}
+input_pause=${REFERENCE_INPUT_PAUSE:-500ms}
+screenshot_pause=${REFERENCE_SCREENSHOT_PAUSE:-$input_pause}
+
+if [[ $auto_pauses == 0 || $auto_pauses == false ]]; then
+  cat
+  exit 0
+fi
+
+mapfile -t lines
+
+trim() {
+  local line=$1
+  line=${line#"${line%%[![:space:]]*}"}
+  line=${line%"${line##*[![:space:]]}"}
+  printf '%s' "$line"
+}
+
+is_sleep() {
+  local line
+  line=$(trim "$1")
+  [[ $line == Sleep || $line == Sleep[[:space:]]* ]]
+}
+
+is_screenshot() {
+  local line
+  line=$(trim "$1")
+  [[ $line == Screenshot || $line == Screenshot[[:space:]]* ]]
+}
+
+is_input() {
+  local line
+  line=$(trim "$1")
+
+  case "$line" in
+    Type | Type[[:space:]]* | \
+      Enter | Enter[[:space:]]* | \
+      Ctrl+* | Alt+* | Shift+* | \
+      Tab | Tab[[:space:]]* | \
+      Backspace | Backspace[[:space:]]* | \
+      Delete | Delete[[:space:]]* | \
+      Up | Up[[:space:]]* | \
+      Down | Down[[:space:]]* | \
+      Left | Left[[:space:]]* | \
+      Right | Right[[:space:]]* | \
+      Home | Home[[:space:]]* | \
+      End | End[[:space:]]* | \
+      PageUp | PageUp[[:space:]]* | \
+      PageDown | PageDown[[:space:]]* | \
+      Space | Space[[:space:]]* | \
+      Key | Key[[:space:]]* | \
+      Press | Press[[:space:]]* | \
+      Paste | Paste[[:space:]]* | \
+      Click | Click[[:space:]]* | \
+      Mouse | Mouse[[:space:]]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+next_significant_line() {
+  local start=$1
+  local i line
+
+  for ((i = start; i < ${#lines[@]}; i++)); do
+    line=$(trim "${lines[$i]}")
+    if [[ -n $line ]]; then
+      printf '%s' "$line"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+last_significant=
+for ((i = 0; i < ${#lines[@]}; i++)); do
+  line=${lines[$i]}
+
+  if is_screenshot "$line" && [[ -n $screenshot_pause ]] && ! is_sleep "$last_significant"; then
+    printf 'Sleep %s\n' "$screenshot_pause"
+    last_significant="Sleep $screenshot_pause"
+  fi
+
+  printf '%s\n' "$line"
+
+  trimmed=$(trim "$line")
+  if [[ -n $trimmed ]]; then
+    last_significant=$trimmed
+  fi
+
+  if is_input "$line" && [[ -n $input_pause ]]; then
+    next_line=
+    next_line=$(next_significant_line $((i + 1)) || true)
+    if [[ -n $next_line ]] && ! is_sleep "$next_line"; then
+      printf 'Sleep %s\n' "$input_pause"
+      last_significant="Sleep $input_pause"
+    fi
+  fi
+
+  if is_screenshot "$line" && [[ -n $screenshot_pause ]]; then
+    next_line=
+    next_line=$(next_significant_line $((i + 1)) || true)
+    if [[ -n $next_line ]] && ! is_sleep "$next_line"; then
+      printf 'Sleep %s\n' "$screenshot_pause"
+      last_significant="Sleep $screenshot_pause"
+    fi
+  fi
+done

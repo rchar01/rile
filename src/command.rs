@@ -13,6 +13,8 @@ pub enum Command {
     ClearRectangle,
     CopyRegionAsKill,
     CopyRectangleAsKill,
+    CopyRectangleToRegister,
+    CopyToRegister,
     DeleteBackwardChar,
     DeleteChar,
     DeleteRectangle,
@@ -33,7 +35,10 @@ pub enum Command {
     IncrementalSearchBackward,
     IncrementalSearchForward,
     InsertFile,
+    InsertRegister,
+    IncrementRegister,
     JoinLine,
+    JumpToRegister,
     ListBuffers,
     NewlineAndIndent,
     KillLine,
@@ -43,9 +48,11 @@ pub enum Command {
     KillWord,
     MarkWholeBuffer,
     NextLine,
+    NumberToRegister,
     OpenLine,
     OpenRectangle,
     PreviousLine,
+    PointToRegister,
     QuotedInsert,
     QueryReplace,
     RectangleMarkMode,
@@ -192,6 +199,18 @@ pub fn default_commands() -> Vec<CommandSpec> {
             CopyRectangleAsKill,
         ),
         CommandSpec::new(
+            "copy-rectangle-to-register",
+            "Copy rectangle to a register",
+            true,
+            CopyRectangleToRegister,
+        ),
+        CommandSpec::new(
+            "copy-to-register",
+            "Copy active region to a register",
+            true,
+            CopyToRegister,
+        ),
+        CommandSpec::new(
             "delete-backward-char",
             "Delete character before cursor",
             true,
@@ -282,10 +301,28 @@ pub fn default_commands() -> Vec<CommandSpec> {
             InsertFile,
         ),
         CommandSpec::new(
+            "increment-register",
+            "Add numeric argument to a number register",
+            true,
+            IncrementRegister,
+        ),
+        CommandSpec::new(
+            "insert-register",
+            "Insert text, rectangle, or number from a register",
+            true,
+            InsertRegister,
+        ),
+        CommandSpec::new(
             "join-line",
             "Join current line to previous line",
             true,
             JoinLine,
+        ),
+        CommandSpec::new(
+            "jump-to-register",
+            "Jump to a point register",
+            true,
+            JumpToRegister,
         ),
         CommandSpec::new("list-buffers", "List active buffers", true, ListBuffers),
         CommandSpec::new(
@@ -311,6 +348,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             MarkWholeBuffer,
         ),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine),
+        CommandSpec::new(
+            "number-to-register",
+            "Store numeric argument in a register",
+            true,
+            NumberToRegister,
+        ),
         CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
         CommandSpec::new(
             "open-rectangle",
@@ -325,6 +368,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Insert the next key literally",
             true,
             QuotedInsert,
+        ),
+        CommandSpec::new(
+            "point-to-register",
+            "Store point in a register",
+            true,
+            PointToRegister,
         ),
         CommandSpec::new(
             "query-replace",
@@ -462,6 +511,8 @@ mod tests {
         assert!(registry.contains("call-last-kbd-macro"));
         assert!(registry.contains("clear-rectangle"));
         assert!(registry.contains("copy-rectangle-as-kill"));
+        assert!(registry.contains("copy-rectangle-to-register"));
+        assert!(registry.contains("copy-to-register"));
         assert!(registry.contains("end-of-buffer"));
         assert!(registry.contains("end-kbd-macro"));
         assert!(registry.contains("exchange-point-and-mark"));
@@ -472,10 +523,15 @@ mod tests {
         assert!(registry.contains("goto-line"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
+        assert!(registry.contains("increment-register"));
         assert!(registry.contains("insert-file"));
+        assert!(registry.contains("insert-register"));
         assert!(registry.contains("join-line"));
+        assert!(registry.contains("jump-to-register"));
         assert!(registry.contains("list-buffers"));
         assert!(registry.contains("newline-and-indent"));
+        assert!(registry.contains("number-to-register"));
+        assert!(registry.contains("point-to-register"));
         assert!(registry.contains("quoted-insert"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));
