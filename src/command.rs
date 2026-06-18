@@ -61,6 +61,8 @@ pub enum Command {
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
+    ShellCommand,
+    ShellCommandOnRegion,
     StartKeyboardMacro,
     StringRectangle,
     OtherWindow,
@@ -419,6 +421,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             SetMarkCommand,
         ),
+        CommandSpec::new("shell-command", "Run a shell command", true, ShellCommand),
+        CommandSpec::new(
+            "shell-command-on-region",
+            "Run a shell command with region as input",
+            true,
+            ShellCommandOnRegion,
+        ),
         CommandSpec::new(
             "start-kbd-macro",
             "Start defining a keyboard macro",
@@ -554,6 +563,8 @@ mod tests {
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));
+        assert!(registry.contains("shell-command"));
+        assert!(registry.contains("shell-command-on-region"));
         assert!(registry.contains("start-kbd-macro"));
         assert!(registry.contains("string-rectangle"));
         assert!(registry.contains("toggle-line-numbers"));

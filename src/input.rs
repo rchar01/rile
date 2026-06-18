@@ -285,6 +285,8 @@ mod tests {
     #[test]
     fn parses_meta_key() {
         assert_eq!(parse(b"\x1bf").event, KeyEvent::Meta('f'));
+        assert_eq!(parse(b"\x1b!").event, KeyEvent::Meta('!'));
+        assert_eq!(parse(b"\x1b|").event, KeyEvent::Meta('|'));
         assert_eq!(parse("\u{1b}é".as_bytes()).event, KeyEvent::Meta('é'));
         assert_eq!(
             parse(b"\x1b\x7f").event,

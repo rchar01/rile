@@ -52,6 +52,8 @@ Initial inspection scenarios:
   shows `C-x r t` is undefined in this kg build.
 - `registers`: point, text, rectangle, and number register probes; focused
   capture shows `C-x r j` and `C-x r i` are undefined in this kg build.
+- `shell-command`: `M-!` insertion behavior, cwd, stdout/stderr/failure probes,
+  and `M-|` region replacement behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.

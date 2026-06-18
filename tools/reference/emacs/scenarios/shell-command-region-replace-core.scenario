@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=shell-command-region-replace-core
+SCENARIO_DESCRIPTION='Observe base Emacs prefix shell-command-on-region replacement behavior.'
+EMACS_PROFILE=core
+TYPING_SPEED=80ms
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=shell-command-region-replace-core.txt
+FIXTURE_CONTENT=$'REGION
+orange
+apple
+banana
+END
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /REGION/
+Screenshot {{FRAME_DIR}}/00-open.png
+Ctrl+N
+Ctrl+A
+Ctrl+Space
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Screenshot {{FRAME_DIR}}/01-before-prefix-shell-region-replace.png
+Ctrl+U
+Screenshot {{FRAME_DIR}}/02-prefix-shell-region-replace.png
+Escape
+Type "|"
+Screenshot {{FRAME_DIR}}/03-prompt-shell-region-replace.png
+Type "sort"
+Screenshot {{FRAME_DIR}}/04-typed-shell-region-replace.png
+Enter
+Screenshot {{FRAME_DIR}}/05-after-shell-region-replace.png
+Sleep 500ms
+EOF
+}

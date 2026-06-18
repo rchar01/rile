@@ -15,6 +15,7 @@ use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{KeyMap, KeyResolution};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
+use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
@@ -40,6 +41,7 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
+    shell_output_return: Option<Viewport>,
     describe_key: Option<Vec<KeyEvent>>,
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
@@ -52,6 +54,7 @@ pub struct Editor {
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
+    shell_command_prompt: Option<ShellCommandPromptState>,
     pending_register: Option<PendingRegisterCommand>,
     quoted_insert: bool,
     region: Option<RegionState>,
@@ -207,6 +210,19 @@ struct RectangleNumberPromptState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct ShellCommandPromptState {
+    action: ShellCommandAction,
+    stdin: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShellCommandAction {
+    Display,
+    Insert,
+    ReplaceRegion { range: TextRange },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct PromptHistory {
     kind: PromptKind,
     entries: Vec<String>,
@@ -276,6 +292,7 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             help_return: None,
+            shell_output_return: None,
             describe_key: None,
             completion: None,
             completion_return: None,
@@ -288,6 +305,7 @@ impl Editor {
             search: None,
             query_replace: None,
             rectangle_number_prompt: None,
+            shell_command_prompt: None,
             pending_register: None,
             quoted_insert: false,
             region: None,
@@ -524,6 +542,10 @@ impl Editor {
             return Ok(self.restore_help_buffer());
         }
 
+        if self.document().is_shell_output() && key == KeyEvent::Text("q".to_owned()) {
+            return Ok(self.restore_shell_output_buffer());
+        }
+
         if self.document().is_buffer_list() && key == KeyEvent::Text("q".to_owned()) {
             return Ok(self.close_buffer_list_window());
         }
@@ -675,6 +697,51 @@ impl Editor {
         EditorOutcome::Continue
     }
 
+    fn open_shell_output_buffer(&mut self, text: impl AsRef<str>) -> EditorOutcome {
+        self.sync_current_window();
+        if !self.document().is_shell_output() || self.shell_output_return.is_none() {
+            self.shell_output_return = Some(*self.windows.current().viewport());
+        }
+        let output = self.buffers.open_shell_output(text);
+
+        self.current_buffer = output;
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = 0;
+        viewport.first_visible_column = 0;
+        self.sync_current_window();
+
+        EditorOutcome::Continue
+    }
+
+    fn restore_shell_output_buffer(&mut self) -> EditorOutcome {
+        let Some(viewport) = self.shell_output_return.take() else {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        };
+        if self.buffers.document(viewport.buffer).is_none() {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        }
+
+        self.current_buffer = viewport.buffer;
+        self.cursor = viewport.cursor;
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        *self.windows.current_mut().viewport_mut() = viewport;
+        self.minibuffer.clear();
+
+        EditorOutcome::Continue
+    }
+
     fn close_buffer_list_window(&mut self) -> EditorOutcome {
         if self.windows.len() > 1 {
             self.sync_current_window();
@@ -737,6 +804,9 @@ impl Editor {
                     Some(PromptKind::RectangleNumberFormat | PromptKind::RectangleNumberStart)
                 ) {
                     self.rectangle_number_prompt = None;
+                }
+                if self.minibuffer.prompt_kind() == Some(PromptKind::ShellCommand) {
+                    self.shell_command_prompt = None;
                 }
                 self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
@@ -1088,6 +1158,7 @@ impl Editor {
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
             PromptKind::RectangleNumberFormat => self.submit_rectangle_number_format(input),
             PromptKind::RectangleNumberStart => self.submit_rectangle_number_start(input.trim()),
+            PromptKind::ShellCommand => self.submit_shell_command(input.trim()),
             PromptKind::StringRectangle => self.submit_string_rectangle(input),
             PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
             PromptKind::WriteFile => self.write_file(input.trim()),
@@ -1195,6 +1266,8 @@ impl Editor {
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             SetMarkCommand => self.set_mark_command(),
+            ShellCommand => self.start_shell_command(argument),
+            ShellCommandOnRegion => self.start_shell_command_on_region(argument),
             StartKeyboardMacro => self.start_keyboard_macro(),
             StringRectangle => self.start_string_rectangle(),
             KillBuffer => self.start_kill_buffer(),
@@ -2841,6 +2914,187 @@ impl Editor {
         Ok(())
     }
 
+    fn start_shell_command(&mut self, argument: Option<i32>) -> Result<()> {
+        let action = if argument.is_some() {
+            if !self.ensure_buffer_editable() {
+                return Ok(());
+            }
+            ShellCommandAction::Insert
+        } else {
+            ShellCommandAction::Display
+        };
+        self.shell_command_prompt = Some(ShellCommandPromptState {
+            action,
+            stdin: String::new(),
+        });
+        self.minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        Ok(())
+    }
+
+    fn start_shell_command_on_region(&mut self, argument: Option<i32>) -> Result<()> {
+        let Some(range) = self.active_region_range() else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        if argument.is_some() && !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        let stdin = self.document().buffer().text_in_range(range)?;
+        let action = if argument.is_some() {
+            ShellCommandAction::ReplaceRegion { range }
+        } else {
+            ShellCommandAction::Display
+        };
+        self.shell_command_prompt = Some(ShellCommandPromptState { action, stdin });
+        self.minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command on region: ");
+        Ok(())
+    }
+
+    fn submit_shell_command(&mut self, command: &str) -> Result<EditorOutcome> {
+        let Some(state) = self.shell_command_prompt.take() else {
+            return Ok(EditorOutcome::Continue);
+        };
+        if command.is_empty() {
+            self.minibuffer.set_message("Quit");
+            return Ok(EditorOutcome::Continue);
+        }
+
+        let current_dir = match self.shell_command_current_dir() {
+            Ok(current_dir) => current_dir,
+            Err(error) => {
+                self.minibuffer.set_error(error.to_string());
+                return Ok(EditorOutcome::Continue);
+            }
+        };
+        let output = match run_shell_command(command, &state.stdin, &current_dir) {
+            Ok(output) => output,
+            Err(error) => {
+                self.minibuffer
+                    .set_error(format!("shell command failed: {error}"));
+                return Ok(EditorOutcome::Continue);
+            }
+        };
+
+        if output.success() {
+            return self.handle_successful_shell_command_output(state.action, output);
+        }
+
+        let text = format_shell_command_output(command, &output);
+        self.open_shell_output_buffer(text);
+        self.minibuffer.set_error(format!(
+            "Shell command failed with code {}",
+            format_shell_status(output.status_code)
+        ));
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn handle_successful_shell_command_output(
+        &mut self,
+        action: ShellCommandAction,
+        output: ShellCommandOutput,
+    ) -> Result<EditorOutcome> {
+        match action {
+            ShellCommandAction::Display => {
+                let text = format_shell_command_output("", &output);
+                self.open_shell_output_buffer(text);
+                self.minibuffer
+                    .set_message(format_shell_success_message(&output));
+            }
+            ShellCommandAction::Insert => {
+                if output.stdout.is_empty() {
+                    self.minibuffer
+                        .set_message("Shell command produced no output");
+                } else {
+                    self.insert_shell_stdout(&output.stdout)?;
+                    let message = format_shell_mutation_message(
+                        "Inserted",
+                        output.stdout.len(),
+                        output.stderr.len(),
+                    );
+                    self.minibuffer.set_message(message);
+                }
+            }
+            ShellCommandAction::ReplaceRegion { range } => {
+                if output.stdout.is_empty() {
+                    self.minibuffer
+                        .set_message("Shell command produced no output");
+                } else {
+                    self.replace_region_with_shell_stdout(range, &output.stdout)?;
+                    let message = format_shell_mutation_message(
+                        "Replaced region with",
+                        output.stdout.len(),
+                        output.stderr.len(),
+                    );
+                    self.minibuffer.set_message(message);
+                }
+            }
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn insert_shell_stdout(&mut self, stdout: &str) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        self.cursor = self
+            .document_mut()
+            .buffer_mut()
+            .insert(cursor_before, stdout)?;
+        self.record_insert(cursor_before, self.cursor, stdout, false);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn replace_region_with_shell_stdout(&mut self, range: TextRange, stdout: &str) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let cursor_before = self.cursor;
+        let old_text = self.document_mut().buffer_mut().delete_range(range)?;
+        let cursor_after = self
+            .document_mut()
+            .buffer_mut()
+            .insert(range.start, stdout)?;
+        self.cursor = cursor_after;
+        self.record_replace(
+            TextRange::new(range.start, cursor_after),
+            old_text,
+            stdout.to_owned(),
+            cursor_before,
+            cursor_after,
+        );
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn shell_command_current_dir(&self) -> Result<PathBuf> {
+        let Some(path) = self.document().path() else {
+            return Ok(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        };
+        let Some(parent) = path.parent() else {
+            return Ok(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        };
+        if parent.as_os_str().is_empty() {
+            return Ok(std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        }
+        if !parent.is_dir() {
+            return Err(RileError::InvalidInput(format!(
+                "shell command directory does not exist: {}",
+                parent.display()
+            )));
+        }
+        Ok(parent.to_path_buf())
+    }
+
     fn start_switch_to_buffer(&mut self) -> Result<()> {
         self.minibuffer
             .start_prompt(PromptKind::SwitchToBuffer, "Switch to buffer: ");
@@ -4451,6 +4705,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::QueryReplaceSearch => "Query replace: ",
         PromptKind::RectangleNumberFormat => "Format string: ",
         PromptKind::RectangleNumberStart => "Number to count from: ",
+        PromptKind::ShellCommand => "Shell command: ",
         PromptKind::StringRectangle => "String rectangle: ",
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
         PromptKind::WriteFile => "Write file: ",
@@ -4469,10 +4724,71 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::KillBuffer
             | PromptKind::RectangleNumberFormat
             | PromptKind::RectangleNumberStart
+            | PromptKind::ShellCommand
             | PromptKind::StringRectangle
             | PromptKind::SwitchToBuffer
             | PromptKind::WriteFile
     )
+}
+
+fn format_shell_command_output(command: &str, output: &ShellCommandOutput) -> String {
+    let mut text = String::new();
+    if !command.is_empty() {
+        text.push_str("Command: ");
+        text.push_str(command);
+        text.push_str("\n\n");
+    }
+
+    if output.stdout.is_empty() {
+        text.push_str("(No stdout)\n");
+    } else {
+        text.push_str(&output.stdout);
+        if !output.stdout.ends_with('\n') {
+            text.push('\n');
+        }
+    }
+
+    if !output.stderr.is_empty() {
+        text.push_str("\nstderr:\n");
+        text.push_str(&output.stderr);
+        if !output.stderr.ends_with('\n') {
+            text.push('\n');
+        }
+    }
+
+    if !output.success() {
+        text.push_str("\nExit status: ");
+        text.push_str(&format_shell_status(output.status_code));
+        text.push('\n');
+    }
+
+    text
+}
+
+fn format_shell_status(status_code: Option<i32>) -> String {
+    status_code
+        .map(|code| code.to_string())
+        .unwrap_or_else(|| "signal".to_owned())
+}
+
+fn format_shell_success_message(output: &ShellCommandOutput) -> String {
+    if output.stderr.is_empty() {
+        format!("Shell command completed ({} bytes)", output.stdout.len())
+    } else {
+        format!(
+            "Shell command completed ({} bytes stdout, {} bytes stderr)",
+            output.stdout.len(),
+            output.stderr.len()
+        )
+    }
+}
+
+fn format_shell_mutation_message(action: &str, stdout_bytes: usize, stderr_bytes: usize) -> String {
+    if stderr_bytes == 0 {
+        format!("{action} {stdout_bytes} bytes from shell command")
+    } else {
+        format!("{action} {stdout_bytes} bytes from shell command ({stderr_bytes} bytes stderr)")
+    }
 }
 
 #[cfg(test)]
@@ -8907,6 +9223,123 @@ M-g g           goto-line\n"
                 .handle_key(KeyEvent::Text(character.to_string()))
                 .expect("prompt input should update");
         }
+    }
+
+    #[test]
+    fn shell_command_displays_output_buffer_and_returns() {
+        let mut editor = Editor::new(Document::scratch());
+        let original_buffer = editor.current_buffer_id();
+
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Shell command: ")
+        );
+        submit_prompt_text(&mut editor, "printf 'shell-out\\n'");
+
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert!(editor.document().buffer().serialize().contains("shell-out"));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Shell command completed (10 bytes)")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+        assert_eq!(editor.current_buffer_id(), original_buffer);
+    }
+
+    #[test]
+    fn shell_command_with_prefix_inserts_stdout_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "printf 'INSERTED'");
+
+        assert_eq!(editor.document().buffer().serialize(), "INSERTEDalpha");
+        assert_eq!(editor.cursor(), Position::new(0, "INSERTED".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should remove shell insertion");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+    }
+
+    #[test]
+    fn shell_command_on_region_with_prefix_replaces_stdout() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "b\na")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("whole buffer should mark");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('|'))
+            .expect("C-u M-| should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Shell command on region: ")
+        );
+        submit_prompt_text(&mut editor, "sort");
+
+        assert_eq!(editor.document().buffer().serialize(), "a\nb\n");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore region replacement");
+        assert_eq!(editor.document().buffer().serialize(), "b\na");
+    }
+
+    #[test]
+    fn nonzero_prefix_shell_command_does_not_mutate_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let original_buffer = editor.current_buffer_id();
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "printf 'changed'; exit 2");
+
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert_eq!(
+            editor
+                .document_for_buffer(original_buffer)
+                .expect("original buffer should remain")
+                .buffer()
+                .serialize(),
+            "alpha"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Shell command failed with code 2")
+        );
     }
 
     #[test]

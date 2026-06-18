@@ -23,6 +23,7 @@ pub enum PromptKind {
     QueryReplaceSearch,
     RectangleNumberFormat,
     RectangleNumberStart,
+    ShellCommand,
     StringRectangle,
     SwitchToBuffer,
     WriteFile,

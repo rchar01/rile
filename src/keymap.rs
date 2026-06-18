@@ -155,6 +155,8 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             "goto-line",
         ),
         KeyBinding::new([KeyEvent::Meta('%')], "query-replace"),
+        KeyBinding::new([KeyEvent::Meta('!')], "shell-command"),
+        KeyBinding::new([KeyEvent::Meta('|')], "shell-command-on-region"),
         KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())],
@@ -463,6 +465,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('%')]),
             KeyResolution::Command("query-replace")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('!')]),
+            KeyResolution::Command("shell-command")
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('|')]),
+            KeyResolution::Command("shell-command-on-region")
         );
     }
 

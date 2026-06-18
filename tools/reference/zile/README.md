@@ -52,6 +52,8 @@ Baseline inspection scenarios:
 - `registers`: point, text, rectangle, and number register probes; focused
   capture shows text registers work, while other probed flows are incomplete or
   fall through in this Zile build.
+- `shell-command`: `M-!` shell command output, cwd, prefix insertion, and
+  no-prefix `M-|` region output behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.

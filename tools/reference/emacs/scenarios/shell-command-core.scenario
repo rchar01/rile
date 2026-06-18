@@ -1,0 +1,116 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=shell-command-core
+SCENARIO_DESCRIPTION='Observe base Emacs shell-command and shell-command-on-region behavior.'
+EMACS_PROFILE=core
+TYPING_SPEED=80ms
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=shell-command-core.txt
+FIXTURE_CONTENT=$'SHELL
+insert-target:
+REGION
+orange
+apple
+banana
+END
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /SHELL/
+Screenshot {{FRAME_DIR}}/00-open.png
+Screenshot {{FRAME_DIR}}/01-before-shell-output.png
+Escape
+Type "!"
+Screenshot {{FRAME_DIR}}/02-prompt-shell-output.png
+Type "printf 'stdout-one\nstdout-two\n'"
+Screenshot {{FRAME_DIR}}/03-typed-shell-output.png
+Enter
+Screenshot {{FRAME_DIR}}/04-after-shell-output.png
+Screenshot {{FRAME_DIR}}/05-before-shell-cwd.png
+Escape
+Type "!"
+Screenshot {{FRAME_DIR}}/06-prompt-shell-cwd.png
+Type "pwd"
+Screenshot {{FRAME_DIR}}/07-typed-shell-cwd.png
+Enter
+Screenshot {{FRAME_DIR}}/08-after-shell-cwd.png
+Screenshot {{FRAME_DIR}}/09-before-shell-failure.png
+Escape
+Type "!"
+Screenshot {{FRAME_DIR}}/10-prompt-shell-failure.png
+Type "false"
+Screenshot {{FRAME_DIR}}/11-typed-shell-failure.png
+Enter
+Screenshot {{FRAME_DIR}}/12-after-shell-failure.png
+Screenshot {{FRAME_DIR}}/13-before-shell-stderr.png
+Escape
+Type "!"
+Screenshot {{FRAME_DIR}}/14-prompt-shell-stderr.png
+Type "printf 'stdout-ok\n'; printf 'stderr-bad\n' >&2; exit 7"
+Screenshot {{FRAME_DIR}}/15-typed-shell-stderr.png
+Enter
+Screenshot {{FRAME_DIR}}/16-after-shell-stderr.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/17-prompt-search-insert-target.png
+Type "insert-target"
+Screenshot {{FRAME_DIR}}/18-typed-search-insert-target.png
+Enter
+Screenshot {{FRAME_DIR}}/19-after-enter-search-insert-target.png
+Ctrl+E
+Ctrl+U
+Screenshot {{FRAME_DIR}}/20-prefix-shell-insert.png
+Escape
+Type "!"
+Screenshot {{FRAME_DIR}}/21-prompt-shell-insert.png
+Type "printf 'INSERTED\n'"
+Screenshot {{FRAME_DIR}}/22-typed-shell-insert.png
+Enter
+Screenshot {{FRAME_DIR}}/23-after-shell-insert.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/24-prompt-search-region.png
+Type "REGION"
+Screenshot {{FRAME_DIR}}/25-typed-search-region.png
+Enter
+Screenshot {{FRAME_DIR}}/26-after-enter-search-region.png
+Ctrl+A
+Ctrl+N
+Ctrl+Space
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Screenshot {{FRAME_DIR}}/27-before-shell-region-display.png
+Escape
+Type "|"
+Screenshot {{FRAME_DIR}}/28-prompt-shell-region-display.png
+Type "sort"
+Screenshot {{FRAME_DIR}}/29-typed-shell-region-display.png
+Enter
+Screenshot {{FRAME_DIR}}/30-after-shell-region-display.png
+Ctrl+S
+Screenshot {{FRAME_DIR}}/31-prompt-search-region-replace.png
+Type "REGION"
+Screenshot {{FRAME_DIR}}/32-typed-search-region-replace.png
+Enter
+Screenshot {{FRAME_DIR}}/33-after-enter-search-region-replace.png
+Ctrl+A
+Ctrl+N
+Ctrl+Space
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+U
+Screenshot {{FRAME_DIR}}/34-prefix-shell-region-replace.png
+Escape
+Type "|"
+Screenshot {{FRAME_DIR}}/35-prompt-shell-region-replace.png
+Type "sort"
+Screenshot {{FRAME_DIR}}/36-typed-shell-region-replace.png
+Enter
+Screenshot {{FRAME_DIR}}/37-after-shell-region-replace.png
+Ctrl+X
+Ctrl+C
+EOF
+}

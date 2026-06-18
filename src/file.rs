@@ -18,6 +18,7 @@ pub enum DocumentKind {
     Help,
     Completions,
     BufferList,
+    ShellOutput,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +98,18 @@ Rile is free software under GPL-3.0-or-later.\n",
         }
     }
 
+    pub fn shell_output(text: impl AsRef<str>) -> Self {
+        Self {
+            buffer: Buffer::from_text(text.as_ref()),
+            path: None,
+            name: Some("*Shell Command Output*".to_owned()),
+            kind: DocumentKind::ShellOutput,
+            read_only: false,
+            missing_on_open: false,
+            backup_on_save: false,
+        }
+    }
+
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         match fs::read(&path) {
@@ -168,6 +181,10 @@ Rile is free software under GPL-3.0-or-later.\n",
 
     pub fn is_buffer_list(&self) -> bool {
         self.kind == DocumentKind::BufferList
+    }
+
+    pub fn is_shell_output(&self) -> bool {
+        self.kind == DocumentKind::ShellOutput
     }
 
     pub fn is_dirty(&self) -> bool {
