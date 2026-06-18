@@ -1,0 +1,133 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=rectangle-commands
+SCENARIO_DESCRIPTION='Observe kg explicit C-x r rectangle commands.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=rectangle-commands.txt
+FIXTURE_CONTENT=$'COPY
+abcdef
+123456
+TARGET
+------
+------
+KILL
+abcdef
+123456
+DELETE
+abcdef
+123456
+CLEAR
+abcdef
+123456
+OPEN
+abcdef
+123456
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /COPY/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+S
+Type "COPY"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-copy-rectangle-selected.png
+Sleep 500ms
+Ctrl+X
+Type "r"
+Escape
+Type "w"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-copy-rectangle-as-kill.png
+Sleep 500ms
+Ctrl+S
+Type "TARGET"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "y"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-yank-rectangle.png
+Sleep 500ms
+Ctrl+S
+Type "KILL"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "k"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-kill-rectangle.png
+Sleep 500ms
+Ctrl+S
+Type "DELETE"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "d"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-delete-rectangle.png
+Sleep 500ms
+Ctrl+S
+Type "CLEAR"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "c"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-clear-rectangle.png
+Sleep 500ms
+Ctrl+S
+Type "OPEN"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "o"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-open-rectangle.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

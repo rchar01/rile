@@ -44,6 +44,8 @@ Initial inspection scenarios:
 - `find-file-completion`: file prompt completion after Tab.
 - `insert-file`: `C-x i` insert-file behavior.
 - `quoted-insert`: `C-q` quoted-insert behavior.
+- `rectangle-commands`: explicit `C-x r` rectangle command probes; focused
+  capture shows `k`, `d`, `c`, and `y` support, but not `M-w` or `o`.
 - `rectangle-mark`: `C-x SPC` rectangle mark mode; focused capture shows regular
   `M-w`/`C-y` copying and yanking a linear region rather than rectangle columns.
 - `yank-pop`: `M-y` yank-pop behavior.

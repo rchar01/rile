@@ -1,5 +1,15 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/emacs/scenarios/rectangle-commands-core.scenario,
+	tools/reference/zile/scenarios/rectangle-commands.scenario,
+	tools/reference/kg/scenarios/rectangle-commands.scenario: Add focused explicit
+	C-x r rectangle command captures.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md: Document the rectangle command scenarios and
+	focused support differences.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Preserve buffer point and viewport state across
 	switch-to-buffer, and add coverage for returning to a buffer at its previous
 	point.

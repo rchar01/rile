@@ -43,6 +43,8 @@ Baseline inspection scenarios:
 - `insert-file`: `C-x i` insert-file behavior.
 - `quoted-insert`: `C-q` quoted-insert behavior.
 - `query-replace`: `M-%` query-replace prompts, choices, and completion status.
+- `rectangle-commands`: explicit `C-x r` rectangle command probes; focused
+  capture shows the tested commands are undefined in this Zile build.
 - `rectangle-mark`: `C-x SPC` rectangle mark mode; focused capture shows no
   usable mark for the subsequent regular `M-w`/`C-y` sequence.
 - `yank-pop`: `M-y` yank-pop behavior.

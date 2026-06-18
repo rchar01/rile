@@ -53,6 +53,8 @@ Initial inspection scenarios:
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
 - `query-replace-core`: base Emacs `M-%` query-replace prompts, choices, and
   completion status.
+- `rectangle-commands-core`: base Emacs explicit `C-x r` rectangle copy, yank,
+  kill, delete, clear, and open behavior.
 - `rectangle-mark-core`: base Emacs `C-x SPC` rectangle mark mode with regular
   `M-w` copy and `C-y` yank behavior.
 - `yank-pop-core`: base Emacs `M-y` yank-pop behavior.
