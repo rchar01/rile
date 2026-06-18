@@ -115,6 +115,11 @@ fn horizontal_scrolling_keeps_cursor_visible_on_long_lines() -> Result<()> {
     let mut rile = RilePty::spawn(&file, 8, 32)?;
 
     rile.wait_for_screen_contains("000 | 0123456789")?;
+    assert!(
+        rile.screen_rows()[0].ends_with('$'),
+        "long line should mark hidden right edge\n{}",
+        rile.screen_dump()
+    );
     rile.send("C-e", keys::control('e'))?;
 
     let (row, column) = rile.cursor_position();
@@ -132,6 +137,32 @@ fn horizontal_scrolling_keeps_cursor_visible_on_long_lines() -> Result<()> {
     assert!(
         !rile.snapshot_text().contains("000 | 0123456789"),
         "screen did not scroll horizontally\n{}",
+        rile.screen_dump()
+    );
+    assert!(
+        rile.screen_rows()[0].starts_with('$'),
+        "horizontally scrolled line should mark hidden left edge\n{}",
+        rile.screen_dump()
+    );
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn horizontal_scrolling_marks_both_hidden_edges() -> Result<()> {
+    let file = fixtures::fixture_path("long_lines.txt");
+    let mut rile = RilePty::spawn(&file, 8, 32)?;
+
+    rile.wait_for_screen_contains("000 | 0123456789")?;
+    for _ in 0..35 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+
+    let first_row = &rile.screen_rows()[0];
+    assert!(
+        first_row.starts_with('$') && first_row.ends_with('$'),
+        "middle horizontal viewport should mark both hidden edges\n{}",
         rile.screen_dump()
     );
 

@@ -17,6 +17,7 @@ fn vertical_mx_completion_filters_and_accepts_command() -> Result<()> {
     rile.send("M-x", keys::meta('x'))?;
     rile.send("toggle-s", b"toggle-s")?;
 
+    rile.assert_screen_contains("1/2    M-x toggle-s")?;
     rile.assert_screen_contains("toggle-search-highlighting")?;
     rile.assert_screen_contains("Toggle search highlighting")?;
     rile.assert_screen_contains("toggle-syntax-highlighting")?;
@@ -38,10 +39,32 @@ fn vertical_mx_completion_selection_moves_with_down() -> Result<()> {
     rile.send("M-x", keys::meta('x'))?;
     rile.send("toggle-s", b"toggle-s")?;
     rile.send("Down", keys::DOWN)?;
+    rile.assert_screen_contains("2/2    M-x toggle-s")?;
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("Syntax highlighting disabled")?;
 
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_mx_completion_clips_long_visible_rows() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 10, 42)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("rectangle", b"rectangle")?;
+
+    rile.assert_screen_contains("M-x rectangle")?;
+    assert!(
+        rile.screen_rows().iter().any(|row| row.ends_with('$')),
+        "expected a clipped completion row\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
     Ok(())
 }

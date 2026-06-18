@@ -226,6 +226,14 @@ impl CompletionSession {
             .and_then(|index| self.candidates.get(*index))
     }
 
+    pub fn match_count(&self) -> usize {
+        self.matches.len()
+    }
+
+    pub fn selected_match_number(&self) -> Option<usize> {
+        self.has_matches().then_some(self.selected + 1)
+    }
+
     pub fn selection_explicit(&self) -> bool {
         self.selection_explicit
     }

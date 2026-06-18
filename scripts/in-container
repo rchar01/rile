@@ -13,7 +13,7 @@ IMAGE=${IMAGE:-rile-dev}
 PODMAN=${PODMAN:-podman}
 CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
 
-"$PODMAN" build -f "$CONTAINERFILE" -t "$IMAGE" .
+"$PODMAN" build --ignorefile .containerignore -f "$CONTAINERFILE" -t "$IMAGE" .
 
 "$PODMAN" run --rm \
   --userns=keep-id \

@@ -410,6 +410,11 @@ impl Editor {
         let Some(completion) = &self.completion else {
             return self.minibuffer.display_text();
         };
+        if completion.style() == CompletionStyle::Vertical {
+            let text = self.minibuffer.display_text()?;
+            let selected = completion.selected_match_number().unwrap_or(0);
+            return Some(format!("{selected}/{}    {text}", completion.match_count()));
+        }
         if completion.style() != CompletionStyle::Ido {
             return self.minibuffer.display_text();
         }

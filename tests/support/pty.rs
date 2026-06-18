@@ -180,7 +180,7 @@ impl RilePty {
         Ok(())
     }
 
-    fn screen_rows(&self) -> Vec<String> {
+    pub fn screen_rows(&self) -> Vec<String> {
         let (_, columns) = self.parser.screen().size();
         self.parser
             .screen()

@@ -320,8 +320,9 @@ fn draw_editor_frame_with_options<W: Write>(
     }
 
     let completion_rows = completion_popup_rows(editor, size.rows);
-    let window_rows =
-        usize::from(size.rows.saturating_sub(1).max(1)).saturating_sub(completion_rows);
+    let total_rows = usize::from(size.rows.max(1));
+    let window_rows = total_rows.saturating_sub(1 + completion_rows).max(1);
+    let minibuffer_row = (window_rows + 1).min(total_rows);
     let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
     for layout in &layouts {
         editor.set_window_text_rows(layout.id, layout.rect.rows.saturating_sub(1));
@@ -331,21 +332,33 @@ fn draw_editor_frame_with_options<W: Write>(
         draw_window(terminal, editor, *layout, options)?;
     }
 
-    draw_completion_popup(terminal, editor, size, completion_rows)?;
+    draw_minibuffer(terminal, editor, size, minibuffer_row)?;
+    draw_completion_popup(terminal, editor, size, minibuffer_row + 1, completion_rows)?;
 
-    terminal.move_cursor(size.rows.max(1), 1)?;
+    move_cursor_to_current_window(terminal, editor, &layouts)?;
+    terminal.show_cursor()
+}
+
+fn draw_minibuffer<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    size: TerminalSize,
+    row: usize,
+) -> Result<()> {
+    terminal.move_cursor(row as u16, 1)?;
     terminal.clear_line()?;
+    let columns = usize::from(size.columns.max(1));
     if let Some(text) = editor.minibuffer_display_text() {
         let face = if text.starts_with("Error:") {
             Face::Error
         } else {
             Face::Minibuffer
         };
-        write_text_with_face(terminal, &text, face, editor.theme())?;
+        write_fixed_width_text_with_face(terminal, &text, columns, face, editor.theme())?;
+    } else {
+        write_fixed_width_text(terminal, "", columns)?;
     }
-
-    move_cursor_to_current_window(terminal, editor, &layouts)?;
-    terminal.show_cursor()
+    Ok(())
 }
 
 fn completion_popup_rows(editor: &Editor, terminal_rows: u16) -> usize {
@@ -370,13 +383,13 @@ fn draw_completion_popup<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     editor: &Editor,
     size: TerminalSize,
+    start_row: usize,
     rows: usize,
 ) -> Result<()> {
     if rows == 0 {
         return Ok(());
     }
     let columns = usize::from(size.columns.max(1));
-    let start_row = usize::from(size.rows).saturating_sub(rows);
     let Some(completion) = editor.completion() else {
         return Ok(());
     };
@@ -392,10 +405,17 @@ fn draw_completion_popup<W: Write>(
         )?;
         return Ok(());
     }
-    for (index, item) in items.into_iter().take(rows).enumerate() {
+    let visible_items = items.into_iter().take(rows).collect::<Vec<_>>();
+    let candidate_width = completion_candidate_column_width(&visible_items, columns);
+    for (index, item) in visible_items.into_iter().enumerate() {
         terminal.move_cursor((start_row + index) as u16, 1)?;
         let line = if completion.show_annotations() && !item.candidate.annotation.is_empty() {
-            format!("{:<32} {}", item.candidate.value, item.candidate.annotation)
+            format_completion_row(
+                &item.candidate.value,
+                &item.candidate.annotation,
+                candidate_width,
+                columns,
+            )
         } else {
             item.candidate.value.clone()
         };
@@ -407,6 +427,47 @@ fn draw_completion_popup<W: Write>(
         write_fixed_width_text_with_face(terminal, &line, columns, face, editor.theme())?;
     }
     Ok(())
+}
+
+fn completion_candidate_column_width(
+    items: &[crate::completion::CompletionViewItem<'_>],
+    columns: usize,
+) -> usize {
+    if columns == 0 {
+        return 0;
+    }
+    let visible_max = items
+        .iter()
+        .map(|item| item.candidate.value.chars().count())
+        .max()
+        .unwrap_or(1)
+        .max(1);
+    let cap = if columns > 40 {
+        columns.saturating_sub(20).min(columns / 2)
+    } else {
+        columns.saturating_sub(4).max(1)
+    };
+    visible_max.min(cap.max(1))
+}
+
+fn format_completion_row(
+    candidate: &str,
+    annotation: &str,
+    candidate_width: usize,
+    columns: usize,
+) -> String {
+    if columns == 0 {
+        return String::new();
+    }
+    let candidate = clipped_text(candidate, candidate_width);
+    let padding = candidate_width.saturating_sub(candidate.chars().count());
+    let mut line = candidate;
+    line.push_str(&" ".repeat(padding));
+    if line.chars().count() + 2 < columns {
+        line.push_str("  ");
+        line.push_str(annotation);
+    }
+    clipped_text(&line, columns)
 }
 
 fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) -> Result<()> {
@@ -487,18 +548,7 @@ fn draw_window<W: Write>(
     let mode_line = if options.visual_test {
         visual_test_mode_line(editor, document, viewport, layout, text_rows)?
     } else {
-        let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
-        let position =
-            mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
-        format!(
-            "{}{}   {position}   ({major_mode})",
-            if layout.id == editor.current_window_id() {
-                "* "
-            } else {
-                "  "
-            },
-            document.mode_line()
-        )
+        format_mode_line(editor, document, viewport, layout, text_rows)?
     };
     write_fixed_width_text_with_face(
         terminal,
@@ -543,6 +593,65 @@ fn visual_test_document_name(document: &Document) -> String {
         .unwrap_or_else(|| document.display_name())
 }
 
+fn format_mode_line(
+    editor: &Editor,
+    document: &Document,
+    viewport: &Viewport,
+    layout: WindowLayout,
+    text_rows: usize,
+) -> Result<String> {
+    let active = if layout.id == editor.current_window_id() {
+        "="
+    } else {
+        "-"
+    };
+    let modified = if document.is_dirty() { "**" } else { "--" };
+    let read_only = if document.is_read_only() { "%" } else { "-" };
+    let final_newline = if document.buffer().final_newline() {
+        "F"
+    } else {
+        "N"
+    };
+    let new_file = if document.missing_on_open() { "N" } else { "-" };
+    let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
+    let scroll = mode_line_scroll_position(document.buffer(), viewport, text_rows)?;
+    Ok(format!(
+        "{active}-:{modified}{read_only}{final_newline}{new_file} {}   {scroll} L{}   ({major_mode})",
+        mode_line_document_name(document),
+        viewport.cursor.line + 1
+    ))
+}
+
+fn mode_line_document_name(document: &Document) -> String {
+    document
+        .path()
+        .and_then(Path::file_name)
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| document.display_name())
+}
+
+fn mode_line_scroll_position(
+    buffer: &Buffer,
+    viewport: &Viewport,
+    text_rows: usize,
+) -> Result<String> {
+    buffer.validate_position(viewport.cursor)?;
+    let line_count = buffer.line_count();
+    let visible_end = viewport.first_visible_line.saturating_add(text_rows);
+    if viewport.first_visible_line == 0 && visible_end >= line_count {
+        Ok("All".to_owned())
+    } else if viewport.first_visible_line == 0 {
+        Ok("Top".to_owned())
+    } else if visible_end >= line_count {
+        Ok("Bot".to_owned())
+    } else {
+        Ok(format!(
+            "{}%",
+            ((viewport.cursor.line + 1) * 100 / line_count).clamp(1, 99)
+        ))
+    }
+}
+
 fn mode_line_position(
     buffer: &Buffer,
     viewport: &Viewport,
@@ -584,18 +693,41 @@ fn write_buffer_line<W: Write>(
 ) -> Result<()> {
     let range = buffer.visible_range(line_index, viewport.first_visible_column, options.width)?;
     let segment = &line[range.clone()];
-    let relative_spans = clip_spans(spans, range);
-    let used_width = write_line_with_spans(
-        terminal,
-        segment,
-        &relative_spans,
-        options.tab_width,
-        options.theme,
-    )?;
+    let line_width = display_width_with_tabs(line, options.tab_width);
+    let left_hidden = viewport.first_visible_column > 0;
+    let right_hidden = line_width > viewport.first_visible_column.saturating_add(options.width);
+    let used_width = if left_hidden || right_hidden {
+        let segment = mark_hidden_line_edges(segment, left_hidden, right_hidden);
+        write_line_with_spans(terminal, &segment, &[], options.tab_width, options.theme)?
+    } else {
+        let relative_spans = clip_spans(spans, range);
+        write_line_with_spans(
+            terminal,
+            segment,
+            &relative_spans,
+            options.tab_width,
+            options.theme,
+        )?
+    };
     if used_width < options.width {
         terminal.write_text(&" ".repeat(options.width - used_width))?;
     }
     Ok(())
+}
+
+fn mark_hidden_line_edges(segment: &str, left_hidden: bool, right_hidden: bool) -> String {
+    let mut characters = segment.chars().collect::<Vec<_>>();
+    if characters.is_empty() {
+        return "$".to_owned();
+    }
+    if left_hidden {
+        characters[0] = '$';
+    }
+    if right_hidden {
+        let last = characters.len() - 1;
+        characters[last] = '$';
+    }
+    characters.into_iter().collect()
 }
 
 fn write_fixed_width_text<W: Write>(
@@ -626,6 +758,20 @@ fn write_fixed_width_text_with_face<W: Write>(
         terminal.write_text(&" ".repeat(width - used))?;
     }
     Ok(())
+}
+
+fn clipped_text(text: &str, width: usize) -> String {
+    if width == 0 {
+        return String::new();
+    }
+    let mut characters = text.chars().collect::<Vec<_>>();
+    if characters.len() <= width {
+        return text.to_owned();
+    }
+    characters.truncate(width);
+    let last = characters.len() - 1;
+    characters[last] = '$';
+    characters.into_iter().collect()
 }
 
 fn write_text_with_face<W: Write>(
@@ -873,9 +1019,9 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnsiTerminal, FrameOptions, TerminalSize, draw_editor_frame,
-        draw_editor_frame_with_options, mode_line_position, write_fixed_width_text_with_face,
-        write_line_number_gutter, write_line_with_spans,
+        AnsiTerminal, FrameOptions, TerminalSize, clipped_text, draw_editor_frame,
+        draw_editor_frame_with_options, format_completion_row, mode_line_position,
+        write_fixed_width_text_with_face, write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::config::ThemeName;
@@ -942,6 +1088,26 @@ mod tests {
     }
 
     #[test]
+    fn clipped_text_marks_hidden_right_edge() {
+        assert_eq!(clipped_text("abcdef", 4), "abc$");
+        assert_eq!(clipped_text("abcdef", 1), "$");
+        assert_eq!(clipped_text("abc", 4), "abc");
+    }
+
+    #[test]
+    fn completion_rows_clip_candidates_and_annotations() {
+        assert_eq!(
+            format_completion_row("remember", "Remember data", 8, 24),
+            "remember  Remember data"
+        );
+        assert!(
+            format_completion_row("very-long-command", "Long annotation", 8, 24)
+                .starts_with("very-lo$")
+        );
+        assert!(format_completion_row("remember", "A very long annotation", 8, 18).ends_with('$'));
+    }
+
+    #[test]
     fn expands_tabs_using_configured_width() {
         let mut terminal = AnsiTerminal::new(Vec::new());
 
@@ -984,6 +1150,27 @@ mod tests {
             mode_line_position(&buffer, &viewport, 2, 4).expect("position should format"),
             "Bot (5,0)"
         );
+    }
+
+    #[test]
+    fn normal_mode_line_uses_modern_position_style() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 6,
+            columns: 60,
+        };
+
+        let frame = rendered_frame(&mut editor, size);
+
+        assert!(frame.contains("=-:"));
+        assert!(frame.contains("*scratch*"));
+        assert!(frame.contains("All L1"));
+        assert!(frame.contains("(Fundamental)"));
     }
 
     #[test]
@@ -1153,17 +1340,17 @@ mod tests {
                 .expect("cursor should move down");
             rendered_frame(&mut editor, size);
         }
-        assert!(rendered_frame(&mut editor, size).contains("Bot (6,0)"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot L6"));
 
         editor
             .handle_key(KeyEvent::Ctrl('p'))
             .expect("cursor should move up");
-        assert!(rendered_frame(&mut editor, size).contains("Bot (5,0)"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot L5"));
 
         editor
             .handle_key(KeyEvent::Ctrl('p'))
             .expect("cursor should move up again");
-        assert!(rendered_frame(&mut editor, size).contains("Bot (4,0)"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot L4"));
     }
 
     #[test]

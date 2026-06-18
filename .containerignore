@@ -3,7 +3,10 @@
 
 .git
 target
+target/**
 artifacts
+artifacts/**
 tmp
+tmp/**
 *.swp
 *.tmp
