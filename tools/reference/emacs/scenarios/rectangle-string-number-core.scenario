@@ -1,0 +1,87 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=rectangle-string-number-core
+SCENARIO_DESCRIPTION='Observe base Emacs string rectangle and rectangle line numbering.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=rectangle-string-number-core.txt
+FIXTURE_CONTENT=$'STRING
+abcdef
+123456
+NUMBER
+abcdef
+123456
+NUMBER-PREFIX
+abcdef
+123456
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /STRING/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+S
+Type "STRING"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "t"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-string-rectangle-prompt.png
+Type "XX"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-string-rectangle.png
+Sleep 500ms
+Ctrl+S
+Type "NUMBER"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+N
+Ctrl+X
+Type "r"
+Type "N"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-rectangle-number-lines.png
+Sleep 500ms
+Ctrl+S
+Type "NUMBER-PREFIX"
+Enter
+Ctrl+A
+Ctrl+N
+Ctrl+F
+Ctrl+Space
+Ctrl+N
+Ctrl+U
+Ctrl+X
+Type "r"
+Type "N"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-number-prefix-start-prompt.png
+Type "7"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-number-prefix-format-prompt.png
+Type "%03d:"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-rectangle-number-lines-prefix.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

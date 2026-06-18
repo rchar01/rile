@@ -215,6 +215,14 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("N".to_owned()),
+            ],
+            "rectangle-number-lines",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("c".to_owned()),
             ],
             "clear-rectangle",
@@ -250,6 +258,14 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("o".to_owned()),
             ],
             "open-rectangle",
+        ),
+        KeyBinding::new(
+            [
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("t".to_owned()),
+            ],
+            "string-rectangle",
         ),
         KeyBinding::new(
             [
@@ -474,6 +490,14 @@ mod tests {
             keymap.resolve(&[
                 KeyEvent::Ctrl('x'),
                 KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("N".to_owned())
+            ]),
+            KeyResolution::Command("rectangle-number-lines")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("c".to_owned())
             ]),
             KeyResolution::Command("clear-rectangle")
@@ -509,6 +533,14 @@ mod tests {
                 KeyEvent::Text("o".to_owned())
             ]),
             KeyResolution::Command("open-rectangle")
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Ctrl('x'),
+                KeyEvent::Text("r".to_owned()),
+                KeyEvent::Text("t".to_owned())
+            ]),
+            KeyResolution::Command("string-rectangle")
         );
         assert_eq!(
             keymap.resolve(&[

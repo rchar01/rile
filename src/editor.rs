@@ -51,6 +51,7 @@ pub struct Editor {
     universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
     query_replace: Option<QueryReplaceState>,
+    rectangle_number_prompt: Option<RectangleNumberPromptState>,
     quoted_insert: bool,
     region: Option<RegionState>,
     kill_ring: Vec<KillEntry>,
@@ -175,6 +176,12 @@ struct QueryReplaceState {
     visited: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RectangleNumberPromptState {
+    bounds: RectangleBounds,
+    start_at: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct PromptHistory {
     kind: PromptKind,
@@ -256,6 +263,7 @@ impl Editor {
             universal_argument: None,
             search: None,
             query_replace: None,
+            rectangle_number_prompt: None,
             quoted_insert: false,
             region: None,
             kill_ring: Vec::new(),
@@ -694,6 +702,12 @@ impl Editor {
                 ) {
                     self.query_replace = None;
                 }
+                if matches!(
+                    self.minibuffer.prompt_kind(),
+                    Some(PromptKind::RectangleNumberFormat | PromptKind::RectangleNumberStart)
+                ) {
+                    self.rectangle_number_prompt = None;
+                }
                 self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
             }
@@ -1042,6 +1056,9 @@ impl Editor {
             PromptKind::KillBuffer => self.kill_buffer(input.trim()),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
+            PromptKind::RectangleNumberFormat => self.submit_rectangle_number_format(input),
+            PromptKind::RectangleNumberStart => self.submit_rectangle_number_start(input.trim()),
+            PromptKind::StringRectangle => self.submit_string_rectangle(input),
             PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
             PromptKind::WriteFile => self.write_file(input.trim()),
         }
@@ -1136,11 +1153,13 @@ impl Editor {
             QuotedInsert => self.start_quoted_insert(),
             QueryReplace => self.start_query_replace(),
             RectangleMarkMode => self.rectangle_mark_mode(),
+            RectangleNumberLines => self.rectangle_number_lines(argument),
             Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
             SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
             SetMarkCommand => self.set_mark_command(),
             StartKeyboardMacro => self.start_keyboard_macro(),
+            StringRectangle => self.start_string_rectangle(),
             KillBuffer => self.start_kill_buffer(),
             OtherWindow => self.other_window(),
             ScrollPageBackward => self.scroll_page_backward(),
@@ -1931,6 +1950,152 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Opened rectangle");
+        Ok(())
+    }
+
+    fn start_string_rectangle(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        if self.rectangle_bounds_from_mark().is_none() {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        }
+        self.minibuffer
+            .start_prompt(PromptKind::StringRectangle, "String rectangle: ");
+        Ok(())
+    }
+
+    fn submit_string_rectangle(&mut self, replacement: &str) -> Result<EditorOutcome> {
+        if !self.ensure_buffer_editable() {
+            return Ok(EditorOutcome::Continue);
+        }
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(EditorOutcome::Continue);
+        };
+        self.string_rectangle(bounds, replacement)?;
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn string_rectangle(&mut self, bounds: RectangleBounds, replacement: &str) -> Result<()> {
+        let cursor_before = self.cursor;
+        let replacement = vec![replacement.to_owned(); bounds.end_line - bounds.start_line + 1];
+        let (_, deletes) = self.document_mut().buffer_mut().delete_display_rectangle(
+            bounds.start_line,
+            bounds.end_line,
+            bounds.start_column,
+            bounds.end_column,
+        )?;
+        let at = self.rectangle_position(bounds.start_line, bounds.start_column)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            at,
+            bounds.start_column,
+            &replacement,
+        )?;
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.record_rectangle_replace(deletes, inserts, cursor_before, cursor_after);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("String rectangle replaced");
+        Ok(())
+    }
+
+    fn rectangle_number_lines(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let Some(bounds) = self.rectangle_bounds_from_mark() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(());
+        };
+        if argument.is_some() {
+            self.rectangle_number_prompt = Some(RectangleNumberPromptState {
+                bounds,
+                start_at: 1,
+            });
+            self.minibuffer
+                .start_prompt(PromptKind::RectangleNumberStart, "Number to count from: ");
+            return Ok(());
+        }
+
+        let format = default_rectangle_number_format(bounds, 1);
+        self.insert_rectangle_numbers(bounds, 1, &format)
+    }
+
+    fn submit_rectangle_number_start(&mut self, input: &str) -> Result<EditorOutcome> {
+        let Some(mut state) = self.rectangle_number_prompt else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(EditorOutcome::Continue);
+        };
+        let start_at = if input.is_empty() {
+            1
+        } else {
+            match input.parse::<i32>() {
+                Ok(value) => value,
+                Err(_) => {
+                    self.rectangle_number_prompt = None;
+                    self.minibuffer.set_error("invalid number");
+                    return Ok(EditorOutcome::Continue);
+                }
+            }
+        };
+        state.start_at = start_at;
+        self.rectangle_number_prompt = Some(state);
+        let default_format = default_rectangle_number_format(state.bounds, start_at);
+        self.minibuffer.start_prompt(
+            PromptKind::RectangleNumberFormat,
+            format!("Format string (default {default_format}): "),
+        );
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn submit_rectangle_number_format(&mut self, input: &str) -> Result<EditorOutcome> {
+        let Some(state) = self.rectangle_number_prompt.take() else {
+            self.minibuffer.set_error("no rectangle selected");
+            return Ok(EditorOutcome::Continue);
+        };
+        let format = if input.is_empty() {
+            default_rectangle_number_format(state.bounds, state.start_at)
+        } else {
+            input.to_owned()
+        };
+        if let Err(error) = self.insert_rectangle_numbers(state.bounds, state.start_at, &format) {
+            self.minibuffer.set_error(error.to_string());
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn insert_rectangle_numbers(
+        &mut self,
+        bounds: RectangleBounds,
+        start_at: i32,
+        format: &str,
+    ) -> Result<()> {
+        let mut numbers = Vec::new();
+        for offset in 0..=(bounds.end_line - bounds.start_line) {
+            numbers.push(format_rectangle_number(
+                format,
+                start_at.saturating_add(offset as i32),
+            )?);
+        }
+
+        let cursor_before = self.cursor;
+        let at = self.rectangle_position(bounds.start_line, bounds.start_column)?;
+        let (inserts, cursor_after) = self.document_mut().buffer_mut().insert_display_rectangle(
+            at,
+            bounds.start_column,
+            &numbers,
+        )?;
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.record_batch_insert(inserts, cursor_before, cursor_after);
+        self.deactivate_region();
+        self.sync_current_window();
+        self.minibuffer.set_message("Numbered rectangle");
         Ok(())
     }
 
@@ -3914,6 +4079,84 @@ fn format_completion_buffer(completion: &CompletionSession) -> String {
     text
 }
 
+fn default_rectangle_number_format(bounds: RectangleBounds, start_at: i32) -> String {
+    let lines = (bounds.end_line - bounds.start_line + 1) as i32;
+    let end = start_at.saturating_add(lines.saturating_sub(1));
+    let width = start_at.to_string().len().max(end.to_string().len());
+    format!("%{width}d ")
+}
+
+fn format_rectangle_number(format: &str, number: i32) -> Result<String> {
+    let mut output = String::new();
+    let mut chars = format.chars().peekable();
+    let mut formatted_number = false;
+
+    while let Some(character) = chars.next() {
+        if character != '%' {
+            output.push(character);
+            continue;
+        }
+        if matches!(chars.peek(), Some('%')) {
+            chars.next();
+            output.push('%');
+            continue;
+        }
+        if formatted_number {
+            return Err(RileError::InvalidInput(
+                "format string must contain one %d directive".to_owned(),
+            ));
+        }
+
+        let zero_pad = if matches!(chars.peek(), Some('0')) {
+            chars.next();
+            true
+        } else {
+            false
+        };
+        let mut width = String::new();
+        while let Some(character) = chars.peek().copied() {
+            if !character.is_ascii_digit() {
+                break;
+            }
+            width.push(character);
+            chars.next();
+        }
+        if chars.next() != Some('d') {
+            return Err(RileError::InvalidInput(
+                "format string must contain one %d directive".to_owned(),
+            ));
+        }
+
+        let width = width.parse::<usize>().unwrap_or(0);
+        let number_text = number.to_string();
+        let sign_width = usize::from(number < 0);
+        if width > number_text.len() {
+            let padding = width - number_text.len();
+            if zero_pad && number < 0 {
+                output.push('-');
+                output.extend(std::iter::repeat_n('0', padding));
+                output.push_str(&number_text[sign_width..]);
+            } else {
+                output.extend(std::iter::repeat_n(
+                    if zero_pad { '0' } else { ' ' },
+                    padding,
+                ));
+                output.push_str(&number_text);
+            }
+        } else {
+            output.push_str(&number_text);
+        }
+        formatted_number = true;
+    }
+
+    if !formatted_number {
+        return Err(RileError::InvalidInput(
+            "format string must contain one %d directive".to_owned(),
+        ));
+    }
+    Ok(output)
+}
+
 fn prompt_label(kind: PromptKind) -> &'static str {
     match kind {
         PromptKind::DescribeFunction => "Describe command: ",
@@ -3926,6 +4169,9 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::KillBuffer => "Kill buffer: ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
+        PromptKind::RectangleNumberFormat => "Format string: ",
+        PromptKind::RectangleNumberStart => "Number to count from: ",
+        PromptKind::StringRectangle => "String rectangle: ",
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
         PromptKind::WriteFile => "Write file: ",
     }
@@ -3941,6 +4187,9 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::GotoLine
             | PromptKind::InsertFile
             | PromptKind::KillBuffer
+            | PromptKind::RectangleNumberFormat
+            | PromptKind::RectangleNumberStart
+            | PromptKind::StringRectangle
             | PromptKind::SwitchToBuffer
             | PromptKind::WriteFile
     )
@@ -3952,7 +4201,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{Editor, EditorOutcome, KillEntry};
+    use super::{Editor, EditorOutcome, KillEntry, format_rectangle_number};
     use crate::buffer::{Position, TextRange};
     use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
@@ -7266,6 +7515,165 @@ M-g g           goto-line\n"
             editor.document().buffer().serialize(),
             "abcdef\n123456\nuvwxyz\n"
         );
+    }
+
+    #[test]
+    fn string_rectangle_replaces_columns_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("t".to_owned()));
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::StringRectangle)
+        );
+        editor
+            .handle_key(KeyEvent::Text("XX".to_owned()))
+            .expect("replacement should enter prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("string rectangle should submit");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "aXXdef\n1XX456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("String rectangle replaced")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore string rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
+    fn rectangle_number_lines_inserts_default_numbers_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        send_c_x_r(&mut editor, KeyEvent::Text("N".to_owned()));
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "a1 bcdef\n12 23456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Numbered rectangle")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore numbered rectangle");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "abcdef\n123456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
+    fn rectangle_number_lines_with_prefix_prompts_for_start_and_format() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        send_c_x_r(&mut editor, KeyEvent::Text("N".to_owned()));
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::RectangleNumberStart)
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("7".to_owned()))
+            .expect("start should enter prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("start prompt should submit");
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::RectangleNumberFormat)
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("%03d:".to_owned()))
+            .expect("format should enter prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("format prompt should submit");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "a007:bcdef\n1008:23456\nuvwxyz\n"
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Numbered rectangle")
+        );
+    }
+
+    #[test]
+    fn rectangle_number_lines_prefix_empty_prompts_use_emacs_defaults() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcdef\n123456\nuvwxyz\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        mark_columns_one_to_three_across_two_lines(&mut editor);
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        send_c_x_r(&mut editor, KeyEvent::Text("N".to_owned()));
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty start should accept default");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty format should accept default");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "a1 bcdef\n12 23456\nuvwxyz\n"
+        );
+    }
+
+    #[test]
+    fn rectangle_number_format_supports_width_padding_and_rejects_bad_directives() {
+        assert_eq!(
+            format_rectangle_number("%03d:", 7).expect("format should work"),
+            "007:"
+        );
+        assert_eq!(
+            format_rectangle_number("%%%3d", -7).expect("format should work"),
+            "% -7"
+        );
+        assert!(format_rectangle_number("plain", 7).is_err());
+        assert!(format_rectangle_number("%d %d", 7).is_err());
+        assert!(format_rectangle_number("%s", 7).is_err());
     }
 
     #[test]

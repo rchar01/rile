@@ -49,11 +49,13 @@ pub enum Command {
     QuotedInsert,
     QueryReplace,
     RectangleMarkMode,
+    RectangleNumberLines,
     Recenter,
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
     StartKeyboardMacro,
+    StringRectangle,
     OtherWindow,
     SplitWindowBelow,
     SplitWindowRight,
@@ -336,6 +338,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             RectangleMarkMode,
         ),
+        CommandSpec::new(
+            "rectangle-number-lines",
+            "Insert line numbers at the rectangle left edge",
+            true,
+            RectangleNumberLines,
+        ),
         CommandSpec::new("recenter", "Center cursor in window", true, Recenter),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
         CommandSpec::new(
@@ -367,6 +375,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Start defining a keyboard macro",
             true,
             StartKeyboardMacro,
+        ),
+        CommandSpec::new(
+            "string-rectangle",
+            "Replace rectangle contents with a string",
+            true,
+            StringRectangle,
         ),
         CommandSpec::new(
             "split-window-below",
@@ -479,11 +493,13 @@ mod tests {
         assert!(registry.contains("universal-argument"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("rectangle-mark-mode"));
+        assert!(registry.contains("rectangle-number-lines"));
         assert!(registry.contains("recenter"));
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));
         assert!(registry.contains("start-kbd-macro"));
+        assert!(registry.contains("string-rectangle"));
         assert!(registry.contains("toggle-line-numbers"));
         assert!(registry.contains("toggle-read-only"));
         assert!(registry.contains("toggle-search-highlighting"));

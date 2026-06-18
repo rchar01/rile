@@ -57,6 +57,8 @@ Initial inspection scenarios:
   kill, delete, clear, and open behavior.
 - `rectangle-mark-core`: base Emacs `C-x SPC` rectangle mark mode with regular
   `M-w` copy and `C-y` yank behavior.
+- `rectangle-string-number-core`: base Emacs `string-rectangle` and
+  `rectangle-number-lines` behavior.
 - `yank-pop-core`: base Emacs `M-y` yank-pop behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.

@@ -22,8 +22,9 @@ Editing features:
   M-y.
 * Mark rectangular columns with C-x SPC; C-w and M-w kill or copy the rectangle,
   and regular C-y yanks rectangle entries as columns.  Use C-x r k, C-x r M-w,
-  C-x r y, C-x r d, C-x r c, and C-x r o for explicit rectangle kill, copy,
-  yank, delete, clear, and open operations without registers.
+  C-x r y, C-x r d, C-x r c, C-x r o, C-x r t, and C-x r N for explicit
+  rectangle kill, copy, yank, delete, clear, open, string replacement, and line
+  numbering operations without registers.
 * Supply repeat counts with C-u for repeatable movement, insertion, deletion,
   kill, and open-line commands.
 * Record keyboard macros with C-x (, finish them with C-x ), and replay them

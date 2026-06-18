@@ -1,5 +1,20 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs, src/keymap.rs, src/minibuffer.rs, src/editor.rs: Add
+	string-rectangle and rectangle-number-lines, including prompted string
+	replacement, prompted/custom numbering format support, and grouped undo
+	coverage.
+	* README.md, NEWS, docs/development.md: Document C-x r t and C-x r N.
+	* tools/reference/emacs/scenarios/rectangle-string-number-core.scenario,
+	tools/reference/zile/scenarios/rectangle-string-number.scenario,
+	tools/reference/kg/scenarios/rectangle-string-number.scenario: Add focused
+	string rectangle and rectangle numbering captures.
+	* tools/reference/emacs/README.md, tools/reference/zile/README.md,
+	tools/reference/kg/README.md: Document the new reference scenarios and
+	focused support differences.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/emacs/scenarios/rectangle-commands-core.scenario,
 	tools/reference/zile/scenarios/rectangle-commands.scenario,
 	tools/reference/kg/scenarios/rectangle-commands.scenario: Add focused explicit

@@ -21,6 +21,9 @@ pub enum PromptKind {
     KillBuffer,
     QueryReplaceReplacement,
     QueryReplaceSearch,
+    RectangleNumberFormat,
+    RectangleNumberStart,
+    StringRectangle,
     SwitchToBuffer,
     WriteFile,
 }

@@ -57,7 +57,8 @@ Basic editor keys:
   copy, and yank rectangular columns.
 - `C-x r k`, `C-x r M-w`, and `C-x r y` kill, copy, and yank rectangles
   using mark and point. `C-x r d` deletes a rectangle without saving it,
-  `C-x r c` clears it to spaces, and `C-x r o` opens blank columns.
+  `C-x r c` clears it to spaces, `C-x r o` opens blank columns, `C-x r t`
+  replaces it with a prompted string, and `C-x r N` inserts line numbers.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.

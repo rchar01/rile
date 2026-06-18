@@ -302,11 +302,12 @@ renders it with the normal region face. `C-w` and `M-w` on a rectangle-marked
 region save typed rectangle kill-ring entries, and regular `C-y` yanks those
 entries back as columns, padding shorter target lines with spaces. The explicit
 rectangle command subset `C-x r k`, `C-x r M-w`, `C-x r y`, `C-x r d`,
-`C-x r c`, and `C-x r o` uses mark and point for kill, copy, yank, delete,
-clear, and open operations without implementing Emacs registers yet. Rectangle
-kill, yank, delete, clear, and open operations are undoable as one grouped edit.
-Register-backed `C-x r ...` commands, `string-rectangle`, rectangle line
-numbering, and `M-y` rotation across rectangle entries are deferred.
+`C-x r c`, `C-x r o`, `C-x r t`, and `C-x r N` uses mark and point for kill,
+copy, yank, delete, clear, open, string replacement, and line numbering
+operations without implementing Emacs registers yet. Rectangle kill, yank,
+delete, clear, open, string replacement, and numbering operations are undoable
+as one grouped edit. Register-backed `C-x r ...` commands and `M-y` rotation
+across rectangle entries are deferred.
 
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no
