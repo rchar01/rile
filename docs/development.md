@@ -104,7 +104,8 @@ Milestone 8 adds multiple buffers:
 - `C-x b` and `switch-to-buffer` prompt for an existing buffer name;
 - `C-x k` and `kill-buffer` prompt for a buffer name, with empty input killing the current buffer;
 - dirty buffers cannot be killed until saved or made clean by later explicit workflows;
-- switching or killing the current buffer resets point to the start of the selected buffer;
+- switching buffers preserves each buffer's point; killing the current buffer
+  selects the next buffer;
 - tests cover buffer reuse, switching, killing, and dirty-buffer protection.
 
 Milestone 9 adds windows and splits:

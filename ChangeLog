@@ -1,5 +1,13 @@
 2026-06-15  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Preserve buffer point and viewport state across
+	switch-to-buffer, and add coverage for returning to a buffer at its previous
+	point.
+	* README.md, docs/development.md, NEWS: Document preserved point for buffer
+	switching.
+
+2026-06-15  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Show query-replace choice prompts with the active query and
 	replacement, and report completed replacements with Emacs/Zile-style
 	occurrence wording.

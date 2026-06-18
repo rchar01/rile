@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::buffer::undo::UndoRecord;
@@ -28,6 +29,7 @@ pub enum EditorOutcome {
 pub struct Editor {
     buffers: BufferManager,
     windows: WindowSet,
+    buffer_viewports: HashMap<BufferId, Viewport>,
     current_buffer: BufferId,
     cursor: Position,
     goal_display_column: Option<usize>,
@@ -227,9 +229,12 @@ impl Editor {
         document.set_backup_on_save(config.backup_on_save);
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
+        let mut buffer_viewports = HashMap::new();
+        buffer_viewports.insert(current_buffer, Viewport::new(current_buffer));
         Self {
             windows: WindowSet::new(current_buffer),
             buffers,
+            buffer_viewports,
             current_buffer,
             cursor: Position::new(0, 0),
             goal_display_column: None,
@@ -2628,14 +2633,14 @@ impl Editor {
 
         match self.buffers.find_by_name(name) {
             Some(id) => {
+                self.sync_current_window();
+                self.restore_buffer_in_current_window(id);
                 self.current_buffer = id;
-                self.cursor = Position::new(0, 0);
                 self.goal_display_column = None;
                 self.search = None;
                 self.query_replace = None;
                 self.deactivate_region();
                 self.clear_insert_group();
-                self.sync_current_window();
                 self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Switched to buffer {name}"));
@@ -2662,6 +2667,7 @@ impl Editor {
 
         match self.buffers.kill(target) {
             Ok(next_current) => {
+                self.buffer_viewports.remove(&target);
                 self.windows.replace_buffer(target, next_current);
                 if target == self.current_buffer {
                     self.current_buffer = next_current;
@@ -3458,6 +3464,29 @@ impl Editor {
         let viewport = self.windows.current_mut().viewport_mut();
         viewport.buffer = self.current_buffer;
         viewport.cursor = self.cursor;
+        self.buffer_viewports.insert(self.current_buffer, *viewport);
+    }
+
+    fn restore_buffer_in_current_window(&mut self, buffer: BufferId) {
+        let text_rows = self.windows.current().viewport().text_rows;
+        let mut viewport = self.saved_viewport_for_buffer(buffer);
+        viewport.buffer = buffer;
+        viewport.text_rows = text_rows;
+        self.cursor = viewport.cursor;
+        *self.windows.current_mut().viewport_mut() = viewport;
+        self.buffer_viewports.insert(buffer, viewport);
+    }
+
+    fn saved_viewport_for_buffer(&self, buffer: BufferId) -> Viewport {
+        self.buffer_viewports
+            .get(&buffer)
+            .copied()
+            .or_else(|| {
+                self.windows
+                    .window_showing_buffer(buffer)
+                    .and_then(|window| self.windows.window(window).map(|window| *window.viewport()))
+            })
+            .unwrap_or_else(|| Viewport::new(buffer))
     }
 
     fn load_current_window(&mut self) {
@@ -4689,6 +4718,48 @@ mod tests {
 
         assert_eq!(editor.current_buffer_name(), "alpha-buffer.txt");
         assert_eq!(editor.document().buffer().serialize(), "alpha");
+    }
+
+    #[test]
+    fn switch_buffer_preserves_buffer_point() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-buffer.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "one\ntwo\nthree").expect("alpha fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(alpha.to_str().unwrap())
+            .expect("alpha should open");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("next-line should move in alpha");
+
+        assert_eq!(editor.current_buffer_name(), "alpha-buffer.txt");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+
+        editor
+            .switch_to_buffer("start.txt")
+            .expect("start buffer should switch");
+        assert_eq!(editor.current_buffer_name(), "start.txt");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("switch-buffer should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha-buffer.txt".to_owned()))
+            .expect("prompt input should name alpha");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should switch to alpha");
+
+        assert_eq!(editor.current_buffer_name(), "alpha-buffer.txt");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
     }
 
     #[test]
