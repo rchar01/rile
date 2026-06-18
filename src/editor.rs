@@ -645,7 +645,7 @@ impl Editor {
 
     fn show_key_prefix_help(&mut self) -> EditorOutcome {
         let prefix = self.key_sequence.clone();
-        let text = format_key_prefix_help(&self.keymap, &prefix);
+        let text = format_key_prefix_help(&self.commands, &self.keymap, &prefix);
         self.clear_key_sequence();
         self.open_help_buffer(text)
     }
@@ -4269,19 +4269,28 @@ fn is_key_prefix_help(key: &KeyEvent) -> bool {
     )
 }
 
-fn format_key_prefix_help(keymap: &KeyMap, prefix: &[KeyEvent]) -> String {
+fn format_key_prefix_help(
+    commands: &CommandRegistry,
+    keymap: &KeyMap,
+    prefix: &[KeyEvent],
+) -> String {
     let mut text = format!(
         "Global Bindings Starting With {}:\n\n",
         format_key_sequence(prefix)
     );
-    text.push_str("Key             Binding\n");
-    text.push_str("---             -------\n\n");
+    text.push_str("Key             Binding                        Description\n");
+    text.push_str("---             -------                        -----------\n\n");
 
     for binding in keymap.bindings_starting_with(prefix) {
+        let description = commands
+            .get(binding.command)
+            .map(|command| command.description)
+            .unwrap_or("");
         text.push_str(&format!(
-            "{:<15} {}\n",
+            "{:<15} {:<30} {}\n",
             format_key_sequence(&binding.sequence),
-            binding.command
+            binding.command,
+            description
         ));
     }
 
@@ -4339,6 +4348,7 @@ fn format_key_event(key: &KeyEvent) -> String {
         KeyEvent::Ctrl(character) => format!("C-{character}"),
         KeyEvent::Meta(character) => format!("M-{character}"),
         KeyEvent::MetaSpecial(special) => format!("M-{}", format_special_key(*special)),
+        KeyEvent::Text(text) if text == " " => "SPC".to_owned(),
         KeyEvent::Text(text) => text.clone(),
         KeyEvent::Special(special) => format_special_key(*special),
     }
@@ -6371,10 +6381,44 @@ mod tests {
         assert_eq!(
             editor.document().buffer().serialize(),
             "Global Bindings Starting With M-g:\n\n\
-Key             Binding\n\
----             -------\n\n\
-M-g g           goto-line\n"
+Key             Binding                        Description\n\
+---             -------                        -----------\n\n\
+M-g g           goto-line                      Go to line or line:column\n"
         );
+    }
+
+    #[test]
+    fn prefix_help_displays_descriptions_and_space_keys() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("Key             Binding                        Description"));
+        assert!(help.contains("C-x SPC"));
+        assert!(help.contains("rectangle-mark-mode"));
+        assert!(help.contains("Mark a rectangular region"));
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("r".to_owned()))
+            .expect("C-x r prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("C-x r SPC"));
+        assert!(help.contains("point-to-register"));
+        assert!(help.contains("Store point in a register"));
     }
 
     #[test]
@@ -6404,6 +6448,28 @@ M-g g           goto-line\n"
         assert!(help.contains("find-file is an interactive command."));
         assert!(help.contains("Open file by path"));
         assert!(help.contains("It is bound to C-x C-f."));
+    }
+
+    #[test]
+    fn describe_key_displays_space_key_as_spc() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("describe-key should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("describe-key should read prefix");
+        editor
+            .handle_key(KeyEvent::Text(" ".to_owned()))
+            .expect("describe-key should finish");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("C-x SPC runs the command `rectangle-mark-mode`."));
+        assert!(help.contains("It is bound to C-x SPC."));
     }
 
     #[test]
