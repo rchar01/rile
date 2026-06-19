@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=list-buffers-interactivity-core
+SCENARIO_DESCRIPTION='Observe core Emacs Buffer Menu RET and selected-window q behavior.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=list-buffers-interactivity-core.txt
+FIXTURE_CONTENT=$'list buffers interactivity fixture
+second line
+'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /list buffers interactivity fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+B
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-list-buffers.png
+Sleep 500ms
+Ctrl+X
+Type "o"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-selected-buffer-list-before-ret.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-ret.png
+Sleep 500ms
+Ctrl+X
+Ctrl+B
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-list-buffers-again.png
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-selected-buffer-list-before-q.png
+Sleep 500ms
+Type "q"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-q.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
