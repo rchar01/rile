@@ -13,7 +13,7 @@ Official repository: <https://codeberg.org/rch/rile>
 
 ## Status
 
-Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run `M-x` commands with command-name completion, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
+Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run `M-x` commands with command-name completion, run shell commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
 
 Current binary behavior:
 
@@ -63,6 +63,12 @@ Basic editor keys:
   `C-x r j` to jump, `C-x r s` to copy the active region, `C-x r r` to copy a
   rectangle, `C-x r i` to insert text, rectangle, or number values, and
   `C-x r n` / `C-x r +` to store and increment number registers.
+- `M-!` prompts for a shell command and displays captured stdout/stderr in a
+  read-only `*Shell Command Output*` buffer. `C-u M-!` inserts stdout at point
+  after a successful command.
+- `M-|` sends the active region to a shell command on stdin and displays
+  captured output. `C-u M-|` replaces the active region with stdout after a
+  successful command.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `C-w` kills the active region.
@@ -99,11 +105,12 @@ Basic editor keys:
 - `C-x C-c` quits.
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
   through candidates, Tab completes a common prefix, and Enter accepts the
-  selected candidate.
+  selected candidate. Command candidates show the first known key binding when
+  available.
 - `C-h k` describes a key binding, and `C-h f` describes an interactive
   command with command-name completion.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
-  goto-line, and describe-command minibuffer prompts.
+  goto-line, rectangle, shell-command, and describe-command minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and query replace use exact UTF-8 substring matching within individual lines. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and neither command matches across line breaks yet.
@@ -131,6 +138,8 @@ completion_matching = "prefix" # or "substring"
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-x C-f`, `C-x C-r`, and `C-x i` file names, and `C-x b` buffer names.
+Command completion candidates show the first known key binding, such as
+`save-buffer (C-x C-s)`, when one exists.
 
 ## License
 

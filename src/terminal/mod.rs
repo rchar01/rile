@@ -411,7 +411,7 @@ fn draw_completion_popup<W: Write>(
         terminal.move_cursor((start_row + index) as u16, 1)?;
         let line = if completion.show_annotations() && !item.candidate.annotation.is_empty() {
             format_completion_row(
-                &item.candidate.value,
+                &item.candidate.display_label(),
                 &item.candidate.annotation,
                 candidate_width,
                 columns,
@@ -438,7 +438,7 @@ fn completion_candidate_column_width(
     }
     let visible_max = items
         .iter()
-        .map(|item| item.candidate.value.chars().count())
+        .map(|item| item.candidate.display_label().chars().count())
         .max()
         .unwrap_or(1)
         .max(1);
@@ -459,12 +459,13 @@ fn format_completion_row(
     if columns == 0 {
         return String::new();
     }
-    let candidate = clipped_text(candidate, candidate_width);
-    let padding = candidate_width.saturating_sub(candidate.chars().count());
+    let description_gap = 8;
+    let candidate_limit = candidate_width.min(columns.saturating_sub(description_gap + 1));
+    let candidate = clipped_text(candidate, candidate_limit);
+    let padding = candidate_width.saturating_sub(candidate.chars().count()) + description_gap;
     let mut line = candidate;
     line.push_str(&" ".repeat(padding));
-    if line.chars().count() + 2 < columns {
-        line.push_str("  ");
+    if line.chars().count() < columns {
         line.push_str(annotation);
     }
     clipped_text(&line, columns)
@@ -1097,8 +1098,36 @@ mod tests {
     #[test]
     fn completion_rows_clip_candidates_and_annotations() {
         assert_eq!(
-            format_completion_row("remember", "Remember data", 8, 24),
-            "remember  Remember data"
+            format_completion_row("rmail", "Read and edit incoming mail.", 34, 80),
+            format!(
+                "{}{}{}",
+                "rmail",
+                " ".repeat(37),
+                "Read and edit incoming mail."
+            )
+        );
+        assert_eq!(
+            format_completion_row("repeat (C-x z)", "Repeat last command.", 34, 80),
+            format!(
+                "{}{}{}",
+                "repeat (C-x z)",
+                " ".repeat(28),
+                "Repeat last command."
+            )
+        );
+        assert_eq!(
+            format_completion_row(
+                "emacs-lisp-native-compile-and-load",
+                "Native-compile synchronously the current file.",
+                34,
+                100,
+            ),
+            format!(
+                "{}{}{}",
+                "emacs-lisp-native-compile-and-load",
+                " ".repeat(8),
+                "Native-compile synchronously the current file."
+            )
         );
         assert!(
             format_completion_row("very-long-command", "Long annotation", 8, 24)

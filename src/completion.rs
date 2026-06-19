@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::command::CommandRegistry;
+use crate::keymap::{KeyMap, format_key_sequence};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionStyle {
@@ -61,6 +62,7 @@ impl Default for CompletionConfig {
 pub struct CompletionCandidate {
     pub value: String,
     pub annotation: String,
+    pub key_binding: Option<String>,
     directory: bool,
 }
 
@@ -69,7 +71,20 @@ impl CompletionCandidate {
         Self {
             value: value.into(),
             annotation: annotation.into(),
+            key_binding: None,
             directory: false,
+        }
+    }
+
+    pub fn with_key_binding(mut self, key_binding: impl Into<String>) -> Self {
+        self.key_binding = Some(key_binding.into());
+        self
+    }
+
+    pub fn display_label(&self) -> String {
+        match &self.key_binding {
+            Some(key_binding) => format!("{} ({key_binding})", self.value),
+            None => self.value.clone(),
         }
     }
 
@@ -77,6 +92,7 @@ impl CompletionCandidate {
         Self {
             value: value.into(),
             annotation: "Directory".to_owned(),
+            key_binding: None,
             directory: true,
         }
     }
@@ -85,6 +101,7 @@ impl CompletionCandidate {
         Self {
             value: value.into(),
             annotation: "File".to_owned(),
+            key_binding: None,
             directory: false,
         }
     }
@@ -119,12 +136,20 @@ pub struct CompletionViewItem<'a> {
 }
 
 impl CompletionSession {
-    pub fn commands(registry: &CommandRegistry, config: CompletionConfig) -> Self {
+    pub fn commands(registry: &CommandRegistry, keymap: &KeyMap, config: CompletionConfig) -> Self {
         let candidates = registry
             .commands()
             .iter()
             .filter(|command| command.interactive)
-            .map(|command| CompletionCandidate::new(command.name, command.description))
+            .map(|command| {
+                let candidate = CompletionCandidate::new(command.name, command.description);
+                match keymap.bindings_for_command(command.name).first() {
+                    Some(binding) => {
+                        candidate.with_key_binding(format_key_sequence(&binding.sequence))
+                    }
+                    None => candidate,
+                }
+            })
             .collect::<Vec<_>>();
         let mut session = Self {
             source: CompletionSource::Commands,
@@ -378,8 +403,9 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{CompletionConfig, CompletionSession};
+    use super::{CompletionCandidate, CompletionConfig, CompletionSession};
     use crate::command::CommandRegistry;
+    use crate::keymap::KeyMap;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -412,7 +438,9 @@ mod tests {
     #[test]
     fn command_completion_filters_and_selects_candidates() {
         let registry = CommandRegistry::default();
-        let mut session = CompletionSession::commands(&registry, CompletionConfig::default());
+        let keymap = KeyMap::default();
+        let mut session =
+            CompletionSession::commands(&registry, &keymap, CompletionConfig::default());
 
         session.update("toggle-s");
 
@@ -430,11 +458,28 @@ mod tests {
     #[test]
     fn command_completion_extends_common_prefix() {
         let registry = CommandRegistry::default();
-        let mut session = CompletionSession::commands(&registry, CompletionConfig::default());
+        let keymap = KeyMap::default();
+        let mut session =
+            CompletionSession::commands(&registry, &keymap, CompletionConfig::default());
 
         session.update("toggle");
 
         assert_eq!(session.common_prefix("toggle").as_deref(), Some("toggle-"));
+    }
+
+    #[test]
+    fn command_completion_records_first_key_binding() {
+        let registry = CommandRegistry::default();
+        let keymap = KeyMap::default();
+        let mut session =
+            CompletionSession::commands(&registry, &keymap, CompletionConfig::default());
+
+        session.update("save-buffer");
+
+        assert_eq!(
+            session.selected().map(CompletionCandidate::display_label),
+            Some("save-buffer (C-x C-s)".to_owned())
+        );
     }
 
     #[test]

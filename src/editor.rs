@@ -12,7 +12,7 @@ use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, C
 use crate::config::{Config, ThemeName};
 use crate::file::{Document, DocumentKind};
 use crate::input::{KeyEvent, SpecialKey};
-use crate::keymap::{KeyMap, KeyResolution};
+use crate::keymap::{KeyMap, KeyResolution, format_key_sequence};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
@@ -413,7 +413,7 @@ impl Editor {
         if completion.style() == CompletionStyle::Vertical {
             let text = self.minibuffer.display_text()?;
             let selected = completion.selected_match_number().unwrap_or(0);
-            return Some(format!("{selected}/{}    {text}", completion.match_count()));
+            return Some(format!("{selected}/{}  {text}", completion.match_count()));
         }
         if completion.style() != CompletionStyle::Ido {
             return self.minibuffer.display_text();
@@ -2817,6 +2817,7 @@ impl Editor {
             .start_prompt(PromptKind::ExtendedCommand, "M-x ");
         self.completion = Some(CompletionSession::commands(
             &self.commands,
+            &self.keymap,
             self.completion_config,
         ));
         self.update_completion_from_prompt();
@@ -2828,6 +2829,7 @@ impl Editor {
             .start_prompt(PromptKind::DescribeFunction, "Describe command: ");
         self.completion = Some(CompletionSession::commands(
             &self.commands,
+            &self.keymap,
             self.completion_config,
         ));
         self.update_completion_from_prompt();
@@ -4255,14 +4257,6 @@ fn register_key_from_event(key: &KeyEvent) -> Option<char> {
     }
 }
 
-fn format_key_sequence(sequence: &[KeyEvent]) -> String {
-    sequence
-        .iter()
-        .map(format_key_event)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 fn format_key_prefix_message(sequence: &[KeyEvent]) -> String {
     format!("{}- (C-h for help)", format_key_sequence(sequence))
 }
@@ -4346,35 +4340,6 @@ fn format_command_help(keymap: &KeyMap, name: &str, description: Option<&str>) -
         text.push_str(&format!("\nIt is bound to {}.\n", keys));
     }
     text
-}
-
-fn format_key_event(key: &KeyEvent) -> String {
-    match key {
-        KeyEvent::Ctrl(character) => format!("C-{character}"),
-        KeyEvent::Meta(character) => format!("M-{character}"),
-        KeyEvent::MetaSpecial(special) => format!("M-{}", format_special_key(*special)),
-        KeyEvent::Text(text) if text == " " => "SPC".to_owned(),
-        KeyEvent::Text(text) => text.clone(),
-        KeyEvent::Special(special) => format_special_key(*special),
-    }
-}
-
-fn format_special_key(key: SpecialKey) -> String {
-    match key {
-        SpecialKey::Backspace => "Backspace".to_owned(),
-        SpecialKey::Delete => "Delete".to_owned(),
-        SpecialKey::Enter => "Enter".to_owned(),
-        SpecialKey::Tab => "Tab".to_owned(),
-        SpecialKey::Escape => "Esc".to_owned(),
-        SpecialKey::ArrowUp => "Up".to_owned(),
-        SpecialKey::ArrowDown => "Down".to_owned(),
-        SpecialKey::ArrowLeft => "Left".to_owned(),
-        SpecialKey::ArrowRight => "Right".to_owned(),
-        SpecialKey::Home => "Home".to_owned(),
-        SpecialKey::End => "End".to_owned(),
-        SpecialKey::PageUp => "PageUp".to_owned(),
-        SpecialKey::PageDown => "PageDown".to_owned(),
-    }
 }
 
 impl DecorationProvider for Editor {
@@ -6120,6 +6085,23 @@ mod tests {
         assert!(text.contains("M-x toggle-s"));
         assert!(text.contains("toggle-search-highlighting"));
         assert!(text.contains("toggle-syntax-highlighting"));
+    }
+
+    #[test]
+    fn vertical_completion_minibuffer_uses_two_space_count_gap() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+
+        assert_eq!(
+            editor.minibuffer_display_text().as_deref(),
+            Some("1/2  M-x toggle-s")
+        );
     }
 
     #[test]

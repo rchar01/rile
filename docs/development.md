@@ -227,22 +227,23 @@ File completion resolves relative candidates against the current buffer's
 directory when available, keeps raw missing-file input working, and descends
 into selected directories. Buffer completion keeps exact existing buffer names
 working and otherwise requires explicit selection or Tab completion before
-switching. The default
-`completion_style = "vertical"` reserves rows above the minibuffer and shows
-candidate annotations. `completion_style = "completions-buffer"` opens a
-temporary read-only `*Completions*` buffer and restores the previous viewport on
-accept/cancel. `completion_style = "ido"` is an experimental compact inline
-minibuffer display. Supported completion config keys are `completion_style`,
-`completion_max_candidates`, `completion_show_annotations`, and
-`completion_matching`.
+switching. The default `completion_style = "vertical"` reserves rows above the
+minibuffer and shows candidate annotations. Command completion rows include the
+first known key binding in the candidate label, such as `save-buffer (C-x C-s)`,
+and keep annotations aligned after the visible label column. The
+`completions-buffer` style opens a temporary read-only `*Completions*` buffer
+and restores the previous viewport on accept/cancel. The `ido` style is an
+experimental compact inline minibuffer display. Supported completion config keys
+are `completion_style`, `completion_max_candidates`,
+`completion_show_annotations`, and `completion_matching`.
 
 Post-Milestone 14 prompt-history polish adds in-session `M-p` and `M-n` history
-navigation for command, file, buffer, write-file, and goto-line minibuffer
-prompts. Prompt history is stored per prompt kind, preserves the current draft
-while navigating, avoids consecutive duplicate entries, and refreshes completion
-candidates after recalling history in completion-enabled prompts. Incremental
-search and query-replace history remain deferred because they have separate
-interaction models.
+navigation for command, file, buffer, write-file, goto-line, rectangle, shell
+command, and describe-command minibuffer prompts. Prompt history is stored per
+prompt kind, preserves the current draft while navigating, avoids consecutive
+duplicate entries, and refreshes completion candidates after recalling history in
+completion-enabled prompts. Incremental search and query-replace history remain
+deferred because they have separate interaction models.
 
 Post-Milestone 14 help polish adds `C-h k` and `C-h f` using Rile's existing
 read-only `*Help*` special buffer. `C-h k` reads a complete key sequence and
@@ -311,12 +312,24 @@ commands support single printable-character point registers (`C-x r SPC`,
 (`C-x r r`, `C-x r i`), and number registers (`C-x r n`, `C-x r +`,
 `C-x r i`). `M-y` rotation across rectangle entries is deferred.
 
+Post-Milestone 14 shell-command polish adds `M-!` / `shell-command` and `M-|` /
+`shell-command-on-region`. Rile runs `/bin/sh -c <command>` synchronously using
+the current buffer file's parent directory when file-backed, otherwise the editor
+launch directory. No-prefix `M-!` and `M-|` display captured stdout/stderr in a
+read-only `*Shell Command Output*` buffer. `C-u M-!` inserts stdout at point, and
+`C-u M-|` replaces the active linear region with stdout, but only after a
+successful command exit; nonzero exits show output and do not mutate the edited
+buffer. Output must decode as UTF-8. V1 deliberately does not support `M-&`,
+process cancellation, live process buffers, interactive TTY subprocesses, remote
+file handlers, configurable shells, coding-system prompts, or rectangle piping.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
-completion, no incremental-search/query-replace prompt history, no
-unsaved-changes quit confirmation, and no redo or advanced Emacs undo traversal
-yet. Search and query replace are exact line-local substring matching; search
-wraps only after an explicit boundary failure, query replace does not wrap, and
-neither command matches across line breaks.
+completion, no incremental-search/query-replace prompt history, no shell-command
+process timeout/cancellation, no unsaved-changes quit confirmation, and no redo
+or advanced Emacs undo traversal yet. Search and query replace are exact
+line-local substring matching; search wraps only after an explicit boundary
+failure, query replace does not wrap, and neither command matches across line
+breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

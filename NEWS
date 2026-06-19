@@ -39,6 +39,9 @@ Editing features:
   literally.
 * Undo current-buffer edits with grouped normal typing.
 * Run commands through M-x with command-name completion.
+* Run shell commands with M-!, display captured stdout/stderr by default, and
+  insert stdout with C-u M-!.  Use M-| to send the active region to stdin and
+  C-u M-| to replace the region with successful stdout.
 * Open files through C-x C-f with file-name completion.
 * Insert file contents at point with C-x i and file-name completion.
 * Open files read-only through C-x C-r with file-name completion.
@@ -61,10 +64,11 @@ Interface features:
   query replace.
 * Complete M-x command names, C-x C-f/C-x C-r/C-x i file names, and C-x b
   buffer names with the default vertical candidate list, optional *Completions*
-  buffer fallback, or experimental ido-style inline display.
+  buffer fallback, or experimental ido-style inline display.  Command
+  completions show the first known key binding when available.
 * Complete C-h f command names with the shared command-completion source.
-* Navigate command, file, buffer, write-file, goto-line, and describe-command
-  prompt history with M-p and M-n.
+* Navigate command, file, buffer, write-file, goto-line, rectangle,
+  shell-command, and describe-command prompt history with M-p and M-n.
 
 Search and replacement:
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use crate::input::KeyEvent;
+use crate::input::{KeyEvent, SpecialKey};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyBinding {
@@ -82,6 +82,43 @@ impl KeyMap {
             .iter()
             .filter(|binding| binding.command == command)
             .collect()
+    }
+}
+
+pub(crate) fn format_key_sequence(sequence: &[KeyEvent]) -> String {
+    sequence
+        .iter()
+        .map(format_key_event)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn format_key_event(key: &KeyEvent) -> String {
+    match key {
+        KeyEvent::Ctrl(character) => format!("C-{character}"),
+        KeyEvent::Meta(character) => format!("M-{character}"),
+        KeyEvent::MetaSpecial(special) => format!("M-{}", format_special_key(*special)),
+        KeyEvent::Text(text) if text == " " => "SPC".to_owned(),
+        KeyEvent::Text(text) => text.clone(),
+        KeyEvent::Special(special) => format_special_key(*special),
+    }
+}
+
+fn format_special_key(key: SpecialKey) -> String {
+    match key {
+        SpecialKey::Backspace => "Backspace".to_owned(),
+        SpecialKey::Delete => "Delete".to_owned(),
+        SpecialKey::Enter => "Enter".to_owned(),
+        SpecialKey::Tab => "Tab".to_owned(),
+        SpecialKey::Escape => "Esc".to_owned(),
+        SpecialKey::ArrowUp => "Up".to_owned(),
+        SpecialKey::ArrowDown => "Down".to_owned(),
+        SpecialKey::ArrowLeft => "Left".to_owned(),
+        SpecialKey::ArrowRight => "Right".to_owned(),
+        SpecialKey::Home => "Home".to_owned(),
+        SpecialKey::End => "End".to_owned(),
+        SpecialKey::PageUp => "PageUp".to_owned(),
+        SpecialKey::PageDown => "PageDown".to_owned(),
     }
 }
 
