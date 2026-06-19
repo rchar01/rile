@@ -42,6 +42,7 @@ pub struct Editor {
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
     shell_output_return: Option<Viewport>,
+    buffer_list_rows: Vec<Option<BufferId>>,
     describe_key: Option<Vec<KeyEvent>>,
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
@@ -293,6 +294,7 @@ impl Editor {
             minibuffer: MinibufferState::default(),
             help_return: None,
             shell_output_return: None,
+            buffer_list_rows: Vec::new(),
             describe_key: None,
             completion: None,
             completion_return: None,
@@ -555,6 +557,10 @@ impl Editor {
             return Ok(self.close_buffer_list_window());
         }
 
+        if self.document().is_buffer_list() && key == KeyEvent::Special(SpecialKey::Enter) {
+            return Ok(self.open_selected_buffer_list_entry());
+        }
+
         if !self.key_sequence.is_empty() {
             return self.handle_bound_key(key);
         }
@@ -774,6 +780,38 @@ impl Editor {
         self.deactivate_region();
         self.clear_insert_group();
         self.sync_current_window();
+
+        EditorOutcome::Continue
+    }
+
+    fn open_selected_buffer_list_entry(&mut self) -> EditorOutcome {
+        let Some(buffer) = self
+            .buffer_list_rows
+            .get(self.cursor.line)
+            .copied()
+            .flatten()
+        else {
+            self.minibuffer.set_message("No buffer on this line");
+            return EditorOutcome::Continue;
+        };
+
+        if self.buffers.document(buffer).is_none() {
+            self.minibuffer.set_error("buffer no longer exists");
+            return EditorOutcome::Continue;
+        }
+
+        self.sync_current_window();
+        self.restore_buffer_in_current_window(buffer);
+        self.current_buffer = buffer;
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        self.refresh_visible_buffer_list();
+        let name = self.current_buffer_name().to_owned();
+        self.minibuffer
+            .set_message(format!("Switched to buffer {name}"));
 
         EditorOutcome::Continue
     }
@@ -3129,8 +3167,9 @@ impl Editor {
 
     fn list_buffers(&mut self) -> Result<()> {
         self.sync_current_window();
-        let text = self.format_buffer_list();
+        let (text, rows) = self.buffer_list_contents();
         let buffer_list = self.buffers.open_buffer_list(text);
+        self.buffer_list_rows = rows;
         let target = self
             .windows
             .window_showing_buffer(buffer_list)
@@ -3149,10 +3188,11 @@ impl Editor {
         Ok(())
     }
 
-    fn format_buffer_list(&self) -> String {
+    fn buffer_list_contents(&self) -> (String, Vec<Option<BufferId>>) {
         let mut text =
             String::from("CRM Buffer                           Size Mode         File\n");
         text.push_str("--- ------                           ---- ----         ----\n");
+        let mut rows = vec![None, None];
         for entry in self
             .buffers
             .entries()
@@ -3179,8 +3219,9 @@ impl Editor {
                 size,
                 mode,
             ));
+            rows.push(Some(entry.id()));
         }
-        text
+        (text, rows)
     }
 
     fn refresh_visible_buffer_list(&mut self) {
@@ -3190,8 +3231,9 @@ impl Editor {
         if self.windows.window_showing_buffer(buffer_list).is_none() {
             return;
         }
-        let text = self.format_buffer_list();
+        let (text, rows) = self.buffer_list_contents();
         self.buffers.open_buffer_list(text);
+        self.buffer_list_rows = rows;
     }
 
     fn find_file(&mut self, path: &str) -> Result<EditorOutcome> {
@@ -4778,7 +4820,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{Editor, EditorOutcome, KillEntry, format_rectangle_number};
-    use crate::buffer::{Position, TextRange};
+    use crate::buffer::{BufferId, Position, TextRange};
     use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
@@ -5843,6 +5885,106 @@ mod tests {
     }
 
     #[test]
+    fn enter_on_buffer_list_row_switches_selected_window() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let source = directory.path().join("main.rs");
+        fs::write(&start, "start\n").expect("start fixture should write");
+        fs::write(&source, "fn main() {}\n").expect("source fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(source.to_str().unwrap())
+            .expect("source should open");
+        editor
+            .switch_to_buffer("start.txt")
+            .expect("start buffer should switch");
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+        editor.cursor = Position::new(3, 0);
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open selected buffer");
+
+        assert_eq!(editor.current_buffer_name(), "main.rs");
+        assert_eq!(editor.window_count(), 2);
+        assert_eq!(editor.document().buffer().serialize(), "fn main() {}\n");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Switched to buffer main.rs")
+        );
+    }
+
+    #[test]
+    fn enter_on_buffer_list_header_or_separator_keeps_list_selected() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("header enter should be ignored");
+        assert_eq!(editor.current_buffer_name(), "*Buffer List*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No buffer on this line")
+        );
+
+        editor.cursor = Position::new(1, 0);
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("separator enter should be ignored");
+        assert_eq!(editor.current_buffer_name(), "*Buffer List*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No buffer on this line")
+        );
+    }
+
+    #[test]
+    fn enter_on_stale_buffer_list_metadata_keeps_list_selected() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+        editor.buffer_list_rows[2] = Some(BufferId(usize::MAX));
+        editor.cursor = Position::new(2, 0);
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("stale enter should be ignored");
+
+        assert_eq!(editor.current_buffer_name(), "*Buffer List*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: buffer no longer exists")
+        );
+    }
+
+    #[test]
     fn visible_buffer_list_refreshes_after_opening_buffer() {
         let directory = TestDir::new();
         let source = directory.path().join("main.rs");
@@ -5876,6 +6018,35 @@ mod tests {
             .serialize();
         assert!(text.contains(".   main.rs"));
         assert!(text.contains("Rust"));
+    }
+
+    #[test]
+    fn visible_buffer_list_refreshes_row_metadata_after_opening_buffer() {
+        let directory = TestDir::new();
+        let source = directory.path().join("main.rs");
+        fs::write(&source, "fn main() {}\n").expect("source fixture should write");
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+        editor
+            .find_file(source.to_str().unwrap())
+            .expect("source should open and refresh visible list");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("o".to_owned()))
+            .expect("other window should select buffer list");
+        editor.cursor = Position::new(3, 0);
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("refreshed row should open buffer");
+
+        assert_eq!(editor.current_buffer_name(), "main.rs");
+        assert_eq!(editor.document().buffer().serialize(), "fn main() {}\n");
     }
 
     #[test]

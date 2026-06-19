@@ -124,3 +124,36 @@ fn list_buffers_opens_in_inactive_lower_window() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn list_buffers_ret_opens_selected_row_in_list_window() -> Result<()> {
+    let file = fixtures::named_temp_file("list buffers ret fixture\n")?;
+    let file_name = file
+        .path()
+        .file_name()
+        .expect("fixture should have file name")
+        .to_string_lossy()
+        .into_owned();
+    let mut rile = RilePty::spawn(file.path(), 14, 120)?;
+
+    rile.wait_for_screen_contains("list buffers ret fixture")?;
+    rile.send("C-x C-b", keys::control_sequence("xb"))?;
+    rile.assert_screen_contains("window 1 inactive *Buffer List*")?;
+
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_screen_contains("window 1 ACTIVE *Buffer List*")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("RET", keys::ENTER)?;
+
+    assert!(
+        !rile.snapshot_text().contains("*Buffer List*"),
+        "buffer list window still rendered\n{}",
+        rile.screen_dump()
+    );
+    rile.assert_screen_contains(&format!("window 1 ACTIVE {file_name}"))?;
+    rile.assert_screen_contains("list buffers ret fixture")?;
+
+    rile.quit()?;
+    Ok(())
+}
