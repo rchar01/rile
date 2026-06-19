@@ -7,6 +7,10 @@ set -euo pipefail
 root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
 image=${IMAGE:-rile-zile-reference}
 podman=${PODMAN:-podman}
+user_flags=(--user "$(id -u):$(id -g)")
+if [[ $("$podman" info --format '{{.Host.Security.Rootless}}') == true ]]; then
+  user_flags=(--userns=keep-id)
+fi
 
 "$podman" build \
   -f "$root/tools/reference/zile/Containerfile" \
@@ -14,8 +18,9 @@ podman=${PODMAN:-podman}
   "$root"
 
 "$podman" run --rm \
-  --userns=keep-id \
+  "${user_flags[@]}" \
   -v "$root":/workspace:z \
   -w /workspace \
+  -e HOME=/tmp \
   "$image" \
   tools/reference/zile/build-in-container "$@"
