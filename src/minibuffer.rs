@@ -21,6 +21,7 @@ pub enum PromptKind {
     KillBuffer,
     QueryReplaceReplacement,
     QueryReplaceSearch,
+    QuitDirtyBuffers,
     RectangleNumberFormat,
     RectangleNumberStart,
     ShellCommand,

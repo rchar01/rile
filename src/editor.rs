@@ -1199,6 +1199,7 @@ impl Editor {
             PromptKind::KillBuffer => self.kill_buffer(input.trim()),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
+            PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
             PromptKind::RectangleNumberFormat => self.submit_rectangle_number_format(input),
             PromptKind::RectangleNumberStart => self.submit_rectangle_number_start(input.trim()),
             PromptKind::ShellCommand => self.submit_shell_command(input.trim()),
@@ -1307,7 +1308,7 @@ impl Editor {
             RectangleNumberLines => self.rectangle_number_lines(argument),
             Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
-            SaveBuffersKillTerminal => return Ok(EditorOutcome::Quit),
+            SaveBuffersKillTerminal => return Ok(self.save_buffers_kill_terminal()),
             SetMarkCommand => self.set_mark_command(),
             ShellCommand => self.start_shell_command(argument),
             ShellCommandOnRegion => self.start_shell_command_on_region(argument),
@@ -1650,6 +1651,41 @@ impl Editor {
                 .set_error("quoted control insertion is not supported"),
         }
         Ok(EditorOutcome::Continue)
+    }
+
+    fn save_buffers_kill_terminal(&mut self) -> EditorOutcome {
+        if !self.has_dirty_normal_buffers() {
+            return EditorOutcome::Quit;
+        }
+
+        self.minibuffer.start_prompt(
+            PromptKind::QuitDirtyBuffers,
+            "Modified buffers exist; exit anyway? (yes or no) ",
+        );
+        EditorOutcome::Continue
+    }
+
+    fn submit_quit_dirty_buffers(&mut self, input: &str) -> EditorOutcome {
+        match input.to_ascii_lowercase().as_str() {
+            "yes" => EditorOutcome::Quit,
+            "no" | "" => {
+                self.minibuffer.set_message("Quit");
+                EditorOutcome::Continue
+            }
+            _ => {
+                self.minibuffer.start_prompt(
+                    PromptKind::QuitDirtyBuffers,
+                    "Modified buffers exist; exit anyway? (yes or no) ",
+                );
+                EditorOutcome::Continue
+            }
+        }
+    }
+
+    fn has_dirty_normal_buffers(&self) -> bool {
+        self.buffers.entries().iter().any(|entry| {
+            entry.document().kind() == DocumentKind::Normal && entry.document().is_dirty()
+        })
     }
 
     fn quit_current_operation(&mut self) {
@@ -4725,6 +4761,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::KillBuffer => "Kill buffer: ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
+        PromptKind::QuitDirtyBuffers => "Modified buffers exist; exit anyway? (yes or no) ",
         PromptKind::RectangleNumberFormat => "Format string: ",
         PromptKind::RectangleNumberStart => "Number to count from: ",
         PromptKind::ShellCommand => "Shell command: ",
@@ -6404,6 +6441,151 @@ mod tests {
             editor
                 .handle_key(KeyEvent::Ctrl('c'))
                 .expect("quit should execute"),
+            EditorOutcome::Quit
+        );
+    }
+
+    #[test]
+    fn c_x_c_prompts_before_quitting_dirty_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        fs::write(&path, "old").expect("file should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should begin");
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('c'))
+                .expect("dirty quit should prompt"),
+            EditorOutcome::Continue
+        );
+
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Modified buffers exist; exit anyway? (yes or no) ")
+        );
+    }
+
+    #[test]
+    fn c_x_c_dirty_quit_cancel_keeps_editor_open() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+        editor
+            .execute_command_by_name("save-buffers-kill-terminal")
+            .expect("dirty quit should prompt");
+
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('g'))
+                .expect("cancel should continue"),
+            EditorOutcome::Continue
+        );
+
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn c_x_c_dirty_quit_no_answer_keeps_editor_open() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+        editor
+            .execute_command_by_name("save-buffers-kill-terminal")
+            .expect("dirty quit should prompt");
+        for character in "no".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("answer should type");
+        }
+
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Special(SpecialKey::Enter))
+                .expect("no should continue"),
+            EditorOutcome::Continue
+        );
+
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn c_x_c_dirty_quit_yes_answer_exits() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+        editor
+            .execute_command_by_name("save-buffers-kill-terminal")
+            .expect("dirty quit should prompt");
+        for character in "yes".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("answer should type");
+        }
+
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Special(SpecialKey::Enter))
+                .expect("yes should quit"),
+            EditorOutcome::Quit
+        );
+    }
+
+    #[test]
+    fn c_x_c_prompts_for_dirty_non_current_buffer() {
+        let directory = TestDir::new();
+        let dirty = directory.path().join("dirty.txt");
+        let clean = directory.path().join("clean.txt");
+        fs::write(&dirty, "dirty").expect("dirty fixture should write");
+        fs::write(&clean, "clean").expect("clean fixture should write");
+        let mut editor = Editor::new(Document::open(&dirty).expect("dirty should open"));
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("dirty buffer should edit");
+        editor
+            .find_file(clean.to_str().unwrap())
+            .expect("clean buffer should open");
+
+        assert_eq!(editor.current_buffer_name(), "clean.txt");
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor
+                .execute_command_by_name("save-buffers-kill-terminal")
+                .expect("hidden dirty buffer should prompt"),
+            EditorOutcome::Continue
+        );
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Modified buffers exist; exit anyway? (yes or no) ")
+        );
+    }
+
+    #[test]
+    fn c_x_c_ignores_dirty_special_buffers() {
+        let mut editor = Editor::new(Document::scratch());
+        let help = editor.buffers.open_help("help");
+        editor
+            .buffers
+            .document_mut(help)
+            .expect("help buffer should exist")
+            .buffer_mut()
+            .insert(Position::new(0, 0), "dirty")
+            .expect("help buffer mutation should work");
+
+        assert_eq!(
+            editor
+                .execute_command_by_name("save-buffers-kill-terminal")
+                .expect("dirty special buffer should not block quit"),
             EditorOutcome::Quit
         );
     }

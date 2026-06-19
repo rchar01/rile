@@ -45,6 +45,10 @@ Initial inspection scenarios:
   read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `consecutive-kills-core`: base Emacs consecutive kill and yank behavior.
+- `dirty-buffer-quit-clean-core`: base Emacs `C-x C-c` behavior with a clean
+  buffer.
+- `dirty-buffer-quit-modified-core`: base Emacs `C-x C-c` save, cancel, and
+  exit-anyway prompts with a modified buffer.
 - `join-line-core`: base Emacs `M-^` join-line behavior.
 - `keyboard-macro-core`: base Emacs keyboard macro and repeat behavior.
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.

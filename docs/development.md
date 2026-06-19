@@ -323,10 +323,15 @@ buffer. Output must decode as UTF-8. V1 deliberately does not support `M-&`,
 process cancellation, live process buffers, interactive TTY subprocesses, remote
 file handlers, configurable shells, coding-system prompts, or rectangle piping.
 
+Post-Milestone 14 quit polish makes `C-x C-c` protect modified normal buffers.
+Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
+prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
+`no` or `C-g` cancels. Generated special buffers are ignored for this decision.
+
 Current limitations: there is no prompt cursor movement, no kill-buffer prompt
 completion, no incremental-search/query-replace prompt history, no shell-command
-process timeout/cancellation, no unsaved-changes quit confirmation, and no redo
-or advanced Emacs undo traversal yet. Search and query replace are exact
+process timeout/cancellation, and no redo or advanced Emacs undo traversal yet.
+Search and query replace are exact
 line-local substring matching; search wraps only after an explicit boundary
 failure, query replace does not wrap, and neither command matches across line
 breaks.

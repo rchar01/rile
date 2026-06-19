@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=dirty-buffer-quit-modified-core
+SCENARIO_DESCRIPTION='Observe core Emacs C-x C-c prompts with a modified buffer.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=dirty-buffer-quit-modified-core.txt
+FIXTURE_CONTENT=$'modified quit fixture\nsecond line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /modified quit fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-clean-open.png
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-modified.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-first-c-x-c-c.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-c-g-cancel.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-second-c-x-c-c.png
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-no-save-key.png
+Sleep 500ms
+Type "no"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-no-exit-answer.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-third-c-x-c-c.png
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-no-save-before-confirm.png
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

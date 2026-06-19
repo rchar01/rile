@@ -102,7 +102,8 @@ Basic editor keys:
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.
-- `C-x C-c` quits.
+- `C-x C-c` quits, prompting for `yes` before exiting when normal buffers have
+  unsaved changes.
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
   through candidates, Tab completes a common prefix, and Enter accepts the
   selected candidate. Command candidates show the first known key binding when

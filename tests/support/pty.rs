@@ -169,10 +169,21 @@ impl RilePty {
         if self.closed {
             return Ok(());
         }
+        let may_prompt = self.snapshot_text().contains("modified:true");
         self.last_action = "quit".to_owned();
         self.session
             .send(keys::control_sequence("xc"))
             .context("failed to send quit sequence")?;
+        if may_prompt {
+            self.wait_for_screen_contains("Modified buffers exist; exit anyway? (yes or no)")?;
+            self.session
+                .send(b"yes\r")
+                .context("failed to confirm dirty quit")?;
+        }
+        self.expect_exit()
+    }
+
+    pub fn expect_exit(&mut self) -> Result<()> {
         self.session
             .expect(Eof)
             .context("rile did not exit cleanly")?;

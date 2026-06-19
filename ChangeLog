@@ -1,5 +1,22 @@
 2026-06-19  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs, src/minibuffer.rs: Prompt before C-x C-c exits when
+	normal buffers have unsaved changes.
+	* tests/support/pty.rs, tests/pty_quit.rs: Confirm dirty quit during
+	cleanup and cover visible cancel/confirm behavior.
+	* tools/reference/emacs/scenarios/dirty-buffer-quit-clean-core.scenario,
+	tools/reference/emacs/scenarios/dirty-buffer-quit-modified-core.scenario,
+	tools/reference/zile/scenarios/dirty-buffer-quit-clean.scenario,
+	tools/reference/zile/scenarios/dirty-buffer-quit-modified.scenario,
+	tools/reference/kg/scenarios/dirty-buffer-quit-clean.scenario,
+	tools/reference/kg/scenarios/dirty-buffer-quit-modified.scenario: Add
+	focused dirty-buffer quit reference captures.
+	* README.md, NEWS, docs/development.md, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	dirty-buffer quit confirmation and reference scenarios.
+
+2026-06-19  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs, src/editor.rs, src/keymap.rs,
 	src/terminal/mod.rs: Show command key bindings in vertical command
 	completion rows and align minibuffer/completion columns.

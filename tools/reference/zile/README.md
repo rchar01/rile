@@ -30,6 +30,9 @@ Baseline inspection scenarios:
 - `baseline-ui`: basic screen layout and mode line.
 - `back-to-indentation`: `M-m` back-to-indentation behavior.
 - `consecutive-kills`: consecutive kill and yank behavior.
+- `dirty-buffer-quit-clean`: `C-x C-c` behavior with a clean buffer.
+- `dirty-buffer-quit-modified`: `C-x C-c` save, cancel, and exit-anyway prompts
+  with a modified buffer.
 - `join-line`: `M-^` join-line behavior.
 - `keyboard-macro`: keyboard macro and repeat behavior.
 - `list-buffers`: `C-x C-b` list-buffers behavior.

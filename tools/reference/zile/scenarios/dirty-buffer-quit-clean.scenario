@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=dirty-buffer-quit-clean
+SCENARIO_DESCRIPTION='Observe Zile C-x C-c behavior with a clean buffer.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=dirty-buffer-quit-clean.txt
+FIXTURE_CONTENT=$'clean quit fixture\nsecond line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /clean quit fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-clean-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
