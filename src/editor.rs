@@ -41,6 +41,7 @@ pub struct Editor {
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
+    messages_return: Option<Viewport>,
     shell_output_return: Option<Viewport>,
     buffer_list_rows: Vec<Option<BufferId>>,
     describe_key: Option<Vec<KeyEvent>>,
@@ -293,6 +294,7 @@ impl Editor {
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             help_return: None,
+            messages_return: None,
             shell_output_return: None,
             buffer_list_rows: Vec::new(),
             describe_key: None,
@@ -550,6 +552,10 @@ impl Editor {
             return Ok(self.restore_help_buffer());
         }
 
+        if self.document().is_messages() && key == KeyEvent::Text("q".to_owned()) {
+            return Ok(self.restore_messages_buffer());
+        }
+
         if self.document().is_shell_output() && key == KeyEvent::Text("q".to_owned()) {
             return Ok(self.restore_shell_output_buffer());
         }
@@ -688,6 +694,52 @@ impl Editor {
 
     fn restore_help_buffer(&mut self) -> EditorOutcome {
         let Some(viewport) = self.help_return.take() else {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        };
+        if self.buffers.document(viewport.buffer).is_none() {
+            self.minibuffer.set_message("No previous buffer");
+            return EditorOutcome::Continue;
+        }
+
+        self.current_buffer = viewport.buffer;
+        self.cursor = viewport.cursor;
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        *self.windows.current_mut().viewport_mut() = viewport;
+        self.minibuffer.clear();
+
+        EditorOutcome::Continue
+    }
+
+    fn open_messages_buffer(&mut self) -> Result<()> {
+        self.sync_current_window();
+        if !self.document().is_messages() || self.messages_return.is_none() {
+            self.messages_return = Some(*self.windows.current().viewport());
+        }
+        let messages = self.buffers.open_messages(self.minibuffer.messages_text());
+
+        self.current_buffer = messages;
+        self.cursor = Position::new(0, 0);
+        self.goal_display_column = None;
+        self.search = None;
+        self.query_replace = None;
+        self.deactivate_region();
+        self.clear_insert_group();
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = 0;
+        viewport.first_visible_column = 0;
+        self.sync_current_window();
+        self.minibuffer
+            .set_message("Type q in messages window to restore previous buffer.");
+        Ok(())
+    }
+
+    fn restore_messages_buffer(&mut self) -> EditorOutcome {
+        let Some(viewport) = self.messages_return.take() else {
             self.minibuffer.set_message("No previous buffer");
             return EditorOutcome::Continue;
         };
@@ -1328,6 +1380,7 @@ impl Editor {
             ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
             Undo => self.undo(),
             UniversalArgument => self.extend_universal_argument(),
+            ViewEchoAreaMessages => self.open_messages_buffer(),
             WriteFile => self.start_write_file(),
             Yank => self.yank(),
             YankRectangle => self.yank_rectangle_command(),
@@ -6910,6 +6963,96 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert!(help.contains("C-x r SPC"));
         assert!(help.contains("point-to-register"));
         assert!(help.contains("Store point in a register"));
+    }
+
+    #[test]
+    fn view_echo_area_messages_opens_read_only_message_history() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should echo");
+        editor
+            .handle_key(KeyEvent::Text("z".to_owned()))
+            .expect("unbound key should report message");
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("e".to_owned()))
+            .expect("messages buffer should open");
+
+        assert_eq!(editor.current_buffer_name(), "*Messages*");
+        assert!(editor.document().is_read_only());
+        let messages = editor.document().buffer().serialize();
+        assert!(messages.contains("C-x- (C-h for help)"));
+        assert!(messages.contains("Key is not bound"));
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Type q in messages window to restore previous buffer.")
+        );
+    }
+
+    #[test]
+    fn q_restores_previous_buffer_from_messages_window() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("text should insert");
+        editor.cursor = Position::new(0, 2);
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+        assert_eq!(editor.current_buffer_name(), "*Messages*");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(editor.minibuffer().display_text(), None);
+    }
+
+    #[test]
+    fn messages_buffer_refreshes_existing_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("missing-command")
+            .expect("unknown command should set message");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+        let first = editor.current_buffer_id();
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("No such command: missing-command")
+        );
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+        editor
+            .execute_command_by_name("another-missing-command")
+            .expect("another unknown command should set message");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should reopen");
+
+        assert_eq!(editor.current_buffer_id(), first);
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("No such command: another-missing-command")
+        );
     }
 
     #[test]

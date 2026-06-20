@@ -167,6 +167,23 @@ impl BufferManager {
         id
     }
 
+    pub fn open_messages(&mut self, text: impl AsRef<str>) -> BufferId {
+        let name = "*Messages*";
+        if let Some(entry) = self.entries.iter_mut().find(|entry| entry.name == name) {
+            entry.document = Document::messages(text);
+            return entry.id;
+        }
+
+        let id = BufferId(self.next_id);
+        self.next_id += 1;
+        self.entries.push(BufferEntry {
+            id,
+            name: name.to_owned(),
+            document: Document::messages(text),
+        });
+        id
+    }
+
     pub fn open_buffer_list(&mut self, text: impl AsRef<str>) -> BufferId {
         let name = "*Buffer List*";
         if let Some(entry) = self.entries.iter_mut().find(|entry| entry.name == name) {

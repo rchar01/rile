@@ -52,6 +52,8 @@ Editing features:
   protection.
 * Prompt before C-x C-c exits when normal buffers have unsaved changes.
 * Describe key bindings with C-h k and interactive commands with C-h f.
+* Review transient status and error history with C-h e in a read-only
+  *Messages* buffer.
 * Recall minibuffer prompt history with M-p and M-n.
 
 Interface features:

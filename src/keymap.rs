@@ -167,6 +167,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('u')], "universal-argument"),
         KeyBinding::new([KeyEvent::Ctrl('@')], "set-mark-command"),
         KeyBinding::new(
+            [KeyEvent::Ctrl('h'), KeyEvent::Text("e".to_owned())],
+            "view-echo-area-messages",
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())],
             "describe-function",
         ),
@@ -528,6 +532,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h')]),
             KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("e".to_owned())]),
+            KeyResolution::Command("view-echo-area-messages")
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())]),

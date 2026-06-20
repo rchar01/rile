@@ -77,6 +77,7 @@ pub enum Command {
     ToggleSyntaxHighlighting,
     Undo,
     UniversalArgument,
+    ViewEchoAreaMessages,
     WriteFile,
     Yank,
     YankRectangle,
@@ -489,6 +490,12 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             UniversalArgument,
         ),
+        CommandSpec::new(
+            "view-echo-area-messages",
+            "Show the message history",
+            true,
+            ViewEchoAreaMessages,
+        ),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
         CommandSpec::new("yank", "Insert latest kill", true, Yank),
         CommandSpec::new(
@@ -556,6 +563,7 @@ mod tests {
         assert!(registry.contains("yank-pop"));
         assert!(registry.contains("undo"));
         assert!(registry.contains("universal-argument"));
+        assert!(registry.contains("view-echo-area-messages"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("rectangle-mark-mode"));
         assert!(registry.contains("rectangle-number-lines"));

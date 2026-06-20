@@ -16,6 +16,7 @@ pub enum DocumentKind {
     Normal,
     Welcome,
     Help,
+    Messages,
     Completions,
     BufferList,
     ShellOutput,
@@ -80,6 +81,18 @@ Rile is free software under GPL-3.0-or-later.\n",
             path: None,
             name: Some("*Completions*".to_owned()),
             kind: DocumentKind::Completions,
+            read_only: false,
+            missing_on_open: false,
+            backup_on_save: false,
+        }
+    }
+
+    pub fn messages(text: impl AsRef<str>) -> Self {
+        Self {
+            buffer: Buffer::from_text(text.as_ref()),
+            path: None,
+            name: Some("*Messages*".to_owned()),
+            kind: DocumentKind::Messages,
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
@@ -177,6 +190,10 @@ Rile is free software under GPL-3.0-or-later.\n",
 
     pub fn is_completions(&self) -> bool {
         self.kind == DocumentKind::Completions
+    }
+
+    pub fn is_messages(&self) -> bool {
+        self.kind == DocumentKind::Messages
     }
 
     pub fn is_buffer_list(&self) -> bool {
@@ -472,6 +489,23 @@ mod tests {
         let error = document
             .save()
             .expect_err("completions buffer should be read-only");
+        assert!(error.to_string().contains("read-only"));
+    }
+
+    #[test]
+    fn messages_document_is_named_clean_and_read_only() {
+        let mut document = Document::messages("Saved file\n");
+
+        assert_eq!(document.display_name(), "*Messages*");
+        assert_eq!(document.kind(), DocumentKind::Messages);
+        assert!(document.is_messages());
+        assert!(document.is_read_only());
+        assert_eq!(document.buffer().serialize(), "Saved file\n");
+        assert!(!document.is_dirty());
+
+        let error = document
+            .save()
+            .expect_err("messages buffer should be read-only");
         assert!(error.to_string().contains("read-only"));
     }
 

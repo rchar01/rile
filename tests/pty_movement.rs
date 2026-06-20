@@ -249,6 +249,33 @@ fn read_only_help_message_clears_on_movement() -> Result<()> {
 }
 
 #[test]
+fn view_echo_area_messages_shows_message_history_and_restores() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("z", b"z")?;
+    rile.assert_screen_contains("Key is not bound")?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("e", b"e")?;
+
+    rile.assert_screen_contains("*Messages*")?;
+    rile.assert_screen_contains("C-x- (C-h for help)")?;
+    rile.assert_screen_contains("Key is not bound")?;
+
+    rile.send("insert in messages", b"x")?;
+    rile.assert_screen_contains("Buffer is read-only: *Messages*")?;
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+    rile.assert_status_contains("ACTIVE")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn buffer_start_and_end_scroll_the_viewport() -> Result<()> {
     let text = (1..=20)
         .map(|line| format!("line {line:03}"))

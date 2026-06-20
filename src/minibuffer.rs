@@ -6,6 +6,7 @@ use unicode_segmentation::UnicodeSegmentation;
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MinibufferState {
     pub message: Option<String>,
+    messages: Vec<String>,
     prompt: Option<PromptState>,
 }
 
@@ -39,7 +40,9 @@ pub struct PromptState {
 
 impl MinibufferState {
     pub fn set_message(&mut self, message: impl Into<String>) {
-        self.message = Some(message.into());
+        let message = message.into();
+        self.messages.push(message.clone());
+        self.message = Some(message);
         self.prompt = None;
     }
 
@@ -115,6 +118,16 @@ impl MinibufferState {
         self.message.clone()
     }
 
+    pub fn messages_text(&self) -> String {
+        if self.messages.is_empty() {
+            return "No messages.\n".to_owned();
+        }
+
+        let mut text = self.messages.join("\n");
+        text.push('\n');
+        text
+    }
+
     pub fn clear(&mut self) {
         self.message = None;
         self.prompt = None;
@@ -161,5 +174,22 @@ mod tests {
 
         assert_eq!(minibuffer.prompt(), None);
         assert_eq!(minibuffer.message.as_deref(), Some("Quit"));
+        assert_eq!(minibuffer.messages_text(), "Quit\n");
+    }
+
+    #[test]
+    fn messages_text_keeps_status_history() {
+        let mut minibuffer = MinibufferState::default();
+
+        assert_eq!(minibuffer.messages_text(), "No messages.\n");
+        minibuffer.set_message("Saved alpha.txt");
+        minibuffer.set_error("missing file name");
+        minibuffer.clear();
+
+        assert_eq!(
+            minibuffer.messages_text(),
+            "Saved alpha.txt\nError: missing file name\n"
+        );
+        assert_eq!(minibuffer.display_text(), None);
     }
 }

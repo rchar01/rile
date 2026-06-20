@@ -250,9 +250,11 @@ Post-Milestone 14 help polish adds `C-h k` and `C-h f` using Rile's existing
 read-only `*Help*` special buffer. `C-h k` reads a complete key sequence and
 shows the bound command plus its description. `C-h f` uses the shared command
 completion source, then shows the selected interactive command's description and
-current key bindings. Terminal input parsing uses the original termios erase
-byte, so `0x08` remains Backspace on `stty erase ^H` terminals and otherwise
-works as `C-h`; `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
+current key bindings. `C-h e` / `view-echo-area-messages` opens a read-only
+`*Messages*` buffer containing prior minibuffer status and error messages; `q`
+restores the previous buffer. Terminal input parsing uses the original termios
+erase byte, so `0x08` remains Backspace on `stty erase ^H` terminals and
+otherwise works as `C-h`; `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
 
 Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
 the shared file-completion source and relative-path resolution from `C-x C-f`.
@@ -331,7 +333,8 @@ prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 
 Current limitations: there is no prompt cursor movement, no
 incremental-search/query-replace prompt history, no shell-command process
-timeout/cancellation, and no redo or advanced Emacs undo traversal yet.
+timeout/cancellation, no message-log retention limit or persistence across
+sessions, and no redo or advanced Emacs undo traversal yet.
 Search and query replace are exact
 line-local substring matching; search wraps only after an explicit boundary
 failure, query replace does not wrap, and neither command matches across line

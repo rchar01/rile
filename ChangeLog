@@ -1,5 +1,15 @@
 2026-06-20  Robert Charusta  <rch-public@posteo.net>
 
+	* src/minibuffer.rs, src/file.rs, src/buffers.rs, src/command.rs,
+	src/keymap.rs, src/editor.rs: Add a read-only *Messages* buffer opened
+	with C-h e.
+	* tests/pty_movement.rs: Cover message-history display and read-only
+	protection.
+	* README.md, NEWS, docs/development.md: Document C-h e and message-log
+	limitations.
+
+2026-06-20  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs, src/editor.rs: Add buffer-name completion to
 	kill-buffer prompts.
 	* tests/pty_completion.rs: Cover visible kill-buffer completion, default

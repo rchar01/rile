@@ -109,8 +109,9 @@ Basic editor keys:
   through candidates, Tab completes a common prefix, and Enter accepts the
   selected candidate. Command candidates show the first known key binding when
   available.
-- `C-h k` describes a key binding, and `C-h f` describes an interactive
-  command with command-name completion.
+- `C-h k` describes a key binding, `C-h f` describes an interactive command
+  with command-name completion, and `C-h e` opens the read-only `*Messages*`
+  message history.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
   goto-line, rectangle, shell-command, and describe-command minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
