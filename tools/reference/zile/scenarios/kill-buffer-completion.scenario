@@ -1,0 +1,93 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=kill-buffer-completion
+SCENARIO_DESCRIPTION='Observe Zile kill-buffer completion, default buffer, and dirty-buffer protection.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=kill-buffer-completion.txt
+FIXTURE_CONTENT=$'starting buffer\n'
+
+setup_reference_files() {
+  local capture_dir=$1
+  mkdir -p "$capture_dir/buffers"
+  printf '%s\n' 'alpha buffer' > "$capture_dir/buffers/alpha-buffer.txt"
+  printf '%s\n' 'alphabet buffer' > "$capture_dir/buffers/alphabet-buffer.txt"
+  printf '%s\n' 'dirty buffer' > "$capture_dir/buffers/dirty-buffer.txt"
+}
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /starting buffer/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Type "/workspace/{{FRAME_DIR}}/../buffers/alpha-buffer.txt"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-alpha-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Type "/workspace/{{FRAME_DIR}}/../buffers/alphabet-buffer.txt"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-alphabet-open.png
+Sleep 500ms
+Ctrl+X
+Type "k"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-kill-buffer-prompt.png
+Sleep 500ms
+Type "alpha"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-prefix.png
+Sleep 500ms
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-tab.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-completion-kill.png
+Sleep 500ms
+Ctrl+X
+Type "k"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-default-kill-prompt.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-default-kill.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Type "/workspace/{{FRAME_DIR}}/../buffers/dirty-buffer.txt"
+Enter
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-dirty-buffer.png
+Sleep 500ms
+Ctrl+X
+Type "k"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-dirty-kill-prompt.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-dirty-protection.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/12-after-dirty-cancel.png
+Sleep 500ms
+Ctrl+X
+Ctrl+S
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

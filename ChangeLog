@@ -1,3 +1,17 @@
+2026-06-20  Robert Charusta  <rch-public@posteo.net>
+
+	* src/completion.rs, src/editor.rs: Add buffer-name completion to
+	kill-buffer prompts.
+	* tests/pty_completion.rs: Cover visible kill-buffer completion, default
+	buffer selection, and dirty-buffer protection.
+	* tools/reference/emacs/scenarios/kill-buffer-completion-modern.scenario,
+	tools/reference/zile/scenarios/kill-buffer-completion.scenario,
+	tools/reference/kg/scenarios/kill-buffer-completion.scenario: Add focused
+	kill-buffer completion reference captures.
+	* README.md, NEWS, docs/development.md, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/kg/README.md: Document
+	kill-buffer completion behavior and reference scenarios.
+
 2026-06-19  Robert Charusta  <rch-public@posteo.net>
 
 	* src/editor.rs, src/minibuffer.rs: Prompt before C-x C-c exits when

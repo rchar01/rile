@@ -59,6 +59,8 @@ Initial inspection scenarios:
   and `M-|` region replacement behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
+- `kill-buffer-completion`: `C-x k` completion, default-buffer, and
+  dirty-buffer protection behavior.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `incremental-search`: `C-s` search prompt, repeat, and accept flow.
 - `query-replace`: `M-%` prompts and choice-key workflow.

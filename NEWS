@@ -48,6 +48,8 @@ Editing features:
 * Toggle normal buffers read-only and writable with C-x C-q.
 * Switch buffers through C-x b with buffer-name completion and preserved point.
 * List buffers through C-x C-b in a read-only *Buffer List* window.
+* Kill buffers through C-x k with buffer-name completion and dirty-buffer
+  protection.
 * Prompt before C-x C-c exits when normal buffers have unsaved changes.
 * Describe key bindings with C-h k and interactive commands with C-h f.
 * Recall minibuffer prompt history with M-p and M-n.

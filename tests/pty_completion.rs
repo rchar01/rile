@@ -234,6 +234,119 @@ fn vertical_buffer_completion_preserves_space_sensitive_exact_name() -> Result<(
 }
 
 #[test]
+fn vertical_kill_buffer_completion_tab_extends_and_kills() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-buffer.txt");
+    let alphabet = directory.path().join("alphabet-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha buffer\n")?;
+    fs::write(&alphabet, "alphabet buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alpha_path = alpha.display().to_string();
+    rile.send("alpha-buffer path", alpha_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha buffer")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alphabet_path = alphabet.display().to_string();
+    rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alphabet buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.assert_screen_contains("Kill buffer (default alphabet-buffer.txt):")?;
+    rile.send("alpha-b", b"alpha-b")?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Kill buffer (default alphabet-buffer.txt): alpha-buffer.txt")?;
+
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer alpha-buffer.txt")?;
+    rile.assert_status_contains("ACTIVE alphabet-buffer.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_empty_answer_kills_default() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alpha_path = alpha.display().to_string();
+    rile.send("alpha-buffer path", alpha_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.assert_screen_contains("Kill buffer (default alpha-buffer.txt):")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer alpha-buffer.txt")?;
+    rile.assert_screen_contains("start")?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_completion_refuses_dirty_buffer() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let dirty = directory.path().join("dirty-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&dirty, "dirty buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let dirty_path = dirty.display().to_string();
+    rile.send("dirty-buffer path", dirty_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("dirty buffer")?;
+    rile.send("insert dirty marker", b"!")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("start", b"start")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.send("dirty", b"dirty")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.assert_screen_contains("Kill buffer (default start.txt): dirty-buffer.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("unsaved changes")?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+
+    rile.send("C-x C-c", keys::control_sequence("xc"))?;
+    rile.wait_for_screen_contains("Modified buffers exist; exit anyway? (yes or no)")?;
+    rile.send("yes", b"yes")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.expect_exit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_mx_prompt_history_recalls_previous_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;

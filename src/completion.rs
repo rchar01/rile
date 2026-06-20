@@ -121,6 +121,7 @@ pub enum CompletionSource {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompletionSession {
     source: CompletionSource,
+    title: String,
     config: CompletionConfig,
     base_dir: Option<PathBuf>,
     candidates: Vec<CompletionCandidate>,
@@ -153,6 +154,7 @@ impl CompletionSession {
             .collect::<Vec<_>>();
         let mut session = Self {
             source: CompletionSource::Commands,
+            title: "M-x".to_owned(),
             config,
             base_dir: None,
             candidates,
@@ -167,6 +169,7 @@ impl CompletionSession {
     pub fn files(base_dir: impl Into<PathBuf>, config: CompletionConfig) -> Self {
         let mut session = Self {
             source: CompletionSource::Files,
+            title: "Find file".to_owned(),
             config,
             base_dir: Some(base_dir.into()),
             candidates: Vec::new(),
@@ -179,12 +182,21 @@ impl CompletionSession {
     }
 
     pub fn buffers(names: impl IntoIterator<Item = String>, config: CompletionConfig) -> Self {
+        Self::buffers_with_title(names, config, "Switch to buffer")
+    }
+
+    pub fn buffers_with_title(
+        names: impl IntoIterator<Item = String>,
+        config: CompletionConfig,
+        title: impl Into<String>,
+    ) -> Self {
         let candidates = names
             .into_iter()
             .map(|name| CompletionCandidate::new(name, "Buffer"))
             .collect::<Vec<_>>();
         let mut session = Self {
             source: CompletionSource::Buffers,
+            title: title.into(),
             config,
             base_dir: None,
             candidates,
@@ -194,6 +206,10 @@ impl CompletionSession {
         };
         session.update("");
         session
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
     }
 
     pub fn source(&self) -> CompletionSource {

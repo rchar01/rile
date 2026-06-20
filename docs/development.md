@@ -219,18 +219,19 @@ Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 path the visited file. Empty input reports `Error: missing file name`.
 
 Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
-completion for `C-x C-f`, and buffer-name completion for `C-x b`. The completion
-core is separate from the UI style and supports command-name, file-name, and
-buffer-name sources, prefix or substring matching, common-prefix Tab completion,
-selected candidate movement with `C-n`/Down and `C-p`/Up, and Enter acceptance.
+completion for `C-x C-f`, and buffer-name completion for `C-x b` and `C-x k`.
+The completion core is separate from the UI style and supports command-name,
+file-name, and buffer-name sources, prefix or substring matching,
+common-prefix Tab completion, selected candidate movement with `C-n`/Down and
+`C-p`/Up, and Enter acceptance.
 File completion resolves relative candidates against the current buffer's
 directory when available, keeps raw missing-file input working, and descends
 into selected directories. Buffer completion keeps exact existing buffer names
 working and otherwise requires explicit selection or Tab completion before
-switching. The default `completion_style = "vertical"` reserves rows above the
-minibuffer and shows candidate annotations. Command completion rows include the
-first known key binding in the candidate label, such as `save-buffer (C-x C-s)`,
-and keep annotations aligned after the visible label column. The
+switching or killing. The default `completion_style = "vertical"` reserves rows
+above the minibuffer and shows candidate annotations. Command completion rows
+include the first known key binding in the candidate label, such as
+`save-buffer (C-x C-s)`, and keep annotations aligned after the visible label column. The
 `completions-buffer` style opens a temporary read-only `*Completions*` buffer
 and restores the previous viewport on accept/cancel. The `ido` style is an
 experimental compact inline minibuffer display. Supported completion config keys
@@ -328,9 +329,9 @@ Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: there is no prompt cursor movement, no kill-buffer prompt
-completion, no incremental-search/query-replace prompt history, no shell-command
-process timeout/cancellation, and no redo or advanced Emacs undo traversal yet.
+Current limitations: there is no prompt cursor movement, no
+incremental-search/query-replace prompt history, no shell-command process
+timeout/cancellation, and no redo or advanced Emacs undo traversal yet.
 Search and query replace are exact
 line-local substring matching; search wraps only after an explicit boundary
 failure, query replace does not wrap, and neither command matches across line

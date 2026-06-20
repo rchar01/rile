@@ -59,6 +59,8 @@ Baseline inspection scenarios:
   no-prefix `M-|` region output behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
+- `kill-buffer-completion`: `C-x k` completion, default-buffer, and
+  dirty-buffer protection behavior.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `help-describe`: `C-h k` and `C-h f` help behavior.
 - `read-only-open`: `C-x C-r` read-only file open behavior.
