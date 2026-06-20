@@ -5,13 +5,15 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Reference Testing
 
-Rile includes optional reference-testing tooling for studying user-visible behavior of other terminal editors. Current reference targets are GNU Zile, kg, and GNU Emacs.
+Rile includes optional reference-testing tooling for studying user-visible behavior of other terminal editors and comparing it with first-party Rile captures. Current reference targets are GNU Zile, kg, GNU Emacs, and Rile itself.
 
 Reference testing is not part of Rile's normal quality gate. It is a way to produce behavior evidence before writing original Rile requirements and tests.
 
 ## Licensing And Provenance
 
 The reference-testing tooling in this repository is original Rile project material. It does not vendor, incorporate, copy, translate, or mechanically port GNU Zile, kg, Emacs, or Emacs package source code.
+
+The Rile reference target is first-party behavior capture of the current Rile binary. It is comparison evidence for hardening existing behavior, not an external behavior source and not a correctness oracle.
 
 The Zile reference tooling may download a pinned upstream GNU Zile release into ignored local artifacts. Zile is GPL-3.0-or-later software from the GNU Project. Any local downloaded source tree keeps its upstream license files and notices in `artifacts/reference/zile/`, which is ignored by Git.
 
@@ -31,6 +33,7 @@ Committed tooling lives under:
 tools/reference/zile/
 tools/reference/kg/
 tools/reference/emacs/
+tools/reference/rile/
 ```
 
 Ignored generated outputs live under:
@@ -39,6 +42,7 @@ Ignored generated outputs live under:
 artifacts/reference/zile/
 artifacts/reference/kg/
 artifacts/reference/emacs/
+artifacts/reference/rile/
 ```
 
 Scenario files under `tools/reference/<editor>/scenarios/` are original Rile project scenario definitions. They describe fixtures, terminal sizes, keystrokes, and frame names for visual behavior capture. The capture scripts apply each scenario's `WIDTH` and `HEIGHT` with `stty cols` and `stty rows` before launching the reference editor.
@@ -93,6 +97,21 @@ startup UI, dialogs, GUI bars, and cursor blinking before the first frame. The
 enables Vertico and Marginalia from Debian ELPA packages for visual completion
 comparison.
 
+## Build The Rile Reference
+
+The Rile reference target builds the current repository binary during capture
+with `cargo build --locked` inside the visual tooling container. The build uses
+an ignored target directory under `artifacts/reference/rile/build/target/` so
+reference captures do not depend on or modify the normal `target/` directory. It
+uses `Containerfile.visual`, not a separate external-editor container, so VHS,
+ttyd, Chromium, and Rust are available together.
+
+Rile scenarios launch the local binary with deterministic visual flags:
+
+```sh
+artifacts/reference/rile/build/target/debug/rile --visual-test --test-size WIDTHxHEIGHT <fixture>
+```
+
 ## Capture A Scenario
 
 Capture the smoke scenario:
@@ -137,12 +156,19 @@ Capture an Emacs scenario:
 tools/reference/emacs/capture m-x-completion-modern
 ```
 
+Capture a Rile scenario:
+
+```sh
+make reference-capture REF_EDITOR=rile REF_SCENARIO=open-line
+```
+
 Capture outputs are written under:
 
 ```text
 artifacts/reference/zile/captures/<scenario>/
 artifacts/reference/kg/captures/<scenario>/
 artifacts/reference/emacs/captures/<scenario>/
+artifacts/reference/rile/captures/<scenario>/
 ```
 
 Each capture directory may include:
@@ -182,6 +208,7 @@ Supported placeholders in `vhs_steps` output:
 - `{{ZILE}}`: installed reference Zile binary.
 - `{{KG}}`: installed reference kg binary.
 - `{{EMACS}}`: installed reference Emacs profile wrapper.
+- `{{RILE}}`: current repository Rile binary.
 - `{{HOME}}`: temporary home directory for the scenario.
 
 Emacs scenarios must also set `EMACS_PROFILE` to `core` or `modern`. Use
@@ -241,6 +268,7 @@ The same controls can be overridden from the environment with
 For each feature scenario:
 
 - Capture reference-editor frames with fixed fixture text and terminal size.
+- Capture matching first-party Rile frames when comparison evidence is useful.
 - Inspect the screenshots and write a short behavior summary.
 - Turn that summary into original Rile requirements and acceptable differences.
 - Add Rile unit tests, PTY tests, parsed-screen snapshots, or optional Rile VHS demos as appropriate.

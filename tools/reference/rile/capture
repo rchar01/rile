@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if (($# != 1)); then
+  printf '%s\n' 'usage: tools/reference/rile/capture <scenario-name-or-path>' >&2
+  exit 2
+fi
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)
+image=${IMAGE:-rile-visual}
+podman=${PODMAN:-podman}
+user_flags=(--user "$(id -u):$(id -g)")
+if [[ $("$podman" info --format '{{.Host.Security.Rootless}}') == true ]]; then
+  user_flags=(--userns=keep-id)
+fi
+
+"$podman" build \
+  -f "$root/Containerfile.visual" \
+  -t "$image" \
+  "$root"
+
+"$podman" run --rm \
+  "${user_flags[@]}" \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  -e HOME=/tmp \
+  -e REFERENCE_AUTO_PAUSES \
+  -e REFERENCE_INPUT_PAUSE \
+  -e REFERENCE_SCREENSHOT_PAUSE \
+  -e TYPING_SPEED \
+  "$image" \
+  tools/reference/rile/capture-in-container "$1"

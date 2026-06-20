@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=baseline-ui
+SCENARIO_DESCRIPTION='Observe Rile visual-test baseline layout and mode line.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=baseline-ui.txt
+FIXTURE_CONTENT=$'alpha beta gamma\nsecond line\nthird line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha beta gamma/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+F
+Ctrl+F
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-small-move.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

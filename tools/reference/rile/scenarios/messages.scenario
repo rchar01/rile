@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=messages
+SCENARIO_DESCRIPTION='Observe Rile echo-area message history and restore behavior.'
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=messages.txt
+FIXTURE_CONTENT=$'messages fixture\nsecond line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /messages fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-save-message.png
+Sleep 500ms
+Ctrl+H
+Type "e"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-messages-buffer.png
+Sleep 500ms
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-read-only-protection.png
+Sleep 500ms
+Type "q"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-q-restore.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

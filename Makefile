@@ -6,7 +6,7 @@ SHELL := /bin/sh
 
 IMAGE ?= rile-dev
 VISUAL_IMAGE ?= rile-visual
-REFERENCE_EDITORS ?= emacs zile kg
+REFERENCE_EDITORS ?= emacs zile kg rile
 REF_EDITOR ?=
 REF_SCENARIO ?=
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
