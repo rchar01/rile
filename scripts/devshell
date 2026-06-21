@@ -8,13 +8,22 @@ IMAGE=${IMAGE:-rile-dev}
 PODMAN=${PODMAN:-podman}
 CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
 PODMAN_DETACH_KEYS=${PODMAN_DETACH_KEYS:-ctrl-]}
+home_rel=artifacts/devshell-home
+user_flags=(--user "$(id -u):$(id -g)")
+# Rootful Podman needs --user to avoid root-owned bind-mount outputs.
+if [ "$($PODMAN info --format '{{.Host.Security.Rootless}}')" = true ]; then
+  user_flags=(--userns=keep-id)
+fi
+
+mkdir -p "$home_rel"
 
 "$PODMAN" build -f "$CONTAINERFILE" -t "$IMAGE" .
 
 "$PODMAN" run --rm -it \
   --detach-keys="$PODMAN_DETACH_KEYS" \
-  --userns=keep-id \
+  "${user_flags[@]}" \
   -e CARGO_TERM_COLOR=always \
+  -e HOME=/workspace/$home_rel \
   -v "$PWD":/workspace:z \
   -w /workspace \
   "$IMAGE" bash

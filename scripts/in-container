@@ -12,12 +12,18 @@ fi
 IMAGE=${IMAGE:-rile-dev}
 PODMAN=${PODMAN:-podman}
 CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
+user_flags=(--user "$(id -u):$(id -g)")
+# Rootful Podman needs --user to avoid root-owned bind-mount outputs.
+if [ "$($PODMAN info --format '{{.Host.Security.Rootless}}')" = true ]; then
+  user_flags=(--userns=keep-id)
+fi
 
 "$PODMAN" build --ignorefile .containerignore -f "$CONTAINERFILE" -t "$IMAGE" .
 
 "$PODMAN" run --rm \
-  --userns=keep-id \
+  "${user_flags[@]}" \
   -e CARGO_TERM_COLOR=always \
+  -e HOME=/tmp \
   -v "$PWD":/workspace:z \
   -w /workspace \
   "$IMAGE" "$@"
