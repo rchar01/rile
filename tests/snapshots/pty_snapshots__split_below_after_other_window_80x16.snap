@@ -11,7 +11,7 @@ cursor: row 8, column 0
 005:
 006:
 007:
-008: -- Rile VISUAL window 0 inactive split_left.txt Ln 001 Col 000 modified:false Al
+008: -- Rile VISUAL window 0 inactive split_left.txt Ln 001 Col 000 ro:false modified
 009: left 000 | alpha
      ^
 010: left 001 | beta
@@ -19,5 +19,5 @@ cursor: row 8, column 0
 012: left 003 | delta
 013:
 014:
-015: -- Rile VISUAL window 1 ACTIVE split_left.txt Ln 001 Col 000 modified:false All
+015: -- Rile VISUAL window 1 ACTIVE split_left.txt Ln 001 Col 000 ro:false modified:f
 016: Selected other window

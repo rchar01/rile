@@ -578,10 +578,11 @@ fn visual_test_mode_line(
     let column = cursor_absolute_display_column(document.buffer(), cursor, editor.tab_width())?;
     let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
     Ok(format!(
-        "-- Rile VISUAL window {} {active} {name} Ln {:03} Col {:03} modified:{} {position} --",
+        "-- Rile VISUAL window {} {active} {name} Ln {:03} Col {:03} ro:{} modified:{} {position} --",
         layout.id.0,
         cursor.line + 1,
         column,
+        document.is_read_only(),
         document.is_dirty()
     ))
 }

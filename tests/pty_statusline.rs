@@ -17,6 +17,7 @@ fn statusline_tracks_visual_state_positions_save_and_errors() -> Result<()> {
     rile.assert_status_contains("window 0 ACTIVE")?;
     rile.assert_status_contains("Ln 001 Col 000")?;
     rile.assert_status_contains("modified:false")?;
+    rile.assert_status_contains("ro:false")?;
     rile.assert_cursor(0, 0)?;
 
     rile.send("C-n", keys::control('n'))?;
@@ -40,6 +41,14 @@ fn statusline_tracks_visual_state_positions_save_and_errors() -> Result<()> {
     rile.send("C-w without mark", keys::control('w'))?;
     rile.wait_for_screen_contains("Error: no active region")?;
     rile.assert_status_contains("modified:false")?;
+
+    rile.send("C-x C-q", keys::control_sequence("xq"))?;
+    rile.wait_for_screen_contains("Buffer is now read-only")?;
+    rile.assert_status_contains("ro:true")?;
+
+    rile.send("C-x C-q", keys::control_sequence("xq"))?;
+    rile.wait_for_screen_contains("Buffer is now writable")?;
+    rile.assert_status_contains("ro:false")?;
 
     rile.quit()?;
     Ok(())

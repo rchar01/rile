@@ -41,7 +41,7 @@ Type "k"
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/03-kill-buffer-prompt.png
 Sleep 500ms
-Type "alpha"
+Type "alpha-b"
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/04-after-prefix.png
 Sleep 500ms
