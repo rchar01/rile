@@ -6,10 +6,10 @@ SPDX-License-Identifier: GPL-3.0-or-later
 <div align="center">
   <img src="assets/brand/rile-forge-avatar-transparent-512.png" alt="Rile forge avatar" width="256">
 
-  <h1>Rile</h1>
-
   <p><strong>A small UTF-8-capable terminal Emacs-style editor written in Rust.</strong></p>
 </div>
+
+---
 
 Rile is a terminal-native editor for practical daily editing of source files,
 configuration files, Markdown, and normal UTF-8 text. It follows familiar Emacs
