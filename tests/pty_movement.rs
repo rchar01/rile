@@ -221,6 +221,43 @@ fn describe_function_opens_help_for_command() -> Result<()> {
 }
 
 #[test]
+fn narrow_help_wraps_with_continuation_marker() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 24)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("save-buffers-kill-terminal", b"save-buffers-kill-terminal")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    let rows = rile.screen_rows();
+    if !rows.iter().take(4).any(|row| row.ends_with('\\')) {
+        anyhow::bail!(
+            "narrow help did not show continuation marker\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    for _ in 0..24 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    let (row, column) = rile.cursor_position();
+    if row == 0 || column > 2 {
+        anyhow::bail!(
+            "help cursor did not move onto continuation row: ({row}, {column})\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn read_only_help_message_clears_on_movement() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

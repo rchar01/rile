@@ -488,8 +488,11 @@ fn ensure_current_window_visible(editor: &mut Editor, layouts: &[WindowLayout]) 
     let gutter_width = line_number_gutter_width(editor, document.buffer());
     let text_rows = layout.rect.rows.saturating_sub(1);
     let text_columns = layout.rect.columns.saturating_sub(gutter_width);
-    let cursor_display_column =
-        cursor_absolute_display_column(document.buffer(), editor.cursor(), editor.tab_width())?;
+    let cursor_display_column = if document.is_help() {
+        0
+    } else {
+        cursor_absolute_display_column(document.buffer(), editor.cursor(), editor.tab_width())?
+    };
     editor.ensure_current_window_contains_cursor(text_rows, text_columns, cursor_display_column);
     Ok(())
 }
@@ -511,37 +514,24 @@ fn draw_window<W: Write>(
     };
 
     let text_rows = layout.rect.rows.saturating_sub(1);
-    for row in 0..text_rows {
-        let screen_row = layout.rect.row + row + 1;
-        let screen_column = layout.rect.column + 1;
-        terminal.move_cursor(screen_row as u16, screen_column as u16)?;
-        let line_index = viewport.first_visible_line + row;
-        let gutter_width = line_number_gutter_width(editor, document.buffer());
-        if gutter_width > 0 {
-            write_line_number_gutter(terminal, line_index, gutter_width, editor.theme())?;
-        }
-        let text_columns = layout.rect.columns.saturating_sub(gutter_width);
-        if text_columns == 0 {
-            continue;
-        }
-        if let Some(line) = document.buffer().line(line_index) {
-            let spans = editor.spans_for_buffer_line(viewport.buffer, line_index, line);
-            write_buffer_line(
-                terminal,
-                document.buffer(),
-                viewport,
-                line_index,
-                line,
-                &spans,
-                LineRenderOptions {
-                    width: text_columns,
-                    tab_width: editor.tab_width(),
-                    theme: editor.theme(),
-                },
-            )?;
-        } else {
-            write_fixed_width_text(terminal, "", text_columns)?;
-        }
+    if document.is_help() {
+        draw_wrapped_help_rows(
+            terminal,
+            editor,
+            document.buffer(),
+            viewport,
+            layout,
+            text_rows,
+        )?;
+    } else {
+        draw_buffer_rows(
+            terminal,
+            editor,
+            document.buffer(),
+            viewport,
+            layout,
+            text_rows,
+        )?;
     }
 
     let mode_line_row = layout.rect.row + layout.rect.rows;
@@ -558,6 +548,198 @@ fn draw_window<W: Write>(
         Face::ModeLine,
         editor.theme(),
     )
+}
+
+fn draw_buffer_rows<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    buffer: &Buffer,
+    viewport: &Viewport,
+    layout: WindowLayout,
+    text_rows: usize,
+) -> Result<()> {
+    for row in 0..text_rows {
+        let screen_row = layout.rect.row + row + 1;
+        let screen_column = layout.rect.column + 1;
+        terminal.move_cursor(screen_row as u16, screen_column as u16)?;
+        let line_index = viewport.first_visible_line + row;
+        let gutter_width = line_number_gutter_width(editor, buffer);
+        if gutter_width > 0 {
+            write_line_number_gutter(terminal, line_index, gutter_width, editor.theme())?;
+        }
+        let text_columns = layout.rect.columns.saturating_sub(gutter_width);
+        if text_columns == 0 {
+            continue;
+        }
+        if let Some(line) = buffer.line(line_index) {
+            let spans = editor.spans_for_buffer_line(viewport.buffer, line_index, line);
+            write_buffer_line(
+                terminal,
+                buffer,
+                viewport,
+                line_index,
+                line,
+                &spans,
+                LineRenderOptions {
+                    width: text_columns,
+                    tab_width: editor.tab_width(),
+                    theme: editor.theme(),
+                },
+            )?;
+        } else {
+            write_fixed_width_text(terminal, "", text_columns)?;
+        }
+    }
+    Ok(())
+}
+
+fn draw_wrapped_help_rows<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    buffer: &Buffer,
+    viewport: &Viewport,
+    layout: WindowLayout,
+    text_rows: usize,
+) -> Result<()> {
+    let gutter_width = line_number_gutter_width(editor, buffer);
+    let text_columns = layout.rect.columns.saturating_sub(gutter_width);
+    let visual_lines = wrapped_help_visual_lines(
+        buffer,
+        viewport.first_visible_line,
+        text_rows,
+        text_columns,
+        editor.tab_width(),
+    );
+
+    for row in 0..text_rows {
+        let screen_row = layout.rect.row + row + 1;
+        let screen_column = layout.rect.column + 1;
+        terminal.move_cursor(screen_row as u16, screen_column as u16)?;
+        let line_index = visual_lines
+            .get(row)
+            .and_then(|line| line.as_ref())
+            .map(|line| line.line_index)
+            .unwrap_or(viewport.first_visible_line + row);
+        if gutter_width > 0 {
+            write_line_number_gutter(terminal, line_index, gutter_width, editor.theme())?;
+        }
+        if text_columns == 0 {
+            continue;
+        }
+        match visual_lines.get(row).and_then(|line| line.as_ref()) {
+            Some(visual_line) => write_wrapped_help_line(
+                terminal,
+                buffer,
+                visual_line,
+                LineRenderOptions {
+                    width: text_columns,
+                    tab_width: editor.tab_width(),
+                    theme: editor.theme(),
+                },
+            )?,
+            None => write_fixed_width_text(terminal, "", text_columns)?,
+        }
+    }
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HelpVisualLine {
+    line_index: usize,
+    start_column: usize,
+    continued: bool,
+}
+
+fn wrapped_help_visual_lines(
+    buffer: &Buffer,
+    first_line: usize,
+    row_count: usize,
+    width: usize,
+    tab_width: usize,
+) -> Vec<Option<HelpVisualLine>> {
+    let mut rows = Vec::with_capacity(row_count);
+    if width == 0 {
+        rows.resize(row_count, None);
+        return rows;
+    }
+
+    for line_index in first_line..buffer.line_count() {
+        let Some(line) = buffer.line(line_index) else {
+            break;
+        };
+        let line_width = display_width_with_tabs(line, tab_width);
+        if line_width == 0 {
+            rows.push(Some(HelpVisualLine {
+                line_index,
+                start_column: 0,
+                continued: false,
+            }));
+            if rows.len() == row_count {
+                return rows;
+            }
+            continue;
+        }
+
+        let mut start_column = 0;
+        while start_column < line_width {
+            let remaining_width = line_width - start_column;
+            let continued = remaining_width > width;
+            rows.push(Some(HelpVisualLine {
+                line_index,
+                start_column,
+                continued,
+            }));
+            if rows.len() == row_count {
+                return rows;
+            }
+
+            let content_width = wrapped_help_content_width(width, continued);
+            start_column += content_width.max(1);
+        }
+    }
+
+    rows.resize(row_count, None);
+    rows
+}
+
+fn write_wrapped_help_line<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    buffer: &Buffer,
+    visual_line: &HelpVisualLine,
+    options: LineRenderOptions,
+) -> Result<()> {
+    let Some(line) = buffer.line(visual_line.line_index) else {
+        return write_fixed_width_text(terminal, "", options.width);
+    };
+    let content_width = wrapped_help_content_width(options.width, visual_line.continued);
+    let range = buffer.visible_range(
+        visual_line.line_index,
+        visual_line.start_column,
+        content_width,
+    )?;
+    let segment = &line[range];
+    let mut used_width =
+        write_line_with_spans(terminal, segment, &[], options.tab_width, options.theme)?;
+    if visual_line.continued && options.width > 1 {
+        let continuation_column = options.width.saturating_sub(1);
+        if used_width < continuation_column {
+            terminal.write_text(&" ".repeat(continuation_column - used_width))?;
+        }
+        terminal.write_text("\\")?;
+        used_width = options.width;
+    }
+    if used_width < options.width {
+        terminal.write_text(&" ".repeat(options.width - used_width))?;
+    }
+    Ok(())
+}
+
+fn wrapped_help_content_width(width: usize, continued: bool) -> usize {
+    if continued && width > 1 {
+        width - 1
+    } else {
+        width
+    }
 }
 
 fn visual_test_mode_line(
@@ -811,18 +993,81 @@ fn move_cursor_to_current_window<W: Write>(
     };
     let cursor = viewport.cursor;
     let text_rows = layout.rect.rows.saturating_sub(1).max(1);
-    let cursor_row = cursor
-        .line
-        .saturating_sub(viewport.first_visible_line)
-        .min(text_rows - 1);
     let gutter_width = line_number_gutter_width(editor, document.buffer());
-    let cursor_column = (gutter_width
-        + cursor_display_column(document.buffer(), viewport, cursor, editor.tab_width())?)
-    .min(layout.rect.columns.saturating_sub(1));
+    let text_columns = layout.rect.columns.saturating_sub(gutter_width);
+    let (cursor_row, text_cursor_column) = if document.is_help() {
+        wrapped_help_cursor_position(
+            document.buffer(),
+            viewport,
+            cursor,
+            text_rows,
+            text_columns,
+            editor.tab_width(),
+        )?
+    } else {
+        (
+            cursor
+                .line
+                .saturating_sub(viewport.first_visible_line)
+                .min(text_rows - 1),
+            cursor_display_column(document.buffer(), viewport, cursor, editor.tab_width())?,
+        )
+    };
+    let cursor_column =
+        (gutter_width + text_cursor_column).min(layout.rect.columns.saturating_sub(1));
     terminal.move_cursor(
         (layout.rect.row + cursor_row + 1) as u16,
         (layout.rect.column + cursor_column + 1) as u16,
     )
+}
+
+fn wrapped_help_cursor_position(
+    buffer: &Buffer,
+    viewport: &Viewport,
+    cursor: Position,
+    text_rows: usize,
+    width: usize,
+    tab_width: usize,
+) -> Result<(usize, usize)> {
+    let cursor_column = cursor_absolute_display_column(buffer, cursor, tab_width)?;
+    let rows = wrapped_help_visual_lines(
+        buffer,
+        viewport.first_visible_line,
+        text_rows,
+        width,
+        tab_width,
+    );
+    for (row, visual_line) in rows.iter().enumerate() {
+        let Some(visual_line) = visual_line else {
+            continue;
+        };
+        if visual_line.line_index != cursor.line {
+            continue;
+        }
+        let content_width = wrapped_help_content_width(width, visual_line.continued).max(1);
+        let segment_end = visual_line.start_column + content_width;
+        let cursor_on_segment = if visual_line.continued {
+            cursor_column < segment_end
+        } else {
+            cursor_column <= segment_end
+        };
+        if cursor_on_segment {
+            return Ok((
+                row,
+                cursor_column
+                    .saturating_sub(visual_line.start_column)
+                    .min(width.saturating_sub(1)),
+            ));
+        }
+    }
+
+    Ok((
+        cursor
+            .line
+            .saturating_sub(viewport.first_visible_line)
+            .min(text_rows - 1),
+        0,
+    ))
 }
 
 fn cursor_display_column(
@@ -1023,7 +1268,8 @@ mod tests {
     use super::{
         AnsiTerminal, FrameOptions, TerminalSize, clipped_text, draw_editor_frame,
         draw_editor_frame_with_options, format_completion_row, mode_line_position,
-        write_fixed_width_text_with_face, write_line_number_gutter, write_line_with_spans,
+        wrapped_help_cursor_position, wrapped_help_visual_lines, write_fixed_width_text_with_face,
+        write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::config::ThemeName;
@@ -1094,6 +1340,99 @@ mod tests {
         assert_eq!(clipped_text("abcdef", 4), "abc$");
         assert_eq!(clipped_text("abcdef", 1), "$");
         assert_eq!(clipped_text("abc", 4), "abc");
+    }
+
+    #[test]
+    fn wrapped_help_visual_lines_continue_long_logical_lines() {
+        let buffer = Buffer::from_text("abcdefghij\nklm");
+
+        let rows = wrapped_help_visual_lines(&buffer, 0, 4, 6, 4);
+
+        assert_eq!(rows[0].as_ref().map(|line| line.line_index), Some(0));
+        assert_eq!(rows[0].as_ref().map(|line| line.start_column), Some(0));
+        assert_eq!(rows[0].as_ref().map(|line| line.continued), Some(true));
+        assert_eq!(rows[1].as_ref().map(|line| line.line_index), Some(0));
+        assert_eq!(rows[1].as_ref().map(|line| line.start_column), Some(5));
+        assert_eq!(rows[1].as_ref().map(|line| line.continued), Some(false));
+        assert_eq!(rows[2].as_ref().map(|line| line.line_index), Some(1));
+        assert_eq!(rows[2].as_ref().map(|line| line.start_column), Some(0));
+        assert_eq!(rows[2].as_ref().map(|line| line.continued), Some(false));
+        assert!(rows[3].is_none());
+    }
+
+    #[test]
+    fn wrapped_help_visual_lines_keep_content_at_width_one() {
+        let buffer = Buffer::from_text("abc");
+
+        let rows = wrapped_help_visual_lines(&buffer, 0, 3, 1, 4);
+
+        assert_eq!(rows[0].as_ref().map(|line| line.start_column), Some(0));
+        assert_eq!(rows[0].as_ref().map(|line| line.continued), Some(true));
+        assert_eq!(rows[1].as_ref().map(|line| line.start_column), Some(1));
+        assert_eq!(rows[1].as_ref().map(|line| line.continued), Some(true));
+        assert_eq!(rows[2].as_ref().map(|line| line.start_column), Some(2));
+        assert_eq!(rows[2].as_ref().map(|line| line.continued), Some(false));
+    }
+
+    #[test]
+    fn wrapped_help_cursor_position_uses_visual_rows() {
+        let buffer = Buffer::from_text("abcdefghij");
+        let viewport = Viewport::new(BufferId(0));
+
+        assert_eq!(
+            wrapped_help_cursor_position(&buffer, &viewport, Position::new(0, 7), 3, 6, 4)
+                .expect("cursor position should resolve"),
+            (1, 2)
+        );
+    }
+
+    #[test]
+    fn help_buffers_render_continuation_rows_in_narrow_windows() {
+        let document = Document::help("abcdefghij");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 6,
+        };
+
+        let frame = rendered_frame(&mut editor, size);
+
+        assert!(frame.contains("abcde\\"));
+        assert!(frame.contains("fghij "));
+    }
+
+    #[test]
+    fn help_buffers_show_content_in_one_column_windows() {
+        let document = Document::help("ab");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 4,
+            columns: 1,
+        };
+
+        let frame = rendered_frame(&mut editor, size);
+
+        assert!(frame.contains("\x1b[1;1Ha"));
+        assert!(frame.contains("\x1b[2;1Hb"));
+        assert!(!frame.contains('\\'));
+    }
+
+    #[test]
+    fn help_buffer_cursor_uses_continuation_row() {
+        let document = Document::help("abcdefghij");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 5,
+            columns: 6,
+        };
+
+        for _ in 0..7 {
+            editor
+                .handle_key(KeyEvent::Ctrl('f'))
+                .expect("cursor should move in help buffer");
+        }
+
+        assert_eq!(rendered_cursor_position(&mut editor, size), Some((2, 3)));
     }
 
     #[test]
