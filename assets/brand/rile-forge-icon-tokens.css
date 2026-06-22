@@ -1,0 +1,142 @@
+:root {
+  /*
+    Icon composition guidelines for Rile editor projects
+
+    These rules define how Rile project icons should be composed across the
+    system. They are intended for 512x512px forge/app-style icons, but the same
+    ratios can be scaled to other square icon sizes.
+
+    Rile is an Emacs-like lightweight editor project. The visual language should
+    suggest editing, buffers, cursor movement, keyboard-driven control, Lisp-like
+    structure, and small precise tools without copying the GNU Emacs logo, swirl,
+    mascot, or exact brand artwork.
+
+    Canvas
+    - Use a square canvas.
+    - Default canvas size: 512x512px.
+    - Use a plain, quiet background with no texture, scene, badge, or outer frame.
+    - Preferred background color: #F6F6F7.
+    - The icon should be optically centered, not mathematically centered if the
+      shape has uneven visual weight.
+
+    Icon scale
+    - The full visible icon silhouette should occupy approximately 78–82% of
+      the canvas width.
+    - The full visible icon silhouette should occupy approximately 78–82% of
+      the canvas height.
+    - Minimum outer margin: 48px on a 512x512px canvas.
+    - Preferred margin range: 48–64px.
+    - No part of the icon should touch or visually crowd the canvas edge.
+    - Avoid excessive empty background around the icon; the mark should feel
+      large, clear, and immediately readable.
+
+    Positioning
+    - Center the combined silhouette of all icon elements on the canvas.
+    - When a secondary element extends to one side, shift the primary element
+      slightly in the opposite direction to keep the total composition balanced.
+    - When an element adds weight at the lower-right, place the main form
+      slightly up and left so the complete silhouette feels centered.
+    - Keep the visual center of mass close to the center of the canvas.
+    - Use optical alignment over strict geometric alignment.
+
+    Shape system
+    - Use 2–3 primary visual elements only.
+    - Prefer one dominant editor/buffer form plus one smaller cursor, command,
+      parenthesis, or mark/action form.
+    - Use large, simple shapes that remain recognizable below 64px.
+    - Avoid decorative details, tiny UI controls, guide lines, stacked clutter,
+      fine patterns, or dense internal structure.
+    - Rounded corners should be used consistently.
+    - Forms should feel precise, calm, keyboard-driven, and tool-like.
+    - Good metaphors: editor buffer, command cursor, minibuffer prompt,
+      simplified parenthesis pair, compact document pane, or abstract text mark.
+    - Avoid copying the Emacs white swirl, GNU head, literal screenshots,
+      tiny text lines, file trees, or full terminal windows.
+
+    Stroke system
+    - Use bold, rounded strokes for legibility.
+    - Stroke color should usually be #3C3C43.
+    - Strokes should be visually consistent across the icon.
+    - For a 512x512px canvas, main strokes should generally feel equivalent to
+      about 18–26px.
+    - Supporting internal strokes may be slightly thinner, but should not become
+      fragile at small sizes.
+    - Avoid hairline strokes.
+
+    Color system
+    - Use neutral fills for the main forms.
+    - Use accent colors sparingly for functional emphasis only.
+    - Preferred dark outline/text color: #3C3C43.
+    - Preferred background: #F6F6F7.
+    - Preferred neutral fills: #F6F6F7, #ECE9E2, #D8D5CE.
+    - Preferred primary accent: #7B5FD6.
+    - Preferred muted accent: #6A64A8.
+    - Preferred deep accent: #4B367F.
+    - Violet accents should represent the Emacs-like editor lineage, command
+      structure, extensibility, and programmable editing.
+    - Blue accents may be used sparingly for buffers, navigation, or system state.
+    - Warm amber may be used only for cursor, prompt, active mark, or command
+      focus cues.
+    - Accent color should usually cover no more than 15–25% of the icon area.
+    - Do not let violet dominate the entire mark; keep the base calm and neutral.
+
+    Depth and effects
+    - Prefer flat vector geometry.
+    - Use little to no shadow.
+    - If depth is needed, use very subtle tonal fills rather than heavy effects.
+    - Avoid gradients, glow, glassmorphism, texture, and complex shadows unless
+      the specific icon family explicitly requires them.
+
+    Readability
+    - The icon must be understandable at 512px, 256px, 128px, and 64px.
+    - The core metaphor should still be recognizable at 32px, even if secondary
+      meaning is reduced.
+    - Remove details that do not survive downscaling.
+    - Favor silhouette clarity over illustrative complexity.
+
+    General visual tone
+    - Minimal developer-tool aesthetic.
+    - Clean vector construction.
+    - High contrast but low visual noise.
+    - Calm neutral base with selective violet emphasis.
+    - Lightweight, programmable, editor-oriented, and GNU/Emacs-adjacent without
+      becoming a clone of existing Emacs or Zile artwork.
+    - Suitable for Rile logos, editor tools, command-driven text interfaces,
+      Lisp-like tooling, lightweight editing utilities, and forge icons.
+  */
+
+  /* Backgrounds */
+  --color-bg-primary: #F6F6F7;
+  --color-bg-secondary: #ECE9E2;
+  --color-surface: #D8D5CE;
+  --color-surface-soft: #C2BAB4;
+
+  /* Text */
+  --color-text-primary: #3C3C43;
+  --color-text-secondary: #5E5D57;
+  --color-text-muted: #8A877F;
+
+  /* Borders */
+  --color-border: #ACA9A1;
+  --color-divider: #C4B9B4;
+
+  /* Accent */
+  --color-accent-primary: #7B5FD6;
+  --color-accent-hover: #9179E2;
+  --color-accent-active: #6A64A8;
+  --color-accent-deep: #4B367F;
+
+  /* Dark UI */
+  --color-dark-surface: #3F3A52;
+  --color-near-black: #292533;
+
+  /* Supporting */
+  --color-editor-blue: #4E75B9;
+  --color-editor-blue-soft: #AEBDE0;
+  --color-command-amber: #E8B85A;
+  --color-command-amber-soft: #F3D79B;
+  --color-violet-soft: #C8BDED;
+  --color-violet-muted: #8A7DB8;
+  --color-paren-lavender: #B6A7DF;
+  --color-buffer-grey: #9B98A4;
+}
