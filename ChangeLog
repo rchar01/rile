@@ -1,5 +1,16 @@
 2026-06-22  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Share selected-candidate acceptance for C-x b and C-x k
+	buffer-name completion and add C-x b default-buffer switching on empty input.
+	* tests/pty_completion.rs, src/editor.rs: Cover switch-buffer empty-default,
+	Tab, and Enter selected-candidate acceptance.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md,
+	tools/reference/emacs/scenarios/buffer-completion-modern.scenario,
+	tools/reference/rile/scenarios/buffer-completion.scenario: Document shared
+	buffer-prompt completion mechanics.
+
+2026-06-22  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs, src/minibuffer.rs, src/buffers.rs: Prompt before killing a
 	modified buffer with Emacs-style y-or-n-p confirmation and force-kill only
 	after explicit confirmation.

@@ -228,9 +228,11 @@ common-prefix Tab completion, selected candidate movement with `C-n`/Down and
 File completion resolves relative candidates against the current buffer's
 directory when available, keeps raw missing-file input working, and descends
 into selected directories. Buffer completion keeps exact existing buffer names
-working and otherwise requires explicit selection or Tab completion before
-switching or killing. The default `completion_style = "vertical"` reserves rows
-above the minibuffer and shows candidate annotations. Command completion rows
+working and otherwise lets Tab or Enter accept the selected candidate before
+switching or killing. C-x b empty input switches to the default previous buffer,
+while C-x k empty input kills the default current buffer. The default
+`completion_style = "vertical"` reserves rows above the minibuffer and shows
+candidate annotations. Command completion rows
 include the first known key binding in the candidate label, such as
 `save-buffer (C-x C-s)`, and keep annotations aligned after the visible label column. The
 `completions-buffer` style opens a temporary read-only `*Completions*` buffer

@@ -85,8 +85,9 @@ Basic editor keys:
 - `C-x i` prompts for a file path with completion and inserts its contents.
 - `C-x C-r` prompts for a file path with completion and opens it read-only.
 - `C-x C-q` toggles whether the current normal buffer is read-only.
-- `C-x b` prompts for a buffer name and switches to it, preserving each buffer's
-  point.
+- `C-x b` prompts for a buffer name with completion and switches to it,
+  preserving each buffer's point; empty input switches to the default buffer,
+  and Tab or Enter accepts the selected candidate when the input is not exact.
 - `C-x C-b` shows a read-only `*Buffer List*` in another window.
 - `C-x k` prompts for a buffer name with completion and kills it; empty input
   kills the current buffer, Tab or Enter accepts the selected candidate when the

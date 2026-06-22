@@ -269,26 +269,25 @@ The C-x k comparison is scoped to editors that prompt for a named buffer:
 Emacs-modern, Zile, and Rile. kg is not included because its C-x k kills the
 current buffer directly rather than entering named-buffer completion.
 
-Current Rile alignment work changed C-x k only:
+Current Rile alignment work shares buffer-prompt completion mechanics between
+C-x b and C-x k:
 
-- the current/default buffer is first in kill-buffer completion candidates;
+- C-x k keeps the current/default buffer first in kill-buffer completion
+  candidates;
 - Tab accepts the selected candidate when no longer common prefix is available;
 - Enter accepts the selected candidate when input is not an exact buffer name;
-- empty input still kills the default current buffer;
 - exact buffer names still take priority over the selected candidate;
+- empty input remains prompt-specific: C-x b switches to the default previous
+  buffer, while C-x k kills the default current buffer;
 - dirty buffers ask for Emacs-style y-or-n-p confirmation before they are killed.
 
-The comparison capture records the visible Tab-selected state and the resulting
-kill. Direct Enter on ambiguous input has the same selected-candidate rule, but
-is covered by automated unit and PTY tests because there is no intermediate
-visual completion state before Enter executes.
-The `vertical_buffer_completion_enter_rejects_ambiguous_raw_input` PTY test
-guards that the selected-candidate rule has not been applied to C-x b yet.
+The comparison captures record the visible Tab-selected state and the resulting
+switch or kill. Direct Enter on ambiguous input has the same selected-candidate
+rule, but is covered by automated unit and PTY tests because there is no
+intermediate visual completion state before Enter executes.
 
 Review next before changing other buffer prompts:
 
-- whether C-x b should accept the visible selected candidate on Enter;
-- whether C-x b Tab should fall back to the selected candidate on ambiguity;
 - whether switch-buffer candidates should prioritize the current, previous, or
   most recently used buffer like a fuller Emacs setup;
 - whether file prompts should keep their current raw missing-file behavior or

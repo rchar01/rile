@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=buffer-completion-modern
-SCENARIO_DESCRIPTION='Observe Vertico/Marginalia buffer-name completion behavior.'
+SCENARIO_DESCRIPTION='Observe Vertico/Marginalia selected-candidate buffer-name completion behavior.'
 EMACS_PROFILE=modern
 WIDTH=100
 HEIGHT=24
