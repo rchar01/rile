@@ -59,8 +59,6 @@ Initial inspection scenarios:
   and `M-|` region replacement behavior.
 - `yank-pop`: `M-y` yank-pop behavior.
 - `buffer-completion`: switch-buffer prompt completion after Tab.
-- `kill-buffer-completion`: `C-x k` completion, default-buffer, and
-  dirty-buffer protection behavior.
 - `prompt-history`: minibuffer history with `M-p` and `M-n`.
 - `incremental-search`: `C-s` search prompt, repeat, and accept flow.
 - `query-replace`: `M-%` prompts and choice-key workflow.
@@ -69,6 +67,9 @@ Initial inspection scenarios:
 - `read-only-open`: `C-x C-r` read-only file open behavior.
 - `toggle-read-only`: `C-x C-q` toggle-read-only behavior.
 - `universal-argument`: `C-u` universal-argument behavior.
+
+kg C-x k kills the current buffer directly in this pinned build, so there is no
+kg `kill-buffer-completion` scenario for named-buffer completion comparison.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

@@ -949,7 +949,7 @@ impl Editor {
                     self.update_completion_from_prompt();
                     return Ok(EditorOutcome::Continue);
                 }
-                let input = self.completion_accept_input(&input);
+                let input = self.completion_accept_input(kind, &input);
                 self.record_prompt_history(kind, &input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
@@ -1009,7 +1009,7 @@ impl Editor {
         }
     }
 
-    fn completion_accept_input(&self, input: &str) -> String {
+    fn completion_accept_input(&self, kind: PromptKind, input: &str) -> String {
         let trimmed = input.trim();
         if trimmed.is_empty() {
             return input.to_owned();
@@ -1019,6 +1019,9 @@ impl Editor {
                 return trimmed.to_owned();
             }
             Some(CompletionSource::Files) => return self.file_completion_accept_input(input),
+            Some(CompletionSource::Buffers) if kind == PromptKind::KillBuffer => {
+                return self.kill_buffer_completion_accept_input(input);
+            }
             Some(CompletionSource::Buffers) => return self.buffer_completion_accept_input(input),
             Some(_) => {}
             None => {}
@@ -1061,6 +1064,17 @@ impl Editor {
                 .unwrap_or_else(|| input.to_owned());
         }
         input.to_owned()
+    }
+
+    fn kill_buffer_completion_accept_input(&self, input: &str) -> String {
+        if self.buffers.find_by_name(input).is_some() {
+            return input.to_owned();
+        }
+        self.completion
+            .as_ref()
+            .and_then(CompletionSession::selected)
+            .map(|candidate| candidate.value.clone())
+            .unwrap_or_else(|| input.to_owned())
     }
 
     fn completion_should_enter_selected_directory(&self, input: &str) -> bool {
@@ -1174,15 +1188,31 @@ impl Editor {
             .prompt_input()
             .unwrap_or_default()
             .to_owned();
-        let Some(prefix) = self
+        if let Some(prefix) = self
             .completion
             .as_ref()
             .and_then(|completion| completion.common_prefix(&input))
+        {
+            self.minibuffer.set_prompt_input(prefix);
+            self.update_completion_from_prompt();
+            return;
+        }
+
+        if self.minibuffer.prompt_kind() != Some(PromptKind::KillBuffer) {
+            return;
+        }
+        let Some(selected) = self
+            .completion
+            .as_ref()
+            .and_then(CompletionSession::selected)
+            .map(|candidate| candidate.value.clone())
         else {
             return;
         };
-        self.minibuffer.set_prompt_input(prefix);
-        self.update_completion_from_prompt();
+        if selected != input {
+            self.minibuffer.set_prompt_input(selected);
+            self.update_completion_from_prompt();
+        }
     }
 
     fn update_completion_from_prompt(&mut self) {
@@ -1249,7 +1279,7 @@ impl Editor {
             PromptKind::GotoLine => self.goto_line(input.trim()),
             PromptKind::InsertFile => self.insert_file(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
-            PromptKind::KillBuffer => self.kill_buffer(input.trim()),
+            PromptKind::KillBuffer => self.kill_buffer(input),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
             PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
@@ -3253,12 +3283,27 @@ impl Editor {
         let label = format!("Kill buffer (default {}): ", self.current_buffer_name());
         self.minibuffer.start_prompt(PromptKind::KillBuffer, label);
         self.completion = Some(CompletionSession::buffers_with_title(
-            self.buffer_completion_names(),
+            self.kill_buffer_completion_names(),
             self.completion_config,
             "Kill buffer",
         ));
         self.update_completion_from_prompt();
         Ok(())
+    }
+
+    fn kill_buffer_completion_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        if let Some(name) = self.buffers.name(self.current_buffer) {
+            names.push(name.to_owned());
+        }
+        names.extend(
+            self.buffers
+                .entries()
+                .iter()
+                .filter(|entry| entry.id() != self.current_buffer)
+                .map(|entry| entry.name().to_owned()),
+        );
+        names
     }
 
     fn list_buffers(&mut self) -> Result<()> {
@@ -5936,6 +5981,123 @@ mod tests {
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Killed buffer alpha-buffer.txt")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_completion_tab_accepts_selected_default_candidate() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-buffer.txt");
+        let alphabet = directory.path().join("alphabet-buffer.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        fs::write(&alphabet, "alphabet").expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(alpha.to_str().unwrap())
+            .expect("alpha should open");
+        editor
+            .find_file(alphabet.to_str().unwrap())
+            .expect("alphabet should open");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("kill-buffer should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should accept selected default candidate");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("alphabet-buffer.txt")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_completion_enter_accepts_selected_default_candidate() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-buffer.txt");
+        let alphabet = directory.path().join("alphabet-buffer.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        fs::write(&alphabet, "alphabet").expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(alpha.to_str().unwrap())
+            .expect("alpha should open");
+        editor
+            .find_file(alphabet.to_str().unwrap())
+            .expect("alphabet should open");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("kill-buffer should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should kill selected default candidate");
+
+        assert_eq!(editor.buffer_count(), 2);
+        assert!(editor.buffers.find_by_name("alphabet-buffer.txt").is_none());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Killed buffer alphabet-buffer.txt")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_completion_preserves_space_sensitive_exact_name() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let spaced = directory.path().join(" alpha-buffer.txt");
+        let alphabet = directory.path().join("alphabet-buffer.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&spaced, "leading alpha").expect("spaced fixture should write");
+        fs::write(&alphabet, "alphabet").expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(spaced.to_str().unwrap())
+            .expect("spaced buffer should open");
+        editor
+            .find_file(alphabet.to_str().unwrap())
+            .expect("alphabet should open");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("kill-buffer should start prompt");
+        editor
+            .handle_key(KeyEvent::Text(" alpha-buffer.txt".to_owned()))
+            .expect("prompt input should keep leading space");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should kill exact buffer name");
+
+        assert_eq!(editor.buffer_count(), 2);
+        assert!(editor.buffers.find_by_name(" alpha-buffer.txt").is_none());
+        assert!(editor.buffers.find_by_name("alphabet-buffer.txt").is_some());
+        assert_eq!(editor.current_buffer_name(), "alphabet-buffer.txt");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Killed buffer  alpha-buffer.txt")
         );
     }
 

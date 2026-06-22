@@ -89,7 +89,8 @@ Basic editor keys:
   point.
 - `C-x C-b` shows a read-only `*Buffer List*` in another window.
 - `C-x k` prompts for a buffer name with completion and kills it; empty input
-  kills the current buffer, and buffers with unsaved changes are refused.
+  kills the current buffer, Tab or Enter accepts the selected candidate when the
+  input is not exact, and buffers with unsaved changes are refused.
 - `C-x 2` splits the current window below.
 - `C-x 3` splits the current window right.
 - `C-x 0` deletes the current window.

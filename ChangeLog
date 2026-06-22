@@ -1,3 +1,20 @@
+2026-06-22  Robert Charusta  <rch-public@posteo.net>
+
+	* src/editor.rs: Make kill-buffer completion prefer the default current
+	buffer and accept the selected candidate on Tab or Enter when input is not an
+	exact buffer name.
+	* tests/pty_completion.rs, src/editor.rs: Cover Emacs-modern-style C-x k
+	selected-candidate acceptance while leaving switch-buffer behavior unchanged.
+	* tools/reference/emacs/scenarios/kill-buffer-completion-modern.scenario,
+	tools/reference/rile/scenarios/kill-buffer-completion.scenario,
+	tools/reference/zile/scenarios/kill-buffer-completion.scenario: Align
+	comparison captures around ambiguous and selected-candidate completion.
+	* tools/reference/kg/scenarios/kill-buffer-completion.scenario,
+	tools/reference/kg/README.md: Remove the kg scenario because kg C-x k kills
+	the current buffer directly instead of prompting for a named buffer.
+	* README.md, NEWS, docs/reference-testing.md: Document the C-x k alignment
+	and remaining buffer-prompt review scope.
+
 2026-06-20  Robert Charusta  <rch-public@posteo.net>
 
 	* src/minibuffer.rs, src/file.rs, src/buffers.rs, src/command.rs,

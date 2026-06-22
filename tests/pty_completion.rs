@@ -234,6 +234,42 @@ fn vertical_buffer_completion_preserves_space_sensitive_exact_name() -> Result<(
 }
 
 #[test]
+fn vertical_buffer_completion_enter_rejects_ambiguous_raw_input() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-buffer.txt");
+    let alphabet = directory.path().join("alphabet-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha buffer\n")?;
+    fs::write(&alphabet, "alphabet buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alpha_path = alpha.display().to_string();
+    rile.send("alpha-buffer path", alpha_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha buffer")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alphabet_path = alphabet.display().to_string();
+    rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alphabet buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("alpha", b"alpha")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("no such buffer: alpha")?;
+    rile.assert_status_contains("ACTIVE alphabet-buffer.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_kill_buffer_completion_tab_extends_and_kills() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
@@ -268,6 +304,116 @@ fn vertical_kill_buffer_completion_tab_extends_and_kills() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("Killed buffer alpha-buffer.txt")?;
+    rile.assert_status_contains("ACTIVE alphabet-buffer.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_completion_tab_accepts_selected_default() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-buffer.txt");
+    let alphabet = directory.path().join("alphabet-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha buffer\n")?;
+    fs::write(&alphabet, "alphabet buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alpha_path = alpha.display().to_string();
+    rile.send("alpha-buffer path", alpha_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha buffer")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alphabet_path = alphabet.display().to_string();
+    rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alphabet buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.send("alpha", b"alpha")?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Kill buffer (default alphabet-buffer.txt): alphabet-buffer.txt")?;
+
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer alphabet-buffer.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_completion_enter_accepts_selected_default() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-buffer.txt");
+    let alphabet = directory.path().join("alphabet-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha buffer\n")?;
+    fs::write(&alphabet, "alphabet buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alpha_path = alpha.display().to_string();
+    rile.send("alpha-buffer path", alpha_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha buffer")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alphabet_path = alphabet.display().to_string();
+    rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alphabet buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.send("alpha", b"alpha")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer alphabet-buffer.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_completion_preserves_space_sensitive_exact_name() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let spaced = directory.path().join(" alpha-buffer.txt");
+    let alphabet = directory.path().join("alphabet-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&spaced, "leading alpha buffer\n")?;
+    fs::write(&alphabet, "alphabet buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let spaced_path = spaced.display().to_string();
+    rile.send("spaced-buffer path", spaced_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("leading alpha buffer")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let alphabet_path = alphabet.display().to_string();
+    rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alphabet buffer")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.send("space-sensitive name", b" alpha-buffer.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer  alpha-buffer.txt")?;
     rile.assert_status_contains("ACTIVE alphabet-buffer.txt")?;
 
     rile.quit()?;

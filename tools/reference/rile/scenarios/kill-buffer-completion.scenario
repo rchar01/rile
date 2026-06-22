@@ -41,26 +41,41 @@ Type "k"
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/03-kill-buffer-prompt.png
 Sleep 500ms
-Type "alpha-b"
+Type "alpha"
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/04-after-prefix.png
 Sleep 500ms
 Tab
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/05-after-tab.png
+Screenshot {{FRAME_DIR}}/05-after-ambiguous-tab.png
 Sleep 500ms
-Enter
+Ctrl+G
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/06-after-completion-kill.png
+Screenshot {{FRAME_DIR}}/06-after-ambiguous-cancel.png
 Sleep 500ms
 Ctrl+X
 Type "k"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/07-default-kill-prompt.png
+Type "alpha-b"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-unique-prefix.png
+Sleep 500ms
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-unique-tab.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/08-after-default-kill.png
+Screenshot {{FRAME_DIR}}/09-after-completion-kill.png
+Sleep 500ms
+Ctrl+X
+Type "k"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-default-kill-prompt.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-after-default-kill.png
 Sleep 500ms
 Ctrl+X
 Ctrl+F
@@ -69,20 +84,20 @@ Enter
 Sleep 500ms
 Type "!"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/09-dirty-buffer.png
+Screenshot {{FRAME_DIR}}/12-dirty-buffer.png
 Sleep 500ms
 Ctrl+X
 Type "k"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/10-dirty-kill-prompt.png
+Screenshot {{FRAME_DIR}}/13-dirty-kill-prompt.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/11-dirty-protection.png
+Screenshot {{FRAME_DIR}}/14-dirty-protection.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/12-after-dirty-cancel.png
+Screenshot {{FRAME_DIR}}/15-after-dirty-cancel.png
 Sleep 500ms
 Ctrl+X
 Ctrl+S

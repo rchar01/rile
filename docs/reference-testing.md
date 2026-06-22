@@ -263,6 +263,38 @@ The same controls can be overridden from the environment with
 `REFERENCE_INPUT_PAUSE`, `REFERENCE_SCREENSHOT_PAUSE`, and
 `REFERENCE_AUTO_PAUSES`.
 
+## Kill Buffer Completion Review Notes
+
+The C-x k comparison is scoped to editors that prompt for a named buffer:
+Emacs-modern, Zile, and Rile. kg is not included because its C-x k kills the
+current buffer directly rather than entering named-buffer completion.
+
+Current Rile alignment work changed C-x k only:
+
+- the current/default buffer is first in kill-buffer completion candidates;
+- Tab accepts the selected candidate when no longer common prefix is available;
+- Enter accepts the selected candidate when input is not an exact buffer name;
+- empty input still kills the default current buffer;
+- exact buffer names still take priority over the selected candidate;
+- dirty buffers are still refused.
+
+The comparison capture records the visible Tab-selected state and the resulting
+kill. Direct Enter on ambiguous input has the same selected-candidate rule, but
+is covered by automated unit and PTY tests because there is no intermediate
+visual completion state before Enter executes.
+The `vertical_buffer_completion_enter_rejects_ambiguous_raw_input` PTY test
+guards that the selected-candidate rule has not been applied to C-x b yet.
+
+Review next before changing other buffer prompts:
+
+- whether C-x b should accept the visible selected candidate on Enter;
+- whether C-x b Tab should fall back to the selected candidate on ambiguity;
+- whether switch-buffer candidates should prioritize the current, previous, or
+  most recently used buffer like a fuller Emacs setup;
+- whether file prompts should keep their current raw missing-file behavior or
+  adopt selected-candidate acceptance in more cases;
+- whether ido and *Completions* styles need the same prompt-specific semantics.
+
 ## How To Use Evidence
 
 For each feature scenario:
