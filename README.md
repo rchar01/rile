@@ -3,17 +3,38 @@ SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Rile
+<div align="center">
+  <img src="assets/brand/rile-forge-avatar-transparent-512.png" alt="Rile forge avatar" width="256">
 
-Rile Is Lightweight Emacs.
+  <h1>Rile</h1>
 
-Rile is planned as a small, fast, terminal-native, Emacs-style text editor written in Rust. The v1 goal is practical daily editing of source files, config files, Markdown, and normal UTF-8 text.
+  <p><strong>A small UTF-8-capable terminal Emacs-style editor written in Rust.</strong></p>
+</div>
+
+Rile is a terminal-native editor for practical daily editing of source files,
+configuration files, Markdown, and normal UTF-8 text. It follows familiar Emacs
+editing conventions while keeping the implementation small and Rust-native.
 
 Official repository: <https://codeberg.org/rch/rile>
 
 ## Status
 
-Milestone 14 configuration and polish is implemented. The editor can insert text, move the cursor, delete text, save, quit, run `M-x` commands with command-name completion, run shell commands, open files with `C-x C-f`, switch and kill buffers, split/delete/select windows, search with active highlights, use basic region editing, run interactive query replacement, highlight common source/config formats, and load basic user preferences.
+Rile is under active early development. It can edit UTF-8 text, open and save
+files, use Emacs-style key bindings, run `M-x` commands with completion, manage
+buffers and split windows, search and query-replace with highlights, run shell
+commands, use registers and rectangles, show help buffers, highlight common
+source/config formats, and load basic user preferences.
+
+The v1 goal is a dependable lightweight editor for source files, config files,
+Markdown, and other plain text. Some advanced Emacs behavior is intentionally
+not implemented yet.
+
+## Quick Start
+
+Requirements for running from source:
+
+- Rust 2024 toolchain when developing directly on the host.
+- Or `podman` and `make` for the preferred dev-container workflow.
 
 Current binary behavior:
 
@@ -24,6 +45,8 @@ cargo run -- [file]
 Editing mode requires an interactive terminal. `--help` and `--version` work without one. When no file is provided, Rile opens a clean `*Rile*` welcome buffer. When a file path is provided, Rile opens it as UTF-8 before entering raw mode, rejects NUL-containing binary files, and shows file/dirty state, position, and major mode in the mode line.
 
 Developer visual testing flags are available for deterministic terminal review: `--visual-test` uses deterministic defaults and a verbose visual-test mode line, while `--test-size WIDTHxHEIGHT` overrides terminal size during rendering.
+
+## Usage
 
 Basic editor keys:
 
@@ -143,7 +166,8 @@ completion_matching = "prefix" # or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
-`C-x C-f`, `C-x C-r`, and `C-x i` file names, and `C-x b` buffer names.
+`C-x C-f`, `C-x C-r`, and `C-x i` file names, and `C-x b`/`C-x k` buffer
+names.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 
@@ -157,7 +181,7 @@ Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 
 ## Development
 
-The preferred development workflow uses Podman, `make`, and the project dev container. See `docs/README.md` for maintainer documentation and `docs/testing.md` for the testing workflow. The host only needs:
+The preferred development workflow uses Podman, `make`, and the project dev container. See [docs/README.md](docs/README.md) for maintainer documentation and [docs/testing.md](docs/testing.md) for the testing workflow. The host only needs:
 
 - `podman`
 - `make`
@@ -179,7 +203,7 @@ make verify
 
 For direct host development, install the same Rust tools locally and run the scripts under `scripts/` directly.
 
-Release notes are maintained in `NEWS`. GNU-style file-level maintenance history is maintained in `ChangeLog`; Git remains the detailed development history.
+Release notes are maintained in [NEWS](NEWS). GNU-style file-level maintenance history is maintained in [ChangeLog](ChangeLog); Git remains the detailed development history.
 
 CI is deferred until it is configured for the official repository.
 
@@ -187,4 +211,4 @@ CI is deferred until it is configured for the official repository.
 
 The repository includes optional reference-testing tooling for studying behavior of reference editors such as GNU Zile, kg, and GNU Emacs. Rile should use reference editors only for behavior and architecture lessons unless license implications are explicitly documented. Do not copy, translate, or mechanically port reference implementation code into Rile.
 
-See `NOTICE.md` for the current third-party code status.
+See [NOTICE.md](NOTICE.md) for the current third-party code status.
