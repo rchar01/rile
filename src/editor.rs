@@ -57,6 +57,7 @@ pub struct Editor {
     query_replace: Option<QueryReplaceState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
     shell_command_prompt: Option<ShellCommandPromptState>,
+    pending_kill_buffer: Option<BufferId>,
     pending_register: Option<PendingRegisterCommand>,
     quoted_insert: bool,
     region: Option<RegionState>,
@@ -310,6 +311,7 @@ impl Editor {
             query_replace: None,
             rectangle_number_prompt: None,
             shell_command_prompt: None,
+            pending_kill_buffer: None,
             pending_register: None,
             quoted_insert: false,
             region: None,
@@ -873,6 +875,9 @@ impl Editor {
         if self.minibuffer.prompt_kind() == Some(PromptKind::IncrementalSearch) {
             return self.handle_search_prompt_key(key);
         }
+        if self.minibuffer.prompt_kind() == Some(PromptKind::KillDirtyBuffer) {
+            return Ok(self.handle_kill_dirty_buffer_key(key));
+        }
         if self.completion.is_some() {
             return self.handle_completion_prompt_key(key);
         }
@@ -904,6 +909,9 @@ impl Editor {
                 if self.minibuffer.prompt_kind() == Some(PromptKind::ShellCommand) {
                     self.shell_command_prompt = None;
                 }
+                if self.minibuffer.prompt_kind() == Some(PromptKind::KillDirtyBuffer) {
+                    self.pending_kill_buffer = None;
+                }
                 self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
             }
@@ -927,6 +935,16 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Tab) => Ok(EditorOutcome::Continue),
             _ => Ok(EditorOutcome::Continue),
+        }
+    }
+
+    fn handle_kill_dirty_buffer_key(&mut self, key: KeyEvent) -> EditorOutcome {
+        match key {
+            KeyEvent::Text(text) => self.submit_kill_dirty_buffer(&text),
+            KeyEvent::Special(SpecialKey::Enter)
+            | KeyEvent::Special(SpecialKey::Escape)
+            | KeyEvent::Ctrl('g') => self.submit_kill_dirty_buffer(""),
+            _ => EditorOutcome::Continue,
         }
     }
 
@@ -1280,6 +1298,7 @@ impl Editor {
             PromptKind::InsertFile => self.insert_file(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input),
+            PromptKind::KillDirtyBuffer => Ok(self.submit_kill_dirty_buffer(input.trim())),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
             PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
@@ -3547,7 +3566,87 @@ impl Editor {
             .expect("target buffer must exist")
             .to_owned();
 
-        match self.buffers.kill(target) {
+        if self
+            .buffers
+            .document(target)
+            .expect("target buffer must exist")
+            .is_dirty()
+        {
+            self.finish_completion_buffer();
+            self.completion = None;
+            self.pending_kill_buffer = Some(target);
+            self.minibuffer
+                .start_prompt(PromptKind::KillDirtyBuffer, dirty_kill_prompt(&target_name));
+            return Ok(EditorOutcome::Continue);
+        }
+
+        self.finish_kill_buffer(target, false)
+    }
+
+    fn submit_kill_dirty_buffer(&mut self, input: &str) -> EditorOutcome {
+        match input.to_ascii_lowercase().as_str() {
+            "y" => {
+                let Some(target) = self.pending_kill_buffer.take() else {
+                    self.minibuffer.set_error("no pending buffer kill");
+                    return EditorOutcome::Continue;
+                };
+                let Some(target_name) = self.buffers.name(target).map(str::to_owned) else {
+                    self.minibuffer.set_error("buffer no longer exists");
+                    return EditorOutcome::Continue;
+                };
+                let message = format!("{}y", dirty_kill_prompt(&target_name));
+                if let Err(error) =
+                    self.finish_kill_buffer_with_message(target, true, Some(message))
+                {
+                    self.minibuffer.set_error(format!("kill failed: {error}"));
+                }
+                EditorOutcome::Continue
+            }
+            "n" | "" => {
+                self.pending_kill_buffer = None;
+                self.minibuffer.set_message("Quit");
+                EditorOutcome::Continue
+            }
+            _ => {
+                if let Some(name) = self
+                    .pending_kill_buffer
+                    .and_then(|id| self.buffers.name(id))
+                    .map(str::to_owned)
+                {
+                    self.minibuffer
+                        .start_prompt(PromptKind::KillDirtyBuffer, dirty_kill_prompt(&name));
+                } else {
+                    self.pending_kill_buffer = None;
+                    self.minibuffer.set_error("buffer no longer exists");
+                }
+                EditorOutcome::Continue
+            }
+        }
+    }
+
+    fn finish_kill_buffer(&mut self, target: BufferId, confirmed: bool) -> Result<EditorOutcome> {
+        self.finish_kill_buffer_with_message(target, confirmed, None)
+    }
+
+    fn finish_kill_buffer_with_message(
+        &mut self,
+        target: BufferId,
+        confirmed: bool,
+        message: Option<String>,
+    ) -> Result<EditorOutcome> {
+        let target_name = self
+            .buffers
+            .name(target)
+            .expect("target buffer must exist")
+            .to_owned();
+
+        let result = if confirmed {
+            self.buffers.kill_confirmed(target)
+        } else {
+            self.buffers.kill(target)
+        };
+
+        match result {
             Ok(next_current) => {
                 self.buffer_viewports.remove(&target);
                 self.windows.replace_buffer(target, next_current);
@@ -3563,7 +3662,7 @@ impl Editor {
                 }
                 self.refresh_visible_buffer_list();
                 self.minibuffer
-                    .set_message(format!("Killed buffer {target_name}"));
+                    .set_message(message.unwrap_or_else(|| format!("Killed buffer {target_name}")));
             }
             Err(error) => self.minibuffer.set_error(format!("kill failed: {error}")),
         }
@@ -4860,6 +4959,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::InsertFile => "Insert file: ",
         PromptKind::IncrementalSearch => "I-search: ",
         PromptKind::KillBuffer => "Kill buffer: ",
+        PromptKind::KillDirtyBuffer => "Kill buffer anyway? ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
         PromptKind::QuitDirtyBuffers => "Modified buffers exist; exit anyway? (yes or no) ",
@@ -4870,6 +4970,10 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
         PromptKind::WriteFile => "Write file: ",
     }
+}
+
+fn dirty_kill_prompt(name: &str) -> String {
+    format!("Buffer {name} modified; kill anyway? (y or n) ")
 }
 
 fn prompt_kind_uses_history(kind: PromptKind) -> bool {
@@ -8022,7 +8126,7 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn kill_buffer_refuses_dirty_current_buffer() {
+    fn kill_buffer_prompts_before_killing_dirty_current_buffer() {
         let mut editor = Editor::new(Document::scratch());
         editor
             .handle_key(KeyEvent::Text("dirty".to_owned()))
@@ -8033,21 +8137,139 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("kill should prompt");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("dirty kill should be reported");
+            .expect("dirty kill should prompt");
 
         assert_eq!(editor.buffer_count(), 1);
-        assert!(editor.document().is_dirty());
-        assert!(
-            editor
-                .minibuffer()
-                .message
-                .as_deref()
-                .is_some_and(|message| message.contains("unsaved changes"))
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::KillDirtyBuffer)
+        );
+        assert!(editor.completion.is_none());
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Buffer *scratch* modified; kill anyway? (y or n) ")
+        );
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should not complete confirmation prompt");
+        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
+
+        editor
+            .handle_key(KeyEvent::Text("y".to_owned()))
+            .expect("confirmation should kill immediately");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer *scratch* modified; kill anyway? (y or n) y")
         );
     }
 
     #[test]
-    fn kill_buffer_completion_refuses_dirty_named_buffer() {
+    fn kill_buffer_dirty_current_cancel_keeps_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("dirty kill should prompt");
+        editor
+            .handle_key(KeyEvent::Text("n".to_owned()))
+            .expect("cancellation should happen immediately");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn kill_buffer_dirty_current_c_g_cancels() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("dirty kill should prompt");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel dirty kill");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn kill_buffer_dirty_current_empty_answer_cancels() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("dirty kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty answer should cancel");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(editor.document().is_dirty());
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn kill_buffer_dirty_current_rejects_yes_no_words() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("dirty".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("kill-buffer")
+            .expect("kill should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("dirty kill should prompt");
+        editor
+            .handle_key(KeyEvent::Text("yes".to_owned()))
+            .expect("yes word should be rejected");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Buffer *scratch* modified; kill anyway? (y or n) ")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("y".to_owned()))
+            .expect("single y should confirm");
+
+        assert_eq!(editor.buffer_count(), 1);
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer *scratch* modified; kill anyway? (y or n) y")
+        );
+    }
+
+    #[test]
+    fn kill_buffer_completion_confirms_dirty_named_buffer() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
         let dirty = directory.path().join("dirty-buffer.txt");
@@ -8079,25 +8301,21 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("tab should complete dirty buffer name");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("dirty kill should be reported");
+            .expect("dirty kill should prompt");
 
-        let dirty_id = editor
-            .buffers
-            .find_by_name("dirty-buffer.txt")
-            .expect("dirty buffer should remain");
-        assert!(
-            editor
-                .buffers
-                .document(dirty_id)
-                .expect("dirty document should exist")
-                .is_dirty()
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Buffer dirty-buffer.txt modified; kill anyway? (y or n) ")
         );
-        assert!(
-            editor
-                .minibuffer()
-                .message
-                .as_deref()
-                .is_some_and(|message| message.contains("unsaved changes"))
+        editor
+            .handle_key(KeyEvent::Text("y".to_owned()))
+            .expect("confirmation should kill immediately");
+
+        assert!(editor.buffers.find_by_name("dirty-buffer.txt").is_none());
+        assert_eq!(editor.current_buffer_name(), "start.txt");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer dirty-buffer.txt modified; kill anyway? (y or n) y")
         );
     }
 

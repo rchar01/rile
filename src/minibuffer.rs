@@ -20,6 +20,7 @@ pub enum PromptKind {
     InsertFile,
     IncrementalSearch,
     KillBuffer,
+    KillDirtyBuffer,
     QueryReplaceReplacement,
     QueryReplaceSearch,
     QuitDirtyBuffers,

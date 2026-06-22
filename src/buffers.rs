@@ -219,10 +219,18 @@ impl BufferManager {
     }
 
     pub fn kill(&mut self, id: BufferId) -> Result<BufferId> {
+        self.kill_with_policy(id, false)
+    }
+
+    pub fn kill_confirmed(&mut self, id: BufferId) -> Result<BufferId> {
+        self.kill_with_policy(id, true)
+    }
+
+    fn kill_with_policy(&mut self, id: BufferId, allow_dirty: bool) -> Result<BufferId> {
         let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
             return Err(RileError::InvalidInput(format!("no such buffer: {}", id.0)));
         };
-        if self.entries[index].document.is_dirty() {
+        if self.entries[index].document.is_dirty() && !allow_dirty {
             return Err(RileError::InvalidInput(format!(
                 "buffer {} has unsaved changes",
                 self.entries[index].name
@@ -337,5 +345,30 @@ mod tests {
 
         assert!(error.to_string().contains("unsaved changes"));
         assert_eq!(manager.len(), 1);
+    }
+
+    #[test]
+    fn confirmed_kill_removes_dirty_buffers() {
+        let mut manager = BufferManager::new(Document::scratch());
+        let id = manager.entries()[0].id();
+        manager
+            .document_mut(id)
+            .expect("buffer should exist")
+            .buffer_mut()
+            .insert(Position::new(0, 0), "dirty")
+            .expect("fixture should insert");
+
+        let next = manager
+            .kill_confirmed(id)
+            .expect("confirmed dirty kill should succeed");
+
+        assert_eq!(manager.len(), 1);
+        assert_eq!(manager.name(next), Some("*scratch*"));
+        assert!(
+            !manager
+                .document(next)
+                .expect("scratch should exist")
+                .is_dirty()
+        );
     }
 }

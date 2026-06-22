@@ -1,5 +1,20 @@
 2026-06-22  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs, src/minibuffer.rs, src/buffers.rs: Prompt before killing a
+	modified buffer with Emacs-style y-or-n-p confirmation and force-kill only
+	after explicit confirmation.
+	* src/editor.rs, tests/pty_completion.rs: Cover dirty kill-buffer confirmation
+	and cancellation.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md,
+	tools/reference/emacs/README.md, tools/reference/zile/README.md: Document
+	Emacs-style dirty kill-buffer confirmation.
+	* tools/reference/emacs/scenarios/kill-buffer-completion-modern.scenario,
+	tools/reference/rile/scenarios/kill-buffer-completion.scenario,
+	tools/reference/zile/scenarios/kill-buffer-completion.scenario: Capture dirty
+	kill confirmation and the resulting confirmed kill.
+
+2026-06-22  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Make kill-buffer completion prefer the default current
 	buffer and accept the selected candidate on Tab or Enter when input is not an
 	exact buffer name.

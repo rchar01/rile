@@ -76,7 +76,7 @@ Initial inspection scenarios:
 - `insert-file-core`: base Emacs `C-x i` insert-file behavior.
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.
 - `kill-buffer-completion-modern`: Vertico/Marginalia `C-x k` completion,
-  default-buffer, and dirty-buffer protection behavior.
+  default-buffer, and y-or-n-p dirty-buffer confirmation behavior.
 - `prompt-history-modern`: Vertico/Marginalia minibuffer history behavior.
 - `help-describe-core`: base Emacs `C-h k` and `C-h f` help behavior.
 - `read-only-open-core`: base Emacs `C-x C-r` read-only file open behavior.

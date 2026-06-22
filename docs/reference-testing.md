@@ -276,7 +276,7 @@ Current Rile alignment work changed C-x k only:
 - Enter accepts the selected candidate when input is not an exact buffer name;
 - empty input still kills the default current buffer;
 - exact buffer names still take priority over the selected candidate;
-- dirty buffers are still refused.
+- dirty buffers ask for Emacs-style y-or-n-p confirmation before they are killed.
 
 The comparison capture records the visible Tab-selected state and the resulting
 kill. Direct Enter on ambiguous input has the same selected-candidate rule, but

@@ -103,10 +103,11 @@ Milestone 8 adds multiple buffers:
 - `find-file` reuses an existing buffer for the same path instead of opening duplicates;
 - `C-x b` and `switch-to-buffer` prompt for an existing buffer name;
 - `C-x k` and `kill-buffer` prompt for a buffer name, with empty input killing the current buffer;
-- dirty buffers cannot be killed until saved or made clean by later explicit workflows;
+- dirty buffers ask for Emacs-style `y-or-n-p` confirmation before `kill-buffer`
+  removes them;
 - switching buffers preserves each buffer's point; killing the current buffer
   selects the next buffer;
-- tests cover buffer reuse, switching, killing, and dirty-buffer protection.
+- tests cover buffer reuse, switching, killing, and dirty-buffer confirmation.
 
 Milestone 9 adds windows and splits:
 

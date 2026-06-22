@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=kill-buffer-completion
-SCENARIO_DESCRIPTION='Observe Zile kill-buffer completion, default buffer, and dirty-buffer protection.'
+SCENARIO_DESCRIPTION='Observe Zile kill-buffer completion, default buffer, and y-or-n-p-style dirty-buffer confirmation.'
 WIDTH=100
 HEIGHT=24
 FIXTURE_NAME=kill-buffer-completion.txt
@@ -93,14 +93,11 @@ Screenshot {{FRAME_DIR}}/13-dirty-kill-prompt.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/14-dirty-protection.png
+Screenshot {{FRAME_DIR}}/14-dirty-confirmation.png
 Sleep 500ms
-Ctrl+G
+Type "y"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/15-after-dirty-cancel.png
-Sleep 500ms
-Ctrl+X
-Ctrl+S
+Screenshot {{FRAME_DIR}}/15-after-dirty-confirmed-kill.png
 Sleep 500ms
 Ctrl+X
 Ctrl+C

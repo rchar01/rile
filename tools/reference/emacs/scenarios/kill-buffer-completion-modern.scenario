@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=kill-buffer-completion-modern
-SCENARIO_DESCRIPTION='Observe Vertico/Marginalia kill-buffer completion and dirty-buffer protection.'
+SCENARIO_DESCRIPTION='Observe Vertico/Marginalia kill-buffer completion and y-or-n-p dirty-buffer confirmation.'
 EMACS_PROFILE=modern
 WIDTH=100
 HEIGHT=24
@@ -94,14 +94,11 @@ Screenshot {{FRAME_DIR}}/13-dirty-kill-prompt.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/14-dirty-protection.png
+Screenshot {{FRAME_DIR}}/14-dirty-confirmation.png
 Sleep 500ms
-Ctrl+G
+Type "y"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/15-after-dirty-cancel.png
-Sleep 500ms
-Ctrl+X
-Ctrl+S
+Screenshot {{FRAME_DIR}}/15-after-dirty-confirmed-kill.png
 Sleep 500ms
 Ctrl+X
 Ctrl+C

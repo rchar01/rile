@@ -450,7 +450,7 @@ fn vertical_kill_buffer_empty_answer_kills_default() -> Result<()> {
 }
 
 #[test]
-fn vertical_kill_buffer_completion_refuses_dirty_buffer() -> Result<()> {
+fn vertical_kill_buffer_completion_confirms_dirty_buffer() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     let dirty = directory.path().join("dirty-buffer.txt");
@@ -481,14 +481,63 @@ fn vertical_kill_buffer_completion_refuses_dirty_buffer() -> Result<()> {
     rile.assert_screen_contains("Kill buffer (default start.txt): dirty-buffer.txt")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("unsaved changes")?;
+    rile.assert_screen_contains("Buffer dirty-buffer.txt modified; kill anyway? (y or n)")?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+    rile.send("y", b"y")?;
+
+    rile.assert_screen_contains("Buffer dirty-buffer.txt modified; kill anyway? (y or n) y")?;
     rile.assert_status_contains("ACTIVE start.txt")?;
 
-    rile.send("C-x C-c", keys::control_sequence("xc"))?;
-    rile.wait_for_screen_contains("Modified buffers exist; exit anyway? (yes or no)")?;
-    rile.send("yes", b"yes")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_kill_buffer_completion_cancels_dirty_buffer() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let dirty = directory.path().join("dirty-buffer.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&dirty, "dirty buffer\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let dirty_path = dirty.display().to_string();
+    rile.send("dirty-buffer path", dirty_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
-    rile.expect_exit()?;
+    rile.wait_for_screen_contains("dirty buffer")?;
+    rile.send("insert dirty marker", b"!")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("start", b"start")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    rile.send("dirty", b"dirty")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Buffer dirty-buffer.txt modified; kill anyway? (y or n)")?;
+
+    rile.send("n", b"n")?;
+    rile.assert_screen_contains("Quit")?;
+    rile.assert_status_contains("ACTIVE start.txt")?;
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("dirty", b"dirty")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_status_contains("ACTIVE dirty-buffer.txt")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-x C-s", keys::control_sequence("xs"))?;
+    rile.quit()?;
     Ok(())
 }
 
