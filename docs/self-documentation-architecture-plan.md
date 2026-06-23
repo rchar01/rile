@@ -312,7 +312,8 @@ Goal: Move command execution to registered handlers while preserving command
 semantics.
 
 - [x] Convert movement commands to registered handlers.
-- [ ] Convert editing and kill/yank commands to registered handlers.
+- [x] Convert editing-category commands, including normal kill/yank commands,
+      to registered handlers.
 - [ ] Convert file, buffer, window, search, query-replace, shell, register,
       rectangle, macro, and help commands to registered handlers.
 - [ ] Route key execution and `M-x` execution through the same command dispatch
@@ -484,6 +485,7 @@ Validation gate:
 | 2026-06-23 | Help buffers render narrow-window continuation rows. | `make verify` passed before committing the terminal help-wrap implementation. |
 | 2026-06-23 | Phase 1 command registry foundations implemented. | Added typed command IDs, categories, dispatch context types, by-ID/category lookup, metadata validation tests, and a default-keybinding registry coverage test. |
 | 2026-06-23 | Phase 2 movement command dispatch migration started. | Registered handlers for movement commands and routed handler-backed commands through shared command bookkeeping with legacy fallback for unmigrated commands. |
+| 2026-06-23 | Phase 2 editing-category dispatch migration continued. | Registered handlers for editing-category commands, including normal kill/yank commands, and added registry coverage requiring those commands to use handlers. |
 
 ## Decision Log
 

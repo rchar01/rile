@@ -1498,6 +1498,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_backward_kill_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed_kill(context.argument, Self::backward_kill_word, Self::kill_word)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_backward_word(
         &mut self,
         context: CommandContext,
@@ -1526,6 +1534,38 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_copy_region_as_kill(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.copy_region_as_kill()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_backward_char(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::delete_backward_char,
+            Self::delete_char,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_char(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::delete_char,
+            Self::delete_backward_char,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_end_of_buffer(
         &mut self,
         _context: CommandContext,
@@ -1539,6 +1579,14 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.move_end_of_line()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_exchange_point_and_mark(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.exchange_point_and_mark()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -1567,8 +1615,52 @@ impl Editor {
         Ok(CommandOutcome::StartedPrompt)
     }
 
+    pub(crate) fn command_join_line(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.join_line()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_kill_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
+        self.repeat_positive_kill(context.argument, Self::kill_line)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_kill_region(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.kill_region()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_kill_word(&mut self, context: CommandContext) -> Result<CommandOutcome> {
+        self.repeat_signed_kill(context.argument, Self::kill_word, Self::backward_kill_word)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_mark_whole_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.mark_whole_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_newline_and_indent(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_positive(context.argument, Self::newline_and_indent)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_next_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
         self.move_line_by_argument(context.argument, 1)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_open_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
+        self.repeat_positive(context.argument, Self::open_line)?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -1578,6 +1670,14 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         self.move_line_by_argument(context.argument, -1)?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_quoted_insert(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_quoted_insert()?;
+        Ok(CommandOutcome::StartedPrompt)
     }
 
     pub(crate) fn command_recenter(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
@@ -1598,6 +1698,29 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.scroll_page_forward()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_set_mark_command(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.set_mark_command()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_undo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.undo()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_yank(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.yank()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_yank_pop(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.yank_pop()?;
         Ok(CommandOutcome::Continue)
     }
 

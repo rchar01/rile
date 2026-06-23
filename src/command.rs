@@ -411,7 +411,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Kill word before cursor",
             true,
             BackwardKillWord,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_backward_kill_word),
         CommandSpec::new(
             "backward-word",
             "Move cursor backward by word",
@@ -450,7 +451,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Copy active region to kill ring",
             true,
             CopyRegionAsKill,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_copy_region_as_kill),
         CommandSpec::new(
             "copy-rectangle-as-kill",
             "Copy rectangle to kill ring",
@@ -474,13 +476,15 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Delete character before cursor",
             true,
             DeleteBackwardChar,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_delete_backward_char),
         CommandSpec::new(
             "delete-char",
             "Delete character at cursor",
             true,
             DeleteChar,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_delete_char),
         CommandSpec::new(
             "delete-rectangle",
             "Delete rectangle without saving it",
@@ -521,7 +525,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Exchange cursor and mark",
             true,
             ExchangePointAndMark,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_exchange_point_and_mark),
         CommandSpec::new(
             "execute-extended-command",
             "Run command by name",
@@ -581,7 +586,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Join current line to previous line",
             true,
             JoinLine,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_join_line),
         CommandSpec::new(
             "jump-to-register",
             "Jump to a point register",
@@ -594,23 +600,28 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Insert newline and indent according to mode",
             true,
             NewlineAndIndent,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_newline_and_indent),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
-        CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine),
-        CommandSpec::new("kill-region", "Kill active region", true, KillRegion),
+        CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine)
+            .with_handler(crate::editor::Editor::command_kill_line),
+        CommandSpec::new("kill-region", "Kill active region", true, KillRegion)
+            .with_handler(crate::editor::Editor::command_kill_region),
         CommandSpec::new(
             "kill-rectangle",
             "Kill rectangle to kill ring",
             true,
             KillRectangle,
         ),
-        CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord),
+        CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord)
+            .with_handler(crate::editor::Editor::command_kill_word),
         CommandSpec::new(
             "mark-whole-buffer",
             "Mark the whole buffer",
             true,
             MarkWholeBuffer,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_mark_whole_buffer),
         CommandSpec::new("next-line", "Move cursor down", true, NextLine)
             .with_handler(crate::editor::Editor::command_next_line),
         CommandSpec::new(
@@ -619,7 +630,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             NumberToRegister,
         ),
-        CommandSpec::new("open-line", "Insert newline after point", true, OpenLine),
+        CommandSpec::new("open-line", "Insert newline after point", true, OpenLine)
+            .with_handler(crate::editor::Editor::command_open_line),
         CommandSpec::new(
             "open-rectangle",
             "Insert blank space into rectangle columns",
@@ -634,7 +646,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Insert the next key literally",
             true,
             QuotedInsert,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_quoted_insert),
         CommandSpec::new(
             "point-to-register",
             "Store point in a register",
@@ -687,7 +700,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Set mark at point",
             true,
             SetMarkCommand,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_set_mark_command),
         CommandSpec::new("shell-command", "Run a shell command", true, ShellCommand),
         CommandSpec::new(
             "shell-command-on-region",
@@ -749,7 +763,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             true,
             ToggleSyntaxHighlighting,
         ),
-        CommandSpec::new("undo", "Undo last edit", true, Undo),
+        CommandSpec::new("undo", "Undo last edit", true, Undo)
+            .with_handler(crate::editor::Editor::command_undo),
         CommandSpec::new(
             "universal-argument",
             "Set a numeric argument for the next command",
@@ -763,14 +778,16 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ViewEchoAreaMessages,
         ),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
-        CommandSpec::new("yank", "Insert latest kill", true, Yank),
+        CommandSpec::new("yank", "Insert latest kill", true, Yank)
+            .with_handler(crate::editor::Editor::command_yank),
         CommandSpec::new(
             "yank-rectangle",
             "Insert latest killed rectangle",
             true,
             YankRectangle,
         ),
-        CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop),
+        CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop)
+            .with_handler(crate::editor::Editor::command_yank_pop),
     ]
 }
 
@@ -923,6 +940,52 @@ mod tests {
                 .commands_by_category(CommandCategory::Movement)
                 .all(|command| command.handler.is_some())
         );
+    }
+
+    #[test]
+    fn editing_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+
+        assert!(
+            registry
+                .commands_by_category(CommandCategory::Editing)
+                .all(|command| command.handler.is_some())
+        );
+    }
+
+    #[test]
+    fn phase_2_editing_slice_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+        let commands = [
+            Command::BackwardKillWord,
+            Command::CopyRegionAsKill,
+            Command::DeleteBackwardChar,
+            Command::DeleteChar,
+            Command::ExchangePointAndMark,
+            Command::JoinLine,
+            Command::KillLine,
+            Command::KillRegion,
+            Command::KillWord,
+            Command::MarkWholeBuffer,
+            Command::NewlineAndIndent,
+            Command::OpenLine,
+            Command::QuotedInsert,
+            Command::SetMarkCommand,
+            Command::Undo,
+            Command::Yank,
+            Command::YankPop,
+        ];
+
+        for command in commands {
+            let spec = registry
+                .get_by_id(command)
+                .expect("command should be registered");
+            assert!(
+                spec.handler.is_some(),
+                "{} should have a handler",
+                spec.name
+            );
+        }
     }
 
     #[test]
