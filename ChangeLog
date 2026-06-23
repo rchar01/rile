@@ -1,3 +1,17 @@
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs: Add command IDs, categories, docs, dispatch context
+	types, registry lookup by ID/category, validated registry construction, and
+	registered handlers for movement commands.
+	* src/completion.rs, src/editor.rs: Read command summaries and docs from
+	the expanded command registry.
+	* src/editor.rs: Route handler-backed commands through shared command
+	bookkeeping with legacy fallback for unmigrated commands.
+	* src/keymap.rs: Test that default keybindings target registered commands.
+	* tests/pty_movement.rs: Expect describe-command help to show full docs.
+	* docs/self-documentation-architecture-plan.md: Mark Phase 1 registry
+	foundations and movement command dispatch migration progress.
+
 2026-06-22  Robert Charusta  <rch-public@posteo.net>
 
 	* src/editor.rs: Share selected-candidate acceptance for C-x b and C-x k

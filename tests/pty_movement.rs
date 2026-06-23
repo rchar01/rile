@@ -187,7 +187,7 @@ fn describe_key_opens_help_for_binding() -> Result<()> {
     rile.send("C-f", keys::control('f'))?;
 
     rile.assert_screen_contains("C-x C-f runs the command `find-file`.")?;
-    rile.assert_screen_contains("Open file by path")?;
+    rile.assert_screen_contains("Prompt for a file path and open it for editing.")?;
     rile.assert_screen_contains("It is bound to C-x C-f.")?;
 
     rile.send("q", b"q")?;
@@ -210,7 +210,7 @@ fn describe_function_opens_help_for_command() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("find-file is an interactive command.")?;
-    rile.assert_screen_contains("Open file by path")?;
+    rile.assert_screen_contains("Prompt for a file path and open it for editing.")?;
     rile.assert_screen_contains("It is bound to C-x C-f.")?;
 
     rile.send("q", b"q")?;

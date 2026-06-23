@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, RectangleEdit, TextRange};
 use crate::buffers::BufferManager;
-use crate::command::{Command, CommandRegistry};
+use crate::command::{
+    Command, CommandContext, CommandOutcome, CommandRegistry, CommandSpec, Invocation,
+};
 use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
 use crate::config::{Config, ThemeName};
 use crate::file::{Document, DocumentKind};
@@ -630,7 +632,7 @@ impl Editor {
         }
 
         let argument = self.take_universal_argument();
-        self.execute_command(command.command, argument)
+        self.execute_command(command, argument)
     }
 
     fn handle_bound_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -1326,13 +1328,12 @@ impl Editor {
 
     fn execute_command(
         &mut self,
-        command: Command,
+        command: CommandSpec,
         argument: Option<i32>,
     ) -> Result<EditorOutcome> {
-        use Command::*;
-
-        let kill_command = is_kill_command(command);
-        let yank_command = is_yank_command(command);
+        let command_id = command.command;
+        let kill_command = is_kill_command(command_id);
+        let yank_command = is_yank_command(command_id);
         if kill_command {
             self.kill_recorded_this_command = false;
         } else {
@@ -1341,6 +1342,40 @@ impl Editor {
         if !yank_command {
             self.yank_state = None;
         }
+
+        let outcome = if let Some(handler) = command.handler {
+            let context = self.command_context(argument);
+            handler(self, context)?
+        } else {
+            self.execute_legacy_command(command_id, argument)?
+        };
+
+        if kill_command {
+            self.last_command_was_kill = self.kill_recorded_this_command;
+            self.kill_recorded_this_command = false;
+        }
+
+        Ok(editor_outcome_for_command_outcome(outcome))
+    }
+
+    fn command_context(&self, argument: Option<i32>) -> CommandContext {
+        let invoked_by = match &self.current_command_sequence {
+            Some(sequence) => Invocation::Key(sequence.clone()),
+            None => Invocation::ExtendedCommand,
+        };
+
+        CommandContext {
+            argument,
+            invoked_by,
+        }
+    }
+
+    fn execute_legacy_command(
+        &mut self,
+        command: Command,
+        argument: Option<i32>,
+    ) -> Result<CommandOutcome> {
+        use Command::*;
 
         match command {
             BackToIndentation => self.move_back_to_indentation(),
@@ -1353,7 +1388,11 @@ impl Editor {
             }
             BeginningOfBuffer => self.move_beginning_of_buffer(),
             BeginningOfLine => self.move_beginning_of_line(),
-            CallLastKeyboardMacro => return self.call_last_keyboard_macro(argument),
+            CallLastKeyboardMacro => {
+                return self
+                    .call_last_keyboard_macro(argument)
+                    .map(command_outcome_for_editor_outcome);
+            }
             ClearRectangle => self.clear_rectangle(),
             CopyRegionAsKill => self.copy_region_as_kill(),
             CopyRectangleAsKill => self.copy_rectangle_as_kill(),
@@ -1410,7 +1449,11 @@ impl Editor {
             RectangleNumberLines => self.rectangle_number_lines(argument),
             Recenter => self.recenter(),
             SaveBuffer => self.save_buffer(),
-            SaveBuffersKillTerminal => return Ok(self.save_buffers_kill_terminal()),
+            SaveBuffersKillTerminal => {
+                return Ok(command_outcome_for_editor_outcome(
+                    self.save_buffers_kill_terminal(),
+                ));
+            }
             SetMarkCommand => self.set_mark_command(),
             ShellCommand => self.start_shell_command(argument),
             ShellCommandOnRegion => self.start_shell_command_on_region(argument),
@@ -1436,12 +1479,126 @@ impl Editor {
             YankPop => self.yank_pop(),
         }?;
 
-        if kill_command {
-            self.last_command_was_kill = self.kill_recorded_this_command;
-            self.kill_recorded_this_command = false;
-        }
+        Ok(CommandOutcome::Continue)
+    }
 
-        Ok(EditorOutcome::Continue)
+    pub(crate) fn command_back_to_indentation(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_back_to_indentation()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_backward_char(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(context.argument, Self::move_backward, Self::move_forward)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_backward_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::move_word_backward,
+            Self::move_word_forward,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_beginning_of_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_beginning_of_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_beginning_of_line(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_beginning_of_line()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_end_of_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_end_of_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_end_of_line(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_end_of_line()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_forward_char(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(context.argument, Self::move_forward, Self::move_backward)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_forward_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::move_word_forward,
+            Self::move_word_backward,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_goto_line(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.start_goto_line()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_next_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
+        self.move_line_by_argument(context.argument, 1)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_previous_line(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_line_by_argument(context.argument, -1)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_recenter(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.recenter()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_scroll_page_backward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.scroll_page_backward()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_scroll_page_forward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.scroll_page_forward()?;
+        Ok(CommandOutcome::Continue)
     }
 
     fn insert_text(&mut self, text: &str, group_with_previous: bool) -> Result<()> {
@@ -3052,7 +3209,7 @@ impl Editor {
                 .set_message(format!("No such command: {name}"));
             return EditorOutcome::Continue;
         };
-        let text = format_describe_function_help(&self.keymap, command.name, command.description);
+        let text = format_describe_function_help(&self.keymap, command.name, command.doc);
         self.open_help_buffer(text)
     }
 
@@ -4567,6 +4724,20 @@ fn is_yank_command(command: Command) -> bool {
     matches!(command, Command::Yank | Command::YankPop)
 }
 
+fn editor_outcome_for_command_outcome(outcome: CommandOutcome) -> EditorOutcome {
+    match outcome {
+        CommandOutcome::Continue | CommandOutcome::StartedPrompt => EditorOutcome::Continue,
+        CommandOutcome::Exit => EditorOutcome::Quit,
+    }
+}
+
+fn command_outcome_for_editor_outcome(outcome: EditorOutcome) -> CommandOutcome {
+    match outcome {
+        EditorOutcome::Continue => CommandOutcome::Continue,
+        EditorOutcome::Quit => CommandOutcome::Exit,
+    }
+}
+
 fn is_keyboard_macro_control_command(command: Command) -> bool {
     matches!(
         command,
@@ -4611,7 +4782,7 @@ fn format_key_prefix_help(
     for binding in keymap.bindings_starting_with(prefix) {
         let description = commands
             .get(binding.command)
-            .map(|command| command.description)
+            .map(|command| command.summary)
             .unwrap_or("");
         text.push_str(&format!(
             "{:<15} {:<30} {}\n",
@@ -4635,7 +4806,7 @@ fn format_describe_key_help(
         format_key_sequence(sequence),
         command
     );
-    let description = commands.get(command).map(|command| command.description);
+    let description = commands.get(command).map(|command| command.doc);
     text.push_str(&format_command_help(keymap, command, description));
     text
 }
@@ -7547,7 +7718,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         let help = editor.document().buffer().serialize();
         assert!(help.contains("C-x C-f runs the command `find-file`."));
         assert!(help.contains("find-file is an interactive command."));
-        assert!(help.contains("Open file by path"));
+        assert!(help.contains("Prompt for a file path and open it for editing."));
         assert!(help.contains("It is bound to C-x C-f."));
     }
 
@@ -7617,7 +7788,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.current_buffer_name(), "*Help*");
         let help = editor.document().buffer().serialize();
         assert!(help.contains("find-file is an interactive command."));
-        assert!(help.contains("Open file by path"));
+        assert!(help.contains("Prompt for a file path and open it for editing."));
         assert!(help.contains("It is bound to C-x C-f."));
     }
 

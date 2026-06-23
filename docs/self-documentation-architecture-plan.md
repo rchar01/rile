@@ -293,25 +293,25 @@ architecture.
 
 Goal: Define the typed metadata model before moving behavior.
 
-- [ ] Introduce `CommandId`, `CommandSpec`, `CommandCategory`,
+- [x] Introduce `CommandId`, `CommandSpec`, `CommandCategory`,
       `CommandContext`, `Invocation`, `CommandOutcome`, and `CommandHandler`.
-- [ ] Build a command registry API with lookup by ID, lookup by name,
+- [x] Build a command registry API with lookup by ID, lookup by name,
       interactive command iteration, and category filtering.
-- [ ] Add tests that reject duplicate command IDs and duplicate command names.
-- [ ] Add tests requiring every interactive command to have a non-empty summary
+- [x] Add tests that reject duplicate command IDs and duplicate command names.
+- [x] Add tests requiring every interactive command to have a non-empty summary
       and full doc string.
 
 Validation gate:
 
-- [ ] Command registry unit tests pass.
-- [ ] Existing command completion and key dispatch behavior is preserved.
+- [x] Command registry unit tests pass.
+- [x] Existing command completion and key dispatch behavior is preserved.
 
 ### Phase 2: Command Dispatch Migration
 
 Goal: Move command execution to registered handlers while preserving command
 semantics.
 
-- [ ] Convert movement commands to registered handlers.
+- [x] Convert movement commands to registered handlers.
 - [ ] Convert editing and kill/yank commands to registered handlers.
 - [ ] Convert file, buffer, window, search, query-replace, shell, register,
       rectangle, macro, and help commands to registered handlers.
@@ -359,7 +359,7 @@ Goal: Make help output render command and keymap registries.
       and wrapped prose.
 - [ ] Format generated help prose to an explicit readable fill width near 70
       columns while preserving tables and preformatted blocks.
-- [ ] Render help buffers with visible `\` continuation rows when a logical line
+- [x] Render help buffers with visible `\` continuation rows when a logical line
       is wider than the current window.
 
 Validation gate:
@@ -481,6 +481,9 @@ Validation gate:
 | Date | Update | Evidence |
 | --- | --- | --- |
 | 2026-06-22 | Plan created. | User requested a written future architecture and implementation plan. |
+| 2026-06-23 | Help buffers render narrow-window continuation rows. | `make verify` passed before committing the terminal help-wrap implementation. |
+| 2026-06-23 | Phase 1 command registry foundations implemented. | Added typed command IDs, categories, dispatch context types, by-ID/category lookup, metadata validation tests, and a default-keybinding registry coverage test. |
+| 2026-06-23 | Phase 2 movement command dispatch migration started. | Registered handlers for movement commands and routed handler-backed commands through shared command bookkeeping with legacy fallback for unmigrated commands. |
 
 ## Decision Log
 

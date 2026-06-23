@@ -397,6 +397,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
 #[cfg(test)]
 mod tests {
     use super::{KeyMap, KeyResolution};
+    use crate::command::CommandRegistry;
     use crate::input::{KeyEvent, SpecialKey};
 
     #[test]
@@ -790,5 +791,19 @@ mod tests {
         );
         assert_eq!(keymap.bindings_for_command("find-file").len(), 1);
         assert!(keymap.bindings_for_command("missing-command").is_empty());
+    }
+
+    #[test]
+    fn default_bindings_target_registered_commands() {
+        let keymap = KeyMap::default();
+        let commands = CommandRegistry::default();
+
+        for binding in &keymap.bindings {
+            assert!(
+                commands.contains(binding.command),
+                "{} should target a registered command",
+                binding.command
+            );
+        }
     }
 }

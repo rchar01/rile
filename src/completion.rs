@@ -139,11 +139,9 @@ pub struct CompletionViewItem<'a> {
 impl CompletionSession {
     pub fn commands(registry: &CommandRegistry, keymap: &KeyMap, config: CompletionConfig) -> Self {
         let candidates = registry
-            .commands()
-            .iter()
-            .filter(|command| command.interactive)
+            .interactive_commands()
             .map(|command| {
-                let candidate = CompletionCandidate::new(command.name, command.description);
+                let candidate = CompletionCandidate::new(command.name, command.summary);
                 match keymap.bindings_for_command(command.name).first() {
                     Some(binding) => {
                         candidate.with_key_binding(format_key_sequence(&binding.sequence))
@@ -496,6 +494,19 @@ mod tests {
             session.selected().map(CompletionCandidate::display_label),
             Some("save-buffer (C-x C-s)".to_owned())
         );
+    }
+
+    #[test]
+    fn command_completion_uses_command_summaries() {
+        let registry = CommandRegistry::default();
+        let keymap = KeyMap::default();
+        let mut session =
+            CompletionSession::commands(&registry, &keymap, CompletionConfig::default());
+
+        session.update("save-buffer");
+
+        let candidate = session.selected().expect("save-buffer should be selected");
+        assert_eq!(candidate.annotation, "Save current buffer");
     }
 
     #[test]
