@@ -307,6 +307,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('q')], QuotedInsert),
         KeyBinding::new([KeyEvent::Ctrl('u')], UniversalArgument),
         KeyBinding::new([KeyEvent::Ctrl('@')], SetMarkCommand),
+        KeyBinding::new([KeyEvent::Ctrl('h'), KeyEvent::Ctrl('a')], AboutRile),
         KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("b".to_owned())],
             DescribeBindings,
@@ -740,6 +741,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h')]),
             KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Ctrl('a')]),
+            KeyResolution::Command(AboutRile)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("b".to_owned())]),

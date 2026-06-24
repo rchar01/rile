@@ -278,6 +278,14 @@ buffer. Terminal input parsing uses the original termios erase byte, so `0x08`
 remains Backspace on `stty erase ^H` terminals and otherwise works as `C-h`;
 `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
 
+`about-rile` (`C-h C-a`) renders editor-level runtime metadata through the same
+help-buffer path: package version, debug/release profile, enabled features,
+terminal backend, default config path, and current directory. Rile does not yet
+maintain a separate diagnostics registry; actionable runtime diagnostics are the
+existing echo-area status and error messages, which are reviewable with `C-h e`.
+The enabled-features field is explicitly reported as unavailable until the build
+has feature-reporting metadata to expose.
+
 Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
 the shared file-completion source and relative-path resolution from `C-x C-f`.
 Normal file-backed documents now carry an explicit read-only flag. Read-only

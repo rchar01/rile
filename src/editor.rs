@@ -11,7 +11,7 @@ use crate::command::{
     Command, CommandContext, CommandOutcome, CommandRegistry, CommandSpec, Invocation,
 };
 use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
-use crate::config::{Config, ThemeName};
+use crate::config::{Config, ThemeName, default_config_path};
 use crate::file::{Document, DocumentKind};
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{
@@ -129,6 +129,31 @@ struct BufferDescription {
     line_ending: &'static str,
     final_newline: bool,
     modes: ActiveModes,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct AboutRileInfo {
+    version: &'static str,
+    build_profile: &'static str,
+    enabled_features: &'static str,
+    terminal_backend: &'static str,
+    config_path: Option<String>,
+    current_directory: Option<String>,
+}
+
+impl AboutRileInfo {
+    fn current() -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION"),
+            build_profile: build_profile(),
+            enabled_features: "not reported by this build",
+            terminal_backend: "ANSI terminal",
+            config_path: default_config_path().map(|path| path.display().to_string()),
+            current_directory: std::env::current_dir()
+                .ok()
+                .map(|path| path.display().to_string()),
+        }
+    }
 }
 
 impl DescribeKeyMode {
@@ -1484,6 +1509,15 @@ impl Editor {
             argument,
             invoked_by,
         }
+    }
+
+    pub(crate) fn command_about_rile(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        let text = format_about_rile_help(&AboutRileInfo::current());
+        self.open_help_buffer(text);
+        Ok(CommandOutcome::Continue)
     }
 
     pub(crate) fn command_back_to_indentation(
@@ -5706,6 +5740,31 @@ fn format_describe_variable_help(option: &OptionSpec, current_value: OptionValue
     text
 }
 
+fn format_about_rile_help(info: &AboutRileInfo) -> String {
+    let mut text = String::new();
+    append_help_heading(&mut text, "About Rile:");
+    append_option_field(&mut text, "Version", info.version);
+    append_option_field(&mut text, "Build profile", info.build_profile);
+    append_option_field(&mut text, "Enabled features", info.enabled_features);
+    append_option_field(&mut text, "Terminal backend", info.terminal_backend);
+    append_option_field(
+        &mut text,
+        "Config path",
+        info.config_path.as_deref().unwrap_or("none"),
+    );
+    append_option_field(
+        &mut text,
+        "Current directory",
+        info.current_directory.as_deref().unwrap_or("unknown"),
+    );
+    text.push('\n');
+    append_wrapped_prose(
+        &mut text,
+        "Rile is a small UTF-8-capable terminal editor with Emacs-style key bindings. Runtime diagnostics that users can act on are reported through the echo area and can be reviewed with C-h e.",
+    );
+    text
+}
+
 fn format_describe_mode_help(modes: &ActiveModes, registry: &ModeRegistry) -> String {
     let mut text = String::new();
     append_help_heading(&mut text, "Active Modes:");
@@ -5835,6 +5894,14 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
         DocumentKind::Completions => "completions",
         DocumentKind::BufferList => "buffer-list",
         DocumentKind::ShellOutput => "shell-output",
+    }
+}
+
+fn build_profile() -> &'static str {
+    if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
     }
 }
 
@@ -6331,10 +6398,10 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        ActiveModes, BufferDescription, Editor, EditorOutcome, HELP_FILL_WIDTH, KillEntry,
-        append_wrapped_prose, format_describe_bindings_help, format_describe_buffer_help,
-        format_describe_key_help, format_describe_mode_help, format_describe_variable_help,
-        format_rectangle_number,
+        AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, HELP_FILL_WIDTH,
+        KillEntry, append_wrapped_prose, format_about_rile_help, format_describe_bindings_help,
+        format_describe_buffer_help, format_describe_key_help, format_describe_mode_help,
+        format_describe_variable_help, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -6388,6 +6455,49 @@ mod tests {
             "Key             Binding\n---             -------\nC-x C-f         find-file"
         ));
         assert!(help.ends_with("Trailing paragraph.\n"));
+    }
+
+    #[test]
+    fn about_rile_opens_runtime_help() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("about-rile should open help");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("About Rile:"));
+        assert!(help.contains(concat!("Version: ", env!("CARGO_PKG_VERSION"))));
+        assert!(help.contains("Build profile:"));
+        assert!(help.contains("Terminal backend: ANSI terminal"));
+        assert!(help.contains("Config path:"));
+        assert!(help.contains("Current directory:"));
+        assert!(help.contains("reviewed with C-h e"));
+    }
+
+    #[test]
+    fn about_rile_help_formats_stable_fields() {
+        let info = AboutRileInfo {
+            version: "test-version",
+            build_profile: "test-profile",
+            enabled_features: "not reported by this build",
+            terminal_backend: "test-terminal",
+            config_path: Some("/tmp/rile/config.toml".to_owned()),
+            current_directory: Some("/tmp/rile".to_owned()),
+        };
+
+        let help = format_about_rile_help(&info);
+
+        assert!(help.contains("Version: test-version"));
+        assert!(help.contains("Build profile: test-profile"));
+        assert!(help.contains("Enabled features: not reported by this build"));
+        assert!(help.contains("Terminal backend: test-terminal"));
+        assert!(help.contains("Config path: /tmp/rile/config.toml"));
+        assert!(help.contains("Current directory: /tmp/rile"));
     }
 
     impl TestDir {

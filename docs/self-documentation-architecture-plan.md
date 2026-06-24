@@ -417,16 +417,17 @@ Validation gate:
 
 Goal: Provide editor-level introspection without overbuilding diagnostics.
 
-- [ ] Add `about-rile` with version, build profile, enabled features, terminal
-      backend, config path, and runtime-relevant paths.
-- [ ] Add structured diagnostic metadata only for diagnostics that users can act
-      on from inside the editor.
-- [ ] Render diagnostics through normal help or messages buffers.
+- [x] Add `about-rile` with version, build profile, feature-reporting status,
+      terminal backend, config path, and runtime-relevant paths.
+- [x] Record that no separate diagnostics registry is needed until Rile has
+      actionable diagnostics beyond echo-area status and error messages.
+- [x] Render current diagnostics guidance through normal help and reviewable
+      messages buffers.
 
 Validation gate:
 
-- [ ] `about-rile` output is deterministic enough for tests where possible.
-- [ ] Runtime-specific fields are tested with stable predicates rather than
+- [x] `about-rile` output is deterministic enough for tests where possible.
+- [x] Runtime-specific fields are tested with stable predicates rather than
       brittle full snapshots.
 
 ### Phase 8: Documentation And Release Notes
@@ -502,6 +503,7 @@ Validation gate:
 | 2026-06-24 | Phase 4 help formatting completed. | Added reusable help formatting helpers, wrapped generated prose near 70 columns, preserved table/preformatted blocks, and covered prose filling in unit tests. |
 | 2026-06-24 | Phase 5 option registry and variable help implemented. | Added typed option specs, registry-backed config defaults and parsing, `describe-variable` with option completion, and unit plus PTY coverage. |
 | 2026-06-24 | Phase 6 mode and buffer inspection implemented. | Added typed mode specs, active mode-stack rendering, `describe-mode`, `describe-buffer`, and unit plus PTY coverage. |
+| 2026-06-24 | Phase 7 about and diagnostics guidance implemented. | Added `about-rile`, runtime metadata help, C-h C-a coverage, and documented that actionable diagnostics remain echo-area messages reviewable with C-h e. |
 
 ## Decision Log
 

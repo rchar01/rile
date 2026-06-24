@@ -5,6 +5,7 @@ use crate::input::KeyEvent;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
+    AboutRile,
     BackToIndentation,
     BackwardChar,
     BackwardKillWord,
@@ -192,7 +193,7 @@ impl CommandCategory {
             | YankRectangle => Self::Rectangles,
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
-            DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
+            AboutRile | DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
             | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
             | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
             ToggleLineNumbers
@@ -208,6 +209,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
     use Command::*;
 
     match command {
+        AboutRile => "Show version, build, terminal, config, and runtime path information.",
         BackToIndentation => {
             "Move point to the first non-whitespace character on the current line."
         }
@@ -448,6 +450,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
     use Command::*;
 
     vec![
+        CommandSpec::new("about-rile", "Show information about Rile", true, AboutRile)
+            .with_handler(crate::editor::Editor::command_about_rile),
         CommandSpec::new(
             "back-to-indentation",
             "Move cursor to first non-whitespace character on line",
@@ -966,6 +970,7 @@ mod tests {
             registry.get("save-buffer").map(|spec| spec.command),
             Some(Command::SaveBuffer)
         );
+        assert!(registry.contains("about-rile"));
         assert!(registry.contains("back-to-indentation"));
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));

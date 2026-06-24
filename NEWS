@@ -57,6 +57,9 @@ Editing features:
 * Describe key bindings with C-h k, interactive commands with C-h f,
   configuration options with C-h v, active modes with C-h m, and the current
   buffer with M-x describe-buffer.
+* Show version, build profile, feature-reporting status, terminal backend,
+  config path, current directory, and diagnostic guidance with C-h C-a /
+  about-rile.
 * Review transient status and error history with C-h e in a read-only
   *Messages* buffer.
 * Recall minibuffer prompt history with M-p and M-n.

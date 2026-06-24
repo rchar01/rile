@@ -1,5 +1,15 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs: Register about-rile.
+	* src/keymap.rs: Bind about-rile to C-h C-a.
+	* src/editor.rs: Add about-rile runtime metadata rendering and tests.
+	* tests/pty_movement.rs: Cover about-rile through the terminal UI.
+	* README.md, NEWS, docs/development.md,
+	docs/self-documentation-architecture-plan.md: Document about-rile and
+	diagnostics guidance.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/mode.rs: Add typed mode IDs, specs, kinds, registry validation,
 	mode-state mapping, and metadata coverage tests.
 	* src/lib.rs: Export the mode module.
