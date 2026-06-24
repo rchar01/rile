@@ -11,6 +11,8 @@ This directory contains maintainer and contributor documentation for Rile.
 
 - [Development Notes](development.md): repository scope, milestone history, tooling, containers, release files, and CI expectations.
 - [Reference Testing](reference-testing.md): optional behavior-capture workflow for reference editors such as GNU Zile and kg.
+- [Self-Documentation Architecture](self-documentation.md): implemented command,
+  keymap, option, mode, help, and metadata-testing architecture.
 - [Testing Guide](testing.md): unit, integration, PTY, snapshot, and optional visual-review workflows.
 
 ## Planning Documents

@@ -141,7 +141,8 @@ Basic editor keys:
   completion, `C-h m` (`describe-mode`) describes active modes, and
   `M-x describe-buffer` describes the current buffer. `C-h C-a` (`about-rile`)
   shows version, build, terminal, config, and runtime path information, and
-  `C-h e` opens the read-only `*Messages*` message history.
+  `C-h e` opens the read-only `*Messages*` message history, which updates while
+  it is visible.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
   goto-line, rectangle, shell-command, describe-function, and describe-variable
   minibuffer prompts.
@@ -186,7 +187,11 @@ Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 
 ## Development
 
-The preferred development workflow uses Podman, `make`, and the project dev container. See [docs/README.md](docs/README.md) for maintainer documentation and [docs/testing.md](docs/testing.md) for the testing workflow. The host only needs:
+The preferred development workflow uses Podman, `make`, and the project dev
+container. See [docs/README.md](docs/README.md) for maintainer documentation,
+[docs/self-documentation.md](docs/self-documentation.md) for the implemented
+help/metadata architecture, and [docs/testing.md](docs/testing.md) for the
+testing workflow. The host only needs:
 
 - `podman`
 - `make`

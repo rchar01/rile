@@ -1,5 +1,15 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* docs/self-documentation.md: Add implemented self-documentation architecture
+	guide.
+	* docs/self-documentation-architecture-plan.md: Remove completed plan.
+	* docs/README.md: Link the new guide.
+	* README.md, docs/development.md: Point maintainers to the guide and document
+	live *Messages* refresh behavior.
+	* ChangeLog: Record the documentation migration.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Add a refresh hook for an existing *Messages* buffer.
 	* src/terminal/mod.rs: Refresh message history before drawing frames and
 	cover live *Messages* updates in tests.
