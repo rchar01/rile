@@ -24,7 +24,7 @@ documentation copied separately from implementation.
 The final architecture should provide one source of truth for:
 
 - `M-x` command execution and completion.
-- `C-h f` / `describe-command` command help.
+- `C-h f` / `describe-function` help for interactive commands.
 - `C-h k` / `describe-key` key lookup.
 - `C-h c` / `describe-key-briefly` short key lookup.
 - `C-h b` / `describe-bindings` active binding tables.
@@ -352,17 +352,18 @@ Validation gate:
 
 Goal: Make help output render command and keymap registries.
 
-- [ ] Rename or alias command help to `describe-command` if that is the chosen
-      user-facing name.
-- [ ] Expand `describe-command` to show command name, category, summary, full
+- [x] Keep Emacs-compatible `describe-function` as the user-facing command
+      help name and prompt text while rendering Rile's interactive command
+      registry.
+- [x] Expand `describe-function` to show command name, category, summary, full
       docs, interactivity, and bound keys.
-- [ ] Expand `describe-key` to show key sequence, resolved command, source
+- [x] Expand `describe-key` to show key sequence, resolved command, source
       keymap, summary, full docs, and shadowed bindings when applicable.
-- [ ] Add `describe-key-briefly` for echo-area command-name lookup.
+- [x] Add `describe-key-briefly` for echo-area command-name lookup.
 - [x] Add `describe-bindings` for the current active keymap stack.
-- [ ] Add reusable help formatting for headings, key tables, command tables,
+- [x] Add reusable help formatting for headings, key tables, command tables,
       and wrapped prose.
-- [ ] Format generated help prose to an explicit readable fill width near 70
+- [x] Format generated help prose to an explicit readable fill width near 70
       columns while preserving tables and preformatted blocks.
 - [x] Render help buffers with visible `\` continuation rows when a logical line
       is wider than the current window.
@@ -371,9 +372,9 @@ Validation gate:
 
 - [x] Unit tests cover help rendering for existing command, key, and bindings
       output.
-- [ ] Unit tests cover brief-key output.
-- [ ] Unit tests cover help prose filling and narrow-window continuation rows.
-- [ ] PTY tests cover opening and leaving help buffers.
+- [x] Unit tests cover brief-key output.
+- [x] Unit tests cover help prose filling and narrow-window continuation rows.
+- [x] PTY tests cover opening and leaving help buffers.
 
 ### Phase 5: Option Registry And `describe-variable`
 
@@ -497,6 +498,8 @@ Validation gate:
 | 2026-06-23 | Phase 3 layered keymap migration started. | Introduced typed keymap IDs, key sequences, binding targets, and command-ID-backed global key bindings; focused `keymap`, `completion`, `describe_key`, and key-dispatch tests passed before `make verify`. |
 | 2026-06-23 | Phase 3 active keymap stack plumbing added. | Added `KeyMapStack` resolution with keymap source metadata and tests covering global fallback plus higher-priority map precedence, including prefix shadowing. |
 | 2026-06-23 | Phase 3 special-buffer local keymaps added. | Moved help/messages/shell-output `q` plus buffer-list `q` and `RET` into named local keymaps backed by registered commands, and made help binding lookup use the active stack. |
+| 2026-06-24 | Phase 4 command and key help expansion continued. | Kept Emacs-compatible `describe-function`, expanded command help with registry metadata, and added `describe-key` shadowed-binding output. |
+| 2026-06-24 | Phase 4 help formatting completed. | Added reusable help formatting helpers, wrapped generated prose near 70 columns, preserved table/preformatted blocks, and covered prose filling in unit tests. |
 
 ## Decision Log
 

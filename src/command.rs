@@ -26,6 +26,7 @@ pub enum Command {
     DescribeBindings,
     DescribeFunction,
     DescribeKey,
+    DescribeKeyBriefly,
     EndKeyboardMacro,
     EndOfBuffer,
     EndOfLine,
@@ -136,6 +137,25 @@ pub enum CommandCategory {
 }
 
 impl CommandCategory {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Movement => "Movement",
+            Self::Editing => "Editing",
+            Self::Files => "Files",
+            Self::Buffers => "Buffers",
+            Self::Windows => "Windows",
+            Self::Search => "Search",
+            Self::Shell => "Shell",
+            Self::Registers => "Registers",
+            Self::Rectangles => "Rectangles",
+            Self::Macros => "Macros",
+            Self::Commands => "Commands",
+            Self::Help => "Help",
+            Self::Configuration => "Configuration",
+            Self::System => "System",
+        }
+    }
+
     const fn for_command(command: Command) -> Self {
         use Command::*;
 
@@ -169,8 +189,8 @@ impl CommandCategory {
             | YankRectangle => Self::Rectangles,
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
-            DescribeBindings | DescribeFunction | DescribeKey | QuitHelpWindow
-            | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
+            DescribeBindings | DescribeFunction | DescribeKey | DescribeKeyBriefly
+            | QuitHelpWindow | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -207,6 +227,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DescribeBindings => "Show the active keymap stack and its key bindings.",
         DescribeFunction => "Prompt for an interactive command and show its help buffer.",
         DescribeKey => "Read a key sequence and describe the command bound to it.",
+        DescribeKeyBriefly => "Read a key sequence and echo the command bound to it.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
         EndOfBuffer => "Move point to the end of the current buffer.",
         EndOfLine => "Move point to the end of the current line.",
@@ -552,6 +573,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_describe_function),
         CommandSpec::new("describe-key", "Describe a key binding", true, DescribeKey)
             .with_handler(crate::editor::Editor::command_describe_key),
+        CommandSpec::new(
+            "describe-key-briefly",
+            "Briefly describe a key binding",
+            true,
+            DescribeKeyBriefly,
+        )
+        .with_handler(crate::editor::Editor::command_describe_key_briefly),
         CommandSpec::new(
             "end-kbd-macro",
             "Finish defining a keyboard macro",
@@ -988,6 +1016,7 @@ mod tests {
         assert!(registry.contains("describe-bindings"));
         assert!(registry.contains("describe-function"));
         assert!(registry.contains("describe-key"));
+        assert!(registry.contains("describe-key-briefly"));
         assert!(registry.contains("other-window"));
         assert!(!registry.contains("save"));
     }

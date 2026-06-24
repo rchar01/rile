@@ -205,7 +205,7 @@ fn describe_function_opens_help_for_command() -> Result<()> {
     rile.wait_for_screen_contains("line 001")?;
     rile.send("C-h", keys::control('h'))?;
     rile.send("f", b"f")?;
-    rile.assert_screen_contains("Describe command:")?;
+    rile.assert_screen_contains("Describe function:")?;
     rile.send("find-file", b"find-file")?;
     rile.send("Enter", keys::ENTER)?;
 

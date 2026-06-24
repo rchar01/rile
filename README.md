@@ -135,11 +135,11 @@ Basic editor keys:
   through candidates, Tab completes a common prefix, and Enter accepts the
   selected candidate. Command candidates show the first known key binding when
   available.
-- `C-h k` describes a key binding, `C-h f` describes an interactive command
-  with command-name completion, and `C-h e` opens the read-only `*Messages*`
-  message history.
+- `C-h k` describes a key binding, `C-h f` (`describe-function`) prompts for
+  an interactive command with command-name completion, and `C-h e` opens the
+  read-only `*Messages*` message history.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
-  goto-line, rectangle, shell-command, and describe-command minibuffer prompts.
+  goto-line, rectangle, shell-command, and describe-function minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and query replace use exact UTF-8 substring matching within individual lines. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and neither command matches across line breaks yet.

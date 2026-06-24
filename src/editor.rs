@@ -54,7 +54,7 @@ pub struct Editor {
     messages_return: Option<Viewport>,
     shell_output_return: Option<Viewport>,
     buffer_list_rows: Vec<Option<BufferId>>,
-    describe_key: Option<Vec<KeyEvent>>,
+    describe_key: Option<DescribeKeyState>,
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
@@ -92,6 +92,27 @@ struct RegionState {
     mark: Position,
     active: bool,
     shape: RegionShape,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct DescribeKeyState {
+    sequence: Vec<KeyEvent>,
+    mode: DescribeKeyMode,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DescribeKeyMode {
+    Help,
+    Brief,
+}
+
+impl DescribeKeyMode {
+    fn prompt(self) -> &'static str {
+        match self {
+            Self::Help => "Describe key:",
+            Self::Brief => "Describe key briefly:",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1561,7 +1582,15 @@ impl Editor {
         &mut self,
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.start_describe_key()?;
+        self.start_describe_key(DescribeKeyMode::Help)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_describe_key_briefly(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_describe_key(DescribeKeyMode::Brief)?;
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -3621,7 +3650,7 @@ impl Editor {
 
     fn start_describe_function(&mut self) -> Result<()> {
         self.minibuffer
-            .start_prompt(PromptKind::DescribeFunction, "Describe command: ");
+            .start_prompt(PromptKind::DescribeFunction, "Describe function: ");
         self.completion = Some(CompletionSession::commands(
             &self.commands,
             &self.keymap,
@@ -3631,36 +3660,67 @@ impl Editor {
         Ok(())
     }
 
-    fn start_describe_key(&mut self) -> Result<()> {
-        self.describe_key = Some(Vec::new());
-        self.minibuffer.set_message("Describe key: ");
+    fn start_describe_key(&mut self, mode: DescribeKeyMode) -> Result<()> {
+        self.describe_key = Some(DescribeKeyState {
+            sequence: Vec::new(),
+            mode,
+        });
+        self.minibuffer.set_message(format!("{} ", mode.prompt()));
         Ok(())
     }
 
     fn handle_describe_key(&mut self, key: KeyEvent) -> EditorOutcome {
-        let Some(sequence) = &mut self.describe_key else {
+        let Some(state) = &mut self.describe_key else {
             return EditorOutcome::Continue;
         };
-        sequence.push(key);
-        let sequence = sequence.clone();
+        state.sequence.push(key);
+        let sequence = state.sequence.clone();
+        let mode = state.mode;
 
         match self.active_keymaps().resolve(&sequence) {
             KeyStackResolution::Prefix => {
-                self.minibuffer
-                    .set_message(format!("Describe key: {}-", format_key_sequence(&sequence)));
+                self.minibuffer.set_message(format!(
+                    "{} {}-",
+                    mode.prompt(),
+                    format_key_sequence(&sequence)
+                ));
                 EditorOutcome::Continue
             }
             KeyStackResolution::Command { keymap, command } => {
                 self.describe_key = None;
-                let keymaps = self.active_keymaps();
-                let text =
-                    format_describe_key_help(&self.commands, &keymaps, &sequence, keymap, command);
-                self.open_help_buffer(text)
+                match mode {
+                    DescribeKeyMode::Help => {
+                        let keymaps = self.active_keymaps();
+                        let text = format_describe_key_help(
+                            &self.commands,
+                            &keymaps,
+                            &sequence,
+                            keymap,
+                            command,
+                        );
+                        self.open_help_buffer(text)
+                    }
+                    DescribeKeyMode::Brief => {
+                        let text =
+                            format_describe_key_brief_message(&self.commands, &sequence, command);
+                        self.minibuffer.set_message(text);
+                        EditorOutcome::Continue
+                    }
+                }
             }
             KeyStackResolution::NoMatch => {
                 self.describe_key = None;
-                let text = format_unbound_key_help(&sequence);
-                self.open_help_buffer(text)
+                match mode {
+                    DescribeKeyMode::Help => {
+                        let text = format_unbound_key_help(&sequence);
+                        self.open_help_buffer(text)
+                    }
+                    DescribeKeyMode::Brief => {
+                        self.minibuffer
+                            .set_message(format_unbound_key_message(&sequence));
+                        EditorOutcome::Continue
+                    }
+                }
             }
         }
     }
@@ -3671,12 +3731,7 @@ impl Editor {
                 .set_message(format!("No such command: {name}"));
             return EditorOutcome::Continue;
         };
-        let text = format_describe_function_help(
-            &self.active_keymaps(),
-            command.command,
-            command.name,
-            command.doc,
-        );
+        let text = format_describe_function_help(&self.active_keymaps(), command);
         self.open_help_buffer(text)
     }
 
@@ -5234,6 +5289,73 @@ fn is_key_prefix_help(key: &KeyEvent) -> bool {
     )
 }
 
+const HELP_FILL_WIDTH: usize = 70;
+
+fn append_help_heading(text: &mut String, heading: &str) {
+    text.push_str(heading);
+    text.push_str("\n\n");
+}
+
+fn append_key_table_header(text: &mut String) {
+    text.push_str("Key             Binding                        Description\n");
+    text.push_str("---             -------                        -----------\n");
+}
+
+fn append_key_table_row(text: &mut String, key: &str, binding: &str, description: &str) {
+    text.push_str(&format!("{key:<15} {binding:<30} {description}\n"));
+}
+
+fn append_command_field(text: &mut String, label: &str, value: &str) {
+    text.push_str(&format!("{label}: {value}\n"));
+}
+
+fn append_wrapped_prose(text: &mut String, prose: &str) {
+    for (index, block) in prose.split("\n\n").enumerate() {
+        if index > 0 {
+            text.push('\n');
+        }
+        if is_preformatted_help_block(block) {
+            text.push_str(block.trim_end());
+            text.push('\n');
+        } else {
+            append_wrapped_paragraph(text, block);
+        }
+    }
+}
+
+fn is_preformatted_help_block(block: &str) -> bool {
+    block.lines().any(|line| {
+        line.starts_with(' ')
+            || line.starts_with('\t')
+            || line.contains('|')
+            || line.trim_start().starts_with("---")
+    })
+}
+
+fn append_wrapped_paragraph(text: &mut String, paragraph: &str) {
+    let mut line = String::new();
+    for word in paragraph.split_whitespace() {
+        let next_len = if line.is_empty() {
+            word.len()
+        } else {
+            line.len() + 1 + word.len()
+        };
+        if next_len > HELP_FILL_WIDTH && !line.is_empty() {
+            text.push_str(&line);
+            text.push('\n');
+            line.clear();
+        }
+        if !line.is_empty() {
+            line.push(' ');
+        }
+        line.push_str(word);
+    }
+    if !line.is_empty() {
+        text.push_str(&line);
+        text.push('\n');
+    }
+}
+
 fn format_key_prefix_help(
     commands: &CommandRegistry,
     keymaps: &KeyMapStack<'_>,
@@ -5245,27 +5367,32 @@ fn format_key_prefix_help(
         } else {
             "Active Bindings"
         };
-    let mut text = format!("{title} Starting With {}:\n\n", format_key_sequence(prefix));
-    text.push_str("Key             Binding                        Description\n");
-    text.push_str("---             -------                        -----------\n\n");
+    let mut text = String::new();
+    append_help_heading(
+        &mut text,
+        &format!("{title} Starting With {}:", format_key_sequence(prefix)),
+    );
+    append_key_table_header(&mut text);
+    text.push('\n');
 
     for binding in keymaps.bindings_starting_with(prefix) {
         let command = commands.get_by_id(binding.binding.command());
         let name = command.map(|command| command.name).unwrap_or("<unknown>");
         let description = command.map(|command| command.summary).unwrap_or("");
-        text.push_str(&format!(
-            "{:<15} {:<30} {}\n",
-            format_key_sequence(&binding.binding.sequence),
+        append_key_table_row(
+            &mut text,
+            &format_key_sequence(&binding.binding.sequence),
             name,
-            description
-        ));
+            description,
+        );
     }
 
     text
 }
 
 fn format_describe_bindings_help(commands: &CommandRegistry, keymaps: &KeyMapStack<'_>) -> String {
-    let mut text = String::from("Active Key Bindings:\n\n");
+    let mut text = String::new();
+    append_help_heading(&mut text, "Active Key Bindings:");
     text.push_str("Keymap Stack:\n");
     for keymap in keymaps.maps() {
         text.push_str(&format!("- {}\n", keymap.name()));
@@ -5273,9 +5400,8 @@ fn format_describe_bindings_help(commands: &CommandRegistry, keymaps: &KeyMapSta
     text.push('\n');
 
     for keymap in keymaps.maps() {
-        text.push_str(&format!("{}:\n\n", keymap.name()));
-        text.push_str("Key             Binding                        Description\n");
-        text.push_str("---             -------                        -----------\n");
+        append_help_heading(&mut text, &format!("{}:", keymap.name()));
+        append_key_table_header(&mut text);
 
         let mut has_bindings = false;
         for binding in keymap.bindings_starting_with(&[]) {
@@ -5292,12 +5418,12 @@ fn format_describe_bindings_help(commands: &CommandRegistry, keymaps: &KeyMapSta
                 }
                 description.push_str(&shadowed_by);
             }
-            text.push_str(&format!(
-                "{:<15} {:<30} {}\n",
-                format_key_sequence(&binding.sequence),
+            append_key_table_row(
+                &mut text,
+                &format_key_sequence(&binding.sequence),
                 name,
-                description
-            ));
+                &description,
+            );
         }
         if !has_bindings {
             text.push_str("(No active bindings)\n");
@@ -5352,23 +5478,65 @@ fn format_describe_key_help(
     if let Some(keymap_name) = keymaps.keymap_name(keymap) {
         text.push_str(&format!("It was found in `{keymap_name}`.\n\n"));
     }
-    let description = command.map(|command| command.doc);
-    text.push_str(&format_command_help(
-        keymaps,
-        command.map(|command| command.command),
-        name,
-        description,
-    ));
+    append_shadowed_key_bindings(&mut text, commands, keymaps, sequence, keymap);
+    text.push_str(&format_command_help(keymaps, command, name));
     text
 }
 
-fn format_describe_function_help(
+fn append_shadowed_key_bindings(
+    text: &mut String,
+    commands: &CommandRegistry,
     keymaps: &KeyMapStack<'_>,
+    sequence: &[KeyEvent],
+    source_keymap: crate::keymap::KeyMapId,
+) {
+    let mut found_source = false;
+    let mut rows = Vec::new();
+
+    for keymap in keymaps.maps() {
+        if keymap.id() == source_keymap {
+            found_source = true;
+            continue;
+        }
+        if !found_source {
+            continue;
+        }
+        if let Some(binding) = keymap.binding_for_sequence(sequence) {
+            let command_name = commands
+                .get_by_id(binding.command())
+                .map(|command| command.name)
+                .unwrap_or("<unknown>");
+            rows.push(format!("- {}: {}\n", keymap.name(), command_name));
+        }
+    }
+
+    if !rows.is_empty() {
+        text.push_str("Shadowed lower-priority bindings:\n");
+        for row in rows {
+            text.push_str(&row);
+        }
+        text.push('\n');
+    }
+}
+
+fn format_describe_key_brief_message(
+    commands: &CommandRegistry,
+    sequence: &[KeyEvent],
     command: Command,
-    name: &str,
-    description: &str,
 ) -> String {
-    format_command_help(keymaps, Some(command), name, Some(description))
+    let name = commands
+        .get_by_id(command)
+        .map(|command| command.name)
+        .unwrap_or("<unknown>");
+    format!(
+        "{} runs the command `{}`.",
+        format_key_sequence(sequence),
+        name
+    )
+}
+
+fn format_describe_function_help(keymaps: &KeyMapStack<'_>, command: CommandSpec) -> String {
+    format_command_help(keymaps, Some(command), command.name)
 }
 
 fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
@@ -5378,28 +5546,48 @@ fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
     )
 }
 
+fn format_unbound_key_message(sequence: &[KeyEvent]) -> String {
+    format!(
+        "{} is not bound to any command.",
+        format_key_sequence(sequence)
+    )
+}
+
 fn format_command_help(
     keymaps: &KeyMapStack<'_>,
-    command: Option<Command>,
+    command: Option<CommandSpec>,
     name: &str,
-    description: Option<&str>,
 ) -> String {
-    let mut text = match description {
-        Some(description) => format!("{} is an interactive command.\n\n{}\n", name, description),
+    let mut text = match command {
+        Some(command) => {
+            let mut text = format!("{} is an interactive command.\n\n", command.name);
+            append_command_field(&mut text, "Name", command.name);
+            append_command_field(&mut text, "Category", command.category.label());
+            append_command_field(&mut text, "Summary", command.summary);
+            append_command_field(
+                &mut text,
+                "Interactive",
+                if command.interactive { "yes" } else { "no" },
+            );
+            text
+        }
         None => format!("{} is not a known interactive command.\n", name),
     };
     let bindings = command
-        .map(|command| keymaps.bindings_for_command(command))
+        .map(|command| keymaps.bindings_for_command(command.command))
         .unwrap_or_default();
     if bindings.is_empty() {
-        text.push_str("\nIt is not bound to any key.\n");
+        text.push_str("It is not bound to any key.\n");
     } else {
         let keys = bindings
             .iter()
             .map(|binding| format_key_sequence(&binding.binding.sequence))
             .collect::<Vec<_>>()
             .join(", ");
-        text.push_str(&format!("\nIt is bound to {}.\n", keys));
+        text.push_str(&format!("It is bound to {}.\n", keys));
+    }
+    if let Some(command) = command {
+        append_wrapped_prose(&mut text, command.doc);
     }
     text
 }
@@ -5731,7 +5919,7 @@ fn format_rectangle_number(format: &str, number: i32) -> Result<String> {
 
 fn prompt_label(kind: PromptKind) -> &'static str {
     match kind {
-        PromptKind::DescribeFunction => "Describe command: ",
+        PromptKind::DescribeFunction => "Describe function: ",
         PromptKind::ExtendedCommand => "M-x ",
         PromptKind::FindFile => "Find file: ",
         PromptKind::FindFileReadOnly => "Find file read-only: ",
@@ -5842,7 +6030,8 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        Editor, EditorOutcome, KillEntry, format_describe_bindings_help, format_rectangle_number,
+        Editor, EditorOutcome, HELP_FILL_WIDTH, KillEntry, append_wrapped_prose,
+        format_describe_bindings_help, format_describe_key_help, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -5859,6 +6048,41 @@ mod tests {
 
     struct TestDir {
         path: PathBuf,
+    }
+
+    #[test]
+    fn help_prose_wraps_to_fill_width() {
+        let mut help = String::new();
+
+        append_wrapped_prose(
+            &mut help,
+            "This paragraph is intentionally long enough to require wrapping at the help fill width while preserving word boundaries for readable terminal help output.",
+        );
+
+        assert!(help.lines().count() > 1);
+        for line in help.lines() {
+            assert!(
+                line.len() <= HELP_FILL_WIDTH,
+                "line should be wrapped: {line:?}"
+            );
+        }
+        let normalized = help.replace('\n', " ");
+        assert!(normalized.contains("word boundaries for readable terminal help output."));
+    }
+
+    #[test]
+    fn help_prose_preserves_preformatted_blocks() {
+        let mut help = String::new();
+
+        append_wrapped_prose(
+            &mut help,
+            "Intro paragraph.\n\nKey             Binding\n---             -------\nC-x C-f         find-file\n\nTrailing paragraph.",
+        );
+
+        assert!(help.contains(
+            "Key             Binding\n---             -------\nC-x C-f         find-file"
+        ));
+        assert!(help.ends_with("Trailing paragraph.\n"));
     }
 
     impl TestDir {
@@ -8336,6 +8560,79 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_key_briefly_echoes_complete_binding() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("c".to_owned()))
+            .expect("describe-key-briefly should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("describe-key-briefly should read prefix");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Describe key briefly: C-x-")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("describe-key-briefly should finish");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("C-x C-f runs the command `find-file`.")
+        );
+    }
+
+    #[test]
+    fn describe_key_briefly_echoes_unbound_key() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("c".to_owned()))
+            .expect("describe-key-briefly should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('z'))
+            .expect("describe-key-briefly should finish");
+
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("C-z is not bound to any command.")
+        );
+    }
+
+    #[test]
+    fn describe_key_briefly_cancel_clears_pending_sequence() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("c".to_owned()))
+            .expect("describe-key-briefly should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("describe-key-briefly should read prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel describe-key-briefly");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("text should insert after cancel");
+
+        assert_eq!(editor.minibuffer().message.as_deref(), None);
+        assert_eq!(editor.document().buffer().serialize(), "x");
+    }
+
+    #[test]
     fn describe_function_opens_help_for_command() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -8355,6 +8652,10 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.current_buffer_name(), "*Help*");
         let help = editor.document().buffer().serialize();
         assert!(help.contains("find-file is an interactive command."));
+        assert!(help.contains("Name: find-file"));
+        assert!(help.contains("Category: Files"));
+        assert!(help.contains("Summary: Open file by path"));
+        assert!(help.contains("Interactive: yes"));
         assert!(help.contains("Prompt for a file path and open it for editing."));
         assert!(help.contains("It is bound to C-x C-f."));
     }
@@ -8490,6 +8791,39 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_key_reports_shadowed_lower_priority_bindings() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new(
+                [KeyEvent::Text("q".to_owned())],
+                Command::OtherWindow,
+            )],
+        );
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [KeyBinding::new(
+                [KeyEvent::Text("q".to_owned())],
+                Command::ForwardChar,
+            )],
+        );
+        let stack = KeyMapStack::new([&special, &global]);
+
+        let help = format_describe_key_help(
+            &CommandRegistry::default(),
+            &stack,
+            &[KeyEvent::Text("q".to_owned())],
+            KeyMapId::SpecialBuffer,
+            Command::OtherWindow,
+        );
+
+        assert!(help.contains("It was found in `special-buffer-map`."));
+        assert!(help.contains("Shadowed lower-priority bindings:\n- global-map: forward-char"));
+        assert!(help.contains("Summary: Select next window"));
+    }
+
+    #[test]
     fn q_in_help_restores_previous_buffer() {
         let mut document = Document::scratch();
         document
@@ -8546,6 +8880,35 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert!(help.contains("q runs the command `quit-help-window`."));
         assert!(help.contains("It was found in `help-mode-map`."));
         assert!(help.contains("It is bound to q."));
+    }
+
+    #[test]
+    fn describe_key_briefly_reports_help_buffer_local_binding() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start in help buffer");
+        editor
+            .handle_key(KeyEvent::Text("c".to_owned()))
+            .expect("describe-key-briefly should start");
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("describe-key-briefly should describe local q");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("q runs the command `quit-help-window`.")
+        );
     }
 
     #[test]

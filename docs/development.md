@@ -243,7 +243,7 @@ are `completion_style`, `completion_max_candidates`,
 
 Post-Milestone 14 prompt-history polish adds in-session `M-p` and `M-n` history
 navigation for command, file, buffer, write-file, goto-line, rectangle, shell
-command, and describe-command minibuffer prompts. Prompt history is stored per
+command, and describe-function minibuffer prompts. Prompt history is stored per
 prompt kind, preserves the current draft while navigating, avoids consecutive
 duplicate entries, and refreshes completion candidates after recalling history in
 completion-enabled prompts. Incremental search and query-replace history remain

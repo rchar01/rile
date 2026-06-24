@@ -1,5 +1,22 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs: Add describe-key-briefly as a registered help command and
+	add labels for command categories.
+	* src/keymap.rs: Bind describe-key-briefly to C-h c.
+	* src/editor.rs: Share describe-key sequence reading between full help and
+	brief echo-area modes, expand command help metadata, and report shadowed
+	lower-priority bindings from describe-key. Use Emacs-compatible
+	describe-function prompt text. Add reusable help formatting helpers and wrap
+	generated prose near 70 columns while preserving table blocks.
+	* README.md: Document describe-function as the Emacs-compatible help command
+	for Rile interactive commands.
+	* docs/development.md: Refer to the describe-function minibuffer prompt.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 4 brief-key
+	lookup, command/key help expansion, and help formatting slices complete, and
+	record the describe-function prompt naming decision.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs: Add describe-bindings as a registered help command.
 	* src/keymap.rs: Bind describe-bindings to C-h b.
 	* src/editor.rs: Render active keymap-stack binding help grouped by keymap
