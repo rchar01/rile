@@ -1,5 +1,13 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* docs/testing.md: Document metadata coverage tests and PTY help-command
+	coverage expectations.
+	* docs/self-documentation-architecture-plan.md: Mark the documentation phase
+	and testing strategy complete.
+	* ChangeLog: Record the Phase 8 documentation update.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs: Register about-rile.
 	* src/keymap.rs: Bind about-rile to C-h C-a.
 	* src/editor.rs: Add about-rile runtime metadata rendering and tests.

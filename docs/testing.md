@@ -37,6 +37,20 @@ Parsed-screen snapshots live under `tests/snapshots/`. They are generated from n
 
 Optional visual demos live under `demos/*.tape`. They run Rile through VHS and write ignored GIF and PNG artifacts under `artifacts/` for human or multimodal review.
 
+## Metadata And Help Tests
+
+Registry metadata is tested at the unit-test layer so new interactive commands,
+key bindings, options, and modes cannot silently skip required names, summaries,
+documentation, handlers, validation, or keymap coverage. Keep those invariant
+tests close to the registry modules they protect.
+
+Help rendering should be covered first with unit tests using stable text
+fragments for command, key, option, mode, buffer, and about output. Use PTY tests
+for representative end-to-end help flows that depend on real terminal input,
+minibuffer prompts, local keymaps, or help-window restoration. Current PTY help
+coverage includes `C-h k`, `C-h f`, `C-h v`, `C-h m`, `C-h C-a`,
+`M-x describe-buffer`, `C-h e`, and prefix help.
+
 ## Deterministic Terminal Mode
 
 Use `--visual-test` to make terminal output deterministic for PTY tests and VHS demos. Visual-test mode uses default configuration rather than user config and renders a verbose mode line with stable test-oriented state.

@@ -435,30 +435,30 @@ Validation gate:
 Goal: Keep public docs concise while the editor becomes the detailed source of
 truth.
 
-- [ ] Update `README.md` to describe self-documentation commands and reduce any
+- [x] Update `README.md` to describe self-documentation commands and reduce any
       duplicated command tables that help can now generate.
-- [ ] Update `docs/development.md` with the registry, keymap, option, mode, and
+- [x] Update `docs/development.md` with the registry, keymap, option, mode, and
       help architecture.
-- [ ] Update `docs/testing.md` with metadata coverage tests and PTY help tests.
-- [ ] Update `NEWS` for user-visible help and introspection changes.
-- [ ] Update `ChangeLog` for file-level implementation history.
+- [x] Update `docs/testing.md` with metadata coverage tests and PTY help tests.
+- [x] Update `NEWS` for user-visible help and introspection changes.
+- [x] Update `ChangeLog` for file-level implementation history.
 
 Validation gate:
 
-- [ ] Documentation matches implemented command names and keybindings.
-- [ ] No user-visible self-documentation behavior exists only in prose.
+- [x] Documentation matches implemented command names and keybindings.
+- [x] No user-visible self-documentation behavior exists only in prose.
 
 ## Testing Strategy
 
-- [ ] Unit-test registry invariants: no duplicate IDs, no duplicate names, no
+- [x] Unit-test registry invariants: no duplicate IDs, no duplicate names, no
       undocumented interactive commands, no undocumented options, no
       undocumented modes.
-- [ ] Unit-test keymap resolution, active stack priority, prefix handling, and
+- [x] Unit-test keymap resolution, active stack priority, prefix handling, and
       shadowed binding reporting.
-- [ ] Unit-test help rendering with stable text fixtures for commands, keys,
+- [x] Unit-test help rendering with stable text fixtures for commands, keys,
       options, modes, and buffers.
-- [ ] PTY-test representative help commands through the real terminal UI.
-- [ ] Keep `make verify` as the full quality gate before merging each phase.
+- [x] PTY-test representative help commands through the real terminal UI.
+- [x] Keep `make verify` as the full quality gate before merging each phase.
 
 ## Risks
 
@@ -504,6 +504,7 @@ Validation gate:
 | 2026-06-24 | Phase 5 option registry and variable help implemented. | Added typed option specs, registry-backed config defaults and parsing, `describe-variable` with option completion, and unit plus PTY coverage. |
 | 2026-06-24 | Phase 6 mode and buffer inspection implemented. | Added typed mode specs, active mode-stack rendering, `describe-mode`, `describe-buffer`, and unit plus PTY coverage. |
 | 2026-06-24 | Phase 7 about and diagnostics guidance implemented. | Added `about-rile`, runtime metadata help, C-h C-a coverage, and documented that actionable diagnostics remain echo-area messages reviewable with C-h e. |
+| 2026-06-24 | Phase 8 documentation pass completed. | Updated public, development, testing, NEWS, and ChangeLog documentation for registry metadata and help-command coverage. |
 
 ## Decision Log
 
