@@ -328,6 +328,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             DescribeKey,
         ),
         KeyBinding::new(
+            [KeyEvent::Ctrl('h'), KeyEvent::Text("m".to_owned())],
+            DescribeMode,
+        ),
+        KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("v".to_owned())],
             DescribeVariable,
         ),
@@ -756,6 +760,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())]),
             KeyResolution::Command(DescribeKey)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("m".to_owned())]),
+            KeyResolution::Command(DescribeMode)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("v".to_owned())]),

@@ -138,7 +138,9 @@ Basic editor keys:
 - `C-h k` describes a key binding, `C-h f` (`describe-function`) prompts for
   an interactive command with command-name completion, `C-h v`
   (`describe-variable`) describes a configuration option with option-name
-  completion, and `C-h e` opens the read-only `*Messages*` message history.
+  completion, `C-h m` (`describe-mode`) describes active modes, and
+  `M-x describe-buffer` describes the current buffer. `C-h e` opens the
+  read-only `*Messages*` message history.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
   goto-line, rectangle, shell-command, describe-function, and describe-variable
   minibuffer prompts.

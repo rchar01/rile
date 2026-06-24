@@ -54,8 +54,9 @@ Editing features:
   acceptance for ambiguous input, and Emacs-style y-or-n-p dirty-buffer
   confirmation.
 * Prompt before C-x C-c exits when normal buffers have unsaved changes.
-* Describe key bindings with C-h k, interactive commands with C-h f, and
-  configuration options with C-h v.
+* Describe key bindings with C-h k, interactive commands with C-h f,
+  configuration options with C-h v, active modes with C-h m, and the current
+  buffer with M-x describe-buffer.
 * Review transient status and error history with C-h e in a read-only
   *Messages* buffer.
 * Recall minibuffer prompt history with M-p and M-n.
@@ -65,6 +66,8 @@ Interface features:
 * Start with a clean *Rile* welcome buffer when no file is given.
 * Display Emacs-style mode lines with buffer state, position, and major
   mode.
+* Inspect active major, syntax, minor, and special-buffer modes through a typed
+  mode registry.
 * Use blank unused rows instead of marker characters.
 * Manage multiple buffers with C-x b, C-x C-b, and C-x k.
 * Split, delete, and select windows with common Emacs key bindings.

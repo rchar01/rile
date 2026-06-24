@@ -23,10 +23,12 @@ pub enum Command {
     DeleteRectangle,
     DeleteOtherWindows,
     DeleteWindow,
+    DescribeBuffer,
     DescribeBindings,
     DescribeFunction,
     DescribeKey,
     DescribeKeyBriefly,
+    DescribeMode,
     DescribeVariable,
     EndKeyboardMacro,
     EndOfBuffer,
@@ -190,10 +192,9 @@ impl CommandCategory {
             | YankRectangle => Self::Rectangles,
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
-            DescribeBindings | DescribeFunction | DescribeKey | DescribeKeyBriefly
-            | DescribeVariable | QuitHelpWindow | QuitMessagesWindow | ViewEchoAreaMessages => {
-                Self::Help
-            }
+            DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
+            | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
+            | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -227,10 +228,12 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DeleteRectangle => "Delete the active rectangle without saving it to the kill ring.",
         DeleteOtherWindows => "Delete every window except the selected window.",
         DeleteWindow => "Delete the selected window when another window is available.",
+        DescribeBuffer => "Show detailed state for the current buffer.",
         DescribeBindings => "Show the active keymap stack and its key bindings.",
         DescribeFunction => "Prompt for an interactive command and show its help buffer.",
         DescribeKey => "Read a key sequence and describe the command bound to it.",
         DescribeKeyBriefly => "Read a key sequence and echo the command bound to it.",
+        DescribeMode => "Show the active major, minor, and special-buffer modes.",
         DescribeVariable => "Prompt for a configuration option and show its help buffer.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
         EndOfBuffer => "Move point to the end of the current buffer.",
@@ -562,6 +565,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow)
             .with_handler(crate::editor::Editor::command_delete_window),
         CommandSpec::new(
+            "describe-buffer",
+            "Describe current buffer",
+            true,
+            DescribeBuffer,
+        )
+        .with_handler(crate::editor::Editor::command_describe_buffer),
+        CommandSpec::new(
             "describe-bindings",
             "Show active key bindings",
             true,
@@ -584,6 +594,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             DescribeKeyBriefly,
         )
         .with_handler(crate::editor::Editor::command_describe_key_briefly),
+        CommandSpec::new("describe-mode", "Describe active modes", true, DescribeMode)
+            .with_handler(crate::editor::Editor::command_describe_mode),
         CommandSpec::new(
             "describe-variable",
             "Describe a configuration option",
@@ -1024,10 +1036,12 @@ mod tests {
         assert!(registry.contains("delete-rectangle"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
+        assert!(registry.contains("describe-buffer"));
         assert!(registry.contains("describe-bindings"));
         assert!(registry.contains("describe-function"));
         assert!(registry.contains("describe-key"));
         assert!(registry.contains("describe-key-briefly"));
+        assert!(registry.contains("describe-mode"));
         assert!(registry.contains("describe-variable"));
         assert!(registry.contains("other-window"));
         assert!(!registry.contains("save"));

@@ -1,5 +1,20 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/mode.rs: Add typed mode IDs, specs, kinds, registry validation,
+	mode-state mapping, and metadata coverage tests.
+	* src/lib.rs: Export the mode module.
+	* src/command.rs: Register describe-mode and describe-buffer.
+	* src/keymap.rs: Bind describe-mode to C-h m.
+	* src/editor.rs: Add active mode-stack discovery, typed buffer-state
+	description, describe-mode and describe-buffer help rendering, and tests.
+	* tests/pty_movement.rs: Cover describe-mode and describe-buffer through the
+	terminal UI.
+	* README.md, NEWS, docs/development.md,
+	docs/self-documentation-architecture-plan.md: Document mode and buffer
+	inspection behavior.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/option.rs: Add typed option IDs, specs, values, registry validation,
 	parsing, defaults, and metadata coverage tests.
 	* src/config.rs: Build defaults from option specs and route config parsing

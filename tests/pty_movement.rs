@@ -245,6 +245,53 @@ fn describe_variable_opens_help_for_option() -> Result<()> {
 }
 
 #[test]
+fn describe_mode_opens_help_for_active_modes() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("m", b"m")?;
+
+    rile.assert_screen_contains("Active Modes:")?;
+    rile.assert_screen_contains("Major mode: fundamental-mode")?;
+    rile.assert_screen_contains("Syntax mode: plain-text-syntax-mode")?;
+    rile.assert_screen_contains("Minor modes: syntax-highlight-mode, search-highlight-mode")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn describe_buffer_opens_help_for_current_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 16, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.assert_screen_contains("M-x")?;
+    rile.send("describe-buffer", b"describe-buffer")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("is the current buffer.")?;
+    rile.assert_screen_contains("Kind: normal")?;
+    rile.assert_screen_contains("Modified: no")?;
+    rile.assert_screen_contains("Read only: no")?;
+    rile.assert_screen_contains("Point: line 1, column 0")?;
+    rile.assert_screen_contains("Encoding: UTF-8")?;
+    rile.assert_screen_contains("Line ending: LF")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn narrow_help_wraps_with_continuation_marker() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 24)?;

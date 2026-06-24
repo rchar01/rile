@@ -19,6 +19,7 @@ use crate::keymap::{
     messages_keymap, shell_output_keymap,
 };
 use crate::minibuffer::{MinibufferState, PromptKind};
+use crate::mode::{ModeId, ModeRegistry, ModeSpec};
 use crate::option::{OptionId, OptionRegistry, OptionSpec, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
@@ -105,6 +106,29 @@ struct DescribeKeyState {
 enum DescribeKeyMode {
     Help,
     Brief,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveModes {
+    major: ModeId,
+    syntax: ModeId,
+    special: Option<ModeId>,
+    minor: Vec<ModeId>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BufferDescription {
+    name: String,
+    path: Option<String>,
+    kind: &'static str,
+    modified: bool,
+    read_only: bool,
+    point_line: usize,
+    point_column: usize,
+    encoding: &'static str,
+    line_ending: &'static str,
+    final_newline: bool,
+    modes: ActiveModes,
 }
 
 impl DescribeKeyMode {
@@ -524,6 +548,48 @@ impl Editor {
             .document(id)
             .map(|document| MajorMode::for_path(document.path()))
             .unwrap_or(MajorMode::Fundamental)
+    }
+
+    fn active_modes_for_document(&self, document: &Document) -> ActiveModes {
+        let major = MajorMode::for_path(document.path());
+        let syntax = major.syntax_mode();
+        let mut minor = Vec::new();
+        if self.line_numbers {
+            minor.push(ModeId::LineNumbers);
+        }
+        if self.syntax_enabled {
+            minor.push(ModeId::SyntaxHighlighting);
+        }
+        if self.search_highlighting {
+            minor.push(ModeId::SearchHighlighting);
+        }
+        ActiveModes {
+            major: ModeId::for_major_mode(major),
+            syntax: ModeId::for_syntax_mode(syntax),
+            special: ModeId::for_document_kind(document.kind()),
+            minor,
+        }
+    }
+
+    fn current_buffer_description(&self) -> BufferDescription {
+        let document = self.document();
+        let point_column = document
+            .buffer()
+            .display_column(self.cursor)
+            .unwrap_or(self.cursor.byte);
+        BufferDescription {
+            name: self.current_buffer_name().to_owned(),
+            path: document.path().map(|path| path.display().to_string()),
+            kind: document_kind_label(document.kind()),
+            modified: document.is_dirty(),
+            read_only: document.is_read_only(),
+            point_line: self.cursor.line + 1,
+            point_column,
+            encoding: "UTF-8",
+            line_ending: "LF",
+            final_newline: document.buffer().final_newline(),
+            modes: self.active_modes_for_document(document),
+        }
     }
 
     pub fn spans_for_buffer_line(
@@ -1576,6 +1642,17 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_describe_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        let registry = ModeRegistry::default();
+        let description = self.current_buffer_description();
+        let text = format_describe_buffer_help(&description, &registry);
+        self.open_help_buffer(text);
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_describe_function(
         &mut self,
         _context: CommandContext,
@@ -1598,6 +1675,17 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         self.start_describe_key(DescribeKeyMode::Brief)?;
         Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_describe_mode(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        let registry = ModeRegistry::default();
+        let modes = self.active_modes_for_document(self.document());
+        let text = format_describe_mode_help(&modes, &registry);
+        self.open_help_buffer(text);
+        Ok(CommandOutcome::Continue)
     }
 
     pub(crate) fn command_describe_variable(
@@ -5618,6 +5706,138 @@ fn format_describe_variable_help(option: &OptionSpec, current_value: OptionValue
     text
 }
 
+fn format_describe_mode_help(modes: &ActiveModes, registry: &ModeRegistry) -> String {
+    let mut text = String::new();
+    append_help_heading(&mut text, "Active Modes:");
+    append_option_field(&mut text, "Major mode", mode_name(registry, modes.major));
+    append_option_field(&mut text, "Syntax mode", mode_name(registry, modes.syntax));
+    append_option_field(&mut text, "Minor modes", mode_list(registry, &modes.minor));
+    append_option_field(
+        &mut text,
+        "Special buffer mode",
+        modes
+            .special
+            .map(|mode| mode_name(registry, mode))
+            .unwrap_or("none"),
+    );
+    text.push('\n');
+    append_help_heading(&mut text, "Mode Details:");
+
+    let mut detail_ids = vec![modes.major, modes.syntax];
+    detail_ids.extend(modes.minor.iter().copied());
+    if let Some(special) = modes.special {
+        detail_ids.push(special);
+    }
+    for id in detail_ids {
+        append_mode_spec_help(&mut text, required_mode(registry, id));
+    }
+    text
+}
+
+fn format_describe_buffer_help(description: &BufferDescription, registry: &ModeRegistry) -> String {
+    let mut text = String::new();
+    append_help_heading(
+        &mut text,
+        &format!("{} is the current buffer.", description.name),
+    );
+    append_option_field(&mut text, "Name", description.name.as_str());
+    append_option_field(
+        &mut text,
+        "Path",
+        description.path.as_deref().unwrap_or("none"),
+    );
+    append_option_field(&mut text, "Kind", description.kind);
+    append_option_field(&mut text, "Modified", yes_no(description.modified));
+    append_option_field(&mut text, "Read only", yes_no(description.read_only));
+    append_option_field(
+        &mut text,
+        "Point",
+        format!(
+            "line {}, column {}",
+            description.point_line, description.point_column
+        ),
+    );
+    append_option_field(&mut text, "Encoding", description.encoding);
+    append_option_field(&mut text, "Line ending", description.line_ending);
+    append_option_field(
+        &mut text,
+        "Final newline",
+        yes_no(description.final_newline),
+    );
+    append_option_field(
+        &mut text,
+        "Major mode",
+        mode_name(registry, description.modes.major),
+    );
+    append_option_field(
+        &mut text,
+        "Syntax mode",
+        mode_name(registry, description.modes.syntax),
+    );
+    append_option_field(
+        &mut text,
+        "Minor modes",
+        mode_list(registry, &description.modes.minor),
+    );
+    append_option_field(
+        &mut text,
+        "Special buffer mode",
+        description
+            .modes
+            .special
+            .map(|mode| mode_name(registry, mode))
+            .unwrap_or("none"),
+    );
+    text
+}
+
+fn append_mode_spec_help(text: &mut String, mode: &ModeSpec) {
+    append_help_heading(text, &format!("{}:", mode.name));
+    append_option_field(text, "Name", mode.name);
+    append_option_field(text, "Kind", mode.kind.label());
+    append_option_field(text, "Summary", mode.summary);
+    append_option_field(text, "Keymap", mode.keymap.unwrap_or("none"));
+    text.push('\n');
+    append_wrapped_prose(text, mode.doc);
+    text.push('\n');
+}
+
+fn mode_name(registry: &ModeRegistry, id: ModeId) -> &'static str {
+    required_mode(registry, id).name
+}
+
+fn mode_list(registry: &ModeRegistry, ids: &[ModeId]) -> String {
+    if ids.is_empty() {
+        return "none".to_owned();
+    }
+    ids.iter()
+        .map(|id| mode_name(registry, *id))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn required_mode(registry: &ModeRegistry, id: ModeId) -> &ModeSpec {
+    registry
+        .get(id)
+        .expect("active mode should be present in default mode registry")
+}
+
+fn yes_no(value: bool) -> &'static str {
+    if value { "yes" } else { "no" }
+}
+
+fn document_kind_label(kind: DocumentKind) -> &'static str {
+    match kind {
+        DocumentKind::Normal => "normal",
+        DocumentKind::Welcome => "welcome",
+        DocumentKind::Help => "help",
+        DocumentKind::Messages => "messages",
+        DocumentKind::Completions => "completions",
+        DocumentKind::BufferList => "buffer-list",
+        DocumentKind::ShellOutput => "shell-output",
+    }
+}
+
 fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
     format!(
         "{} is not bound to any command.\n",
@@ -6111,8 +6331,9 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::{
-        Editor, EditorOutcome, HELP_FILL_WIDTH, KillEntry, append_wrapped_prose,
-        format_describe_bindings_help, format_describe_key_help, format_describe_variable_help,
+        ActiveModes, BufferDescription, Editor, EditorOutcome, HELP_FILL_WIDTH, KillEntry,
+        append_wrapped_prose, format_describe_bindings_help, format_describe_buffer_help,
+        format_describe_key_help, format_describe_mode_help, format_describe_variable_help,
         format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
@@ -6123,6 +6344,7 @@ mod tests {
     use crate::input::{KeyEvent, SpecialKey};
     use crate::keymap::{KeyBinding, KeyMap, KeyMapId, KeyMapStack};
     use crate::minibuffer::PromptKind;
+    use crate::mode::{ModeId, ModeRegistry};
     use crate::option::{OptionId, OptionRegistry, OptionValue};
     use crate::render::{DecorationProvider, Face, Span};
     use crate::syntax::{MajorMode, SyntaxMode};
@@ -8767,6 +8989,106 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .serialize()
                 .contains("find-file is an interactive command.")
         );
+    }
+
+    #[test]
+    fn describe_mode_opens_help_for_active_modes() {
+        let config = Config {
+            line_numbers: true,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(Document::scratch(), config);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("m".to_owned()))
+            .expect("describe-mode should open help");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("Active Modes:"));
+        assert!(help.contains("Major mode: fundamental-mode"));
+        assert!(help.contains("Syntax mode: plain-text-syntax-mode"));
+        assert!(help.contains(
+            "Minor modes: line-number-mode, syntax-highlight-mode, search-highlight-mode"
+        ));
+        assert!(help.contains("Special buffer mode: none"));
+        assert!(help.contains("fundamental-mode:"));
+    }
+
+    #[test]
+    fn describe_mode_help_formats_special_buffer_mode() {
+        let registry = ModeRegistry::default();
+        let modes = ActiveModes {
+            major: ModeId::Fundamental,
+            syntax: ModeId::PlainTextSyntax,
+            special: Some(ModeId::Help),
+            minor: vec![ModeId::SyntaxHighlighting],
+        };
+
+        let help = format_describe_mode_help(&modes, &registry);
+
+        assert!(help.contains("Special buffer mode: help-mode"));
+        assert!(help.contains("help-mode:"));
+        assert!(help.contains("Keymap: help-mode-map"));
+    }
+
+    #[test]
+    fn describe_buffer_opens_help_for_current_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("abc".to_owned()))
+            .expect("text should insert");
+        editor
+            .execute_command_by_name("describe-buffer")
+            .expect("describe-buffer should open help");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("*scratch* is the current buffer."));
+        assert!(help.contains("Name: *scratch*"));
+        assert!(help.contains("Kind: normal"));
+        assert!(help.contains("Modified: yes"));
+        assert!(help.contains("Read only: no"));
+        assert!(help.contains("Point: line 1, column 3"));
+        assert!(help.contains("Encoding: UTF-8"));
+        assert!(help.contains("Line ending: LF"));
+        assert!(help.contains("Final newline: no"));
+        assert!(help.contains("Major mode: fundamental-mode"));
+    }
+
+    #[test]
+    fn describe_buffer_help_formats_typed_state() {
+        let registry = ModeRegistry::default();
+        let description = BufferDescription {
+            name: "example.rs".to_owned(),
+            path: Some("/tmp/example.rs".to_owned()),
+            kind: "normal",
+            modified: false,
+            read_only: true,
+            point_line: 2,
+            point_column: 4,
+            encoding: "UTF-8",
+            line_ending: "LF",
+            final_newline: true,
+            modes: ActiveModes {
+                major: ModeId::Rust,
+                syntax: ModeId::RustSyntax,
+                special: None,
+                minor: vec![ModeId::SyntaxHighlighting],
+            },
+        };
+
+        let help = format_describe_buffer_help(&description, &registry);
+
+        assert!(help.contains("example.rs is the current buffer."));
+        assert!(help.contains("Path: /tmp/example.rs"));
+        assert!(help.contains("Read only: yes"));
+        assert!(help.contains("Point: line 2, column 4"));
+        assert!(help.contains("Major mode: rust-mode"));
+        assert!(help.contains("Syntax mode: rust-syntax-mode"));
     }
 
     #[test]

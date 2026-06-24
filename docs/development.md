@@ -256,16 +256,27 @@ default value, valid values, and validator. `describe-variable` (`C-h v`) uses
 the same registry to complete option names and render live option help with the
 current editor value.
 
-Post-Milestone 14 help polish adds `C-h k`, `C-h f`, and `C-h v` using Rile's
-existing read-only `*Help*` special buffer. `C-h k` reads a complete key
+Active modes are described by a typed mode registry. Major modes are still
+derived from the selected buffer path, syntax modes are derived from the major
+mode, special-buffer modes are derived from `DocumentKind`, and minor modes are
+derived from editor settings such as line numbers and highlighting. The registry
+provides names, summaries, full docs, kind labels, and local keymap names for
+`describe-mode` (`C-h m`). `describe-buffer` renders a typed view of the current
+buffer state including name, path, kind, modified and read-only state, point,
+encoding, line ending, final newline state, and active modes.
+
+Post-Milestone 14 help polish adds `C-h k`, `C-h f`, `C-h v`, and `C-h m` using
+Rile's existing read-only `*Help*` special buffer. `C-h k` reads a complete key
 sequence and shows the bound command plus its description. `C-h f` uses the
 shared command completion source, then shows the selected interactive command's
 description and current key bindings. `C-h v` uses the shared option registry to
-describe configuration variables. `C-h e` / `view-echo-area-messages` opens a read-only
-`*Messages*` buffer containing prior minibuffer status and error messages; `q`
-restores the previous buffer. Terminal input parsing uses the original termios
-erase byte, so `0x08` remains Backspace on `stty erase ^H` terminals and
-otherwise works as `C-h`; `M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
+describe configuration variables. `C-h m` uses the shared mode registry to
+describe active modes, and `M-x describe-buffer` describes the current buffer.
+`C-h e` / `view-echo-area-messages` opens a read-only `*Messages*` buffer
+containing prior minibuffer status and error messages; `q` restores the previous
+buffer. Terminal input parsing uses the original termios erase byte, so `0x08`
+remains Backspace on `stty erase ^H` terminals and otherwise works as `C-h`;
+`M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
 
 Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
 the shared file-completion source and relative-path resolution from `C-x C-f`.

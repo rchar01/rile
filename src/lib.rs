@@ -13,6 +13,7 @@ pub mod file;
 pub mod input;
 pub mod keymap;
 pub mod minibuffer;
+pub mod mode;
 pub mod option;
 pub mod render;
 pub mod shell;

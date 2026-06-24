@@ -398,19 +398,19 @@ Validation gate:
 
 Goal: Make active modes and buffer state inspectable.
 
-- [ ] Introduce `ModeId`, `ModeSpec`, `ModeKind`, and a mode registry.
-- [ ] Represent normal editing modes, syntax modes, and special-buffer modes as
+- [x] Introduce `ModeId`, `ModeSpec`, `ModeKind`, and a mode registry.
+- [x] Represent normal editing modes, syntax modes, and special-buffer modes as
       mode specs.
-- [ ] Attach major mode, minor modes, and special-buffer mode data to buffers.
-- [ ] Add local keymaps to relevant modes.
-- [ ] Implement `describe-mode` from the active mode stack.
-- [ ] Implement `describe-buffer` from typed buffer state.
+- [x] Attach major mode, minor modes, and special-buffer mode data to buffers.
+- [x] Add local keymaps to relevant modes.
+- [x] Implement `describe-mode` from the active mode stack.
+- [x] Implement `describe-buffer` from typed buffer state.
 
 Validation gate:
 
-- [ ] Tests require every mode to have summary and docs.
-- [ ] `describe-mode` shows active major, minor, and special-buffer modes.
-- [ ] `describe-buffer` shows name, path, kind, modified state, read-only state,
+- [x] Tests require every mode to have summary and docs.
+- [x] `describe-mode` shows active major, minor, and special-buffer modes.
+- [x] `describe-buffer` shows name, path, kind, modified state, read-only state,
       point, encoding, line ending, and active modes.
 
 ### Phase 7: About And Diagnostics
@@ -501,6 +501,7 @@ Validation gate:
 | 2026-06-24 | Phase 4 command and key help expansion continued. | Kept Emacs-compatible `describe-function`, expanded command help with registry metadata, and added `describe-key` shadowed-binding output. |
 | 2026-06-24 | Phase 4 help formatting completed. | Added reusable help formatting helpers, wrapped generated prose near 70 columns, preserved table/preformatted blocks, and covered prose filling in unit tests. |
 | 2026-06-24 | Phase 5 option registry and variable help implemented. | Added typed option specs, registry-backed config defaults and parsing, `describe-variable` with option completion, and unit plus PTY coverage. |
+| 2026-06-24 | Phase 6 mode and buffer inspection implemented. | Added typed mode specs, active mode-stack rendering, `describe-mode`, `describe-buffer`, and unit plus PTY coverage. |
 
 ## Decision Log
 
