@@ -14,7 +14,10 @@ use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, C
 use crate::config::{Config, ThemeName};
 use crate::file::{Document, DocumentKind};
 use crate::input::{KeyEvent, SpecialKey};
-use crate::keymap::{KeyMap, KeyResolution, format_key_sequence};
+use crate::keymap::{
+    KeyMap, KeyMapStack, KeyStackResolution, buffer_list_keymap, format_key_sequence, help_keymap,
+    messages_keymap, shell_output_keymap,
+};
 use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
@@ -41,6 +44,10 @@ pub struct Editor {
     current_command_sequence: Option<Vec<KeyEvent>>,
     keyboard_macro_prompt_start: Option<usize>,
     keymap: KeyMap,
+    help_keymap: KeyMap,
+    messages_keymap: KeyMap,
+    shell_output_keymap: KeyMap,
+    buffer_list_keymap: KeyMap,
     commands: CommandRegistry,
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
@@ -296,6 +303,10 @@ impl Editor {
             current_command_sequence: None,
             keyboard_macro_prompt_start: None,
             keymap: KeyMap::default(),
+            help_keymap: help_keymap(),
+            messages_keymap: messages_keymap(),
+            shell_output_keymap: shell_output_keymap(),
+            buffer_list_keymap: buffer_list_keymap(),
             commands: CommandRegistry::default(),
             minibuffer: MinibufferState::default(),
             help_return: None,
@@ -554,32 +565,17 @@ impl Editor {
             return Ok(self.handle_describe_key(key));
         }
 
-        if self.document().is_help() && key == KeyEvent::Text("q".to_owned()) {
-            return Ok(self.restore_help_buffer());
-        }
-
-        if self.document().is_messages() && key == KeyEvent::Text("q".to_owned()) {
-            return Ok(self.restore_messages_buffer());
-        }
-
-        if self.document().is_shell_output() && key == KeyEvent::Text("q".to_owned()) {
-            return Ok(self.restore_shell_output_buffer());
-        }
-
-        if self.document().is_buffer_list() && key == KeyEvent::Text("q".to_owned()) {
-            return Ok(self.close_buffer_list_window());
-        }
-
-        if self.document().is_buffer_list() && key == KeyEvent::Special(SpecialKey::Enter) {
-            return Ok(self.open_selected_buffer_list_entry());
-        }
-
         if !self.key_sequence.is_empty() {
             return self.handle_bound_key(key);
         }
 
         if self.universal_argument.is_some() && self.handle_universal_argument_key(&key) {
             return Ok(EditorOutcome::Continue);
+        }
+
+        if self.active_keymaps().resolve(std::slice::from_ref(&key)) != KeyStackResolution::NoMatch
+        {
+            return self.handle_bound_key(key);
         }
 
         match key {
@@ -626,12 +622,25 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         };
 
-        if command.command == Command::UniversalArgument {
-            self.extend_universal_argument()?;
-            return Ok(EditorOutcome::Continue);
-        }
+        self.execute_command_spec(command)
+    }
 
-        let argument = self.take_universal_argument();
+    fn execute_command_by_id(&mut self, id: Command) -> Result<EditorOutcome> {
+        let Some(command) = self.commands.get_by_id(id) else {
+            self.minibuffer
+                .set_message(format!("No such command: {id:?}"));
+            return Ok(EditorOutcome::Continue);
+        };
+
+        self.execute_command_spec(command)
+    }
+
+    fn execute_command_spec(&mut self, command: CommandSpec) -> Result<EditorOutcome> {
+        let argument = if command.command == Command::UniversalArgument {
+            None
+        } else {
+            self.take_universal_argument()
+        };
         self.execute_command(command, argument)
     }
 
@@ -642,8 +651,9 @@ impl Editor {
 
         self.key_sequence.push(key);
 
-        match self.keymap.resolve(&self.key_sequence) {
-            KeyResolution::NoMatch => {
+        let resolution = self.active_keymaps().resolve(&self.key_sequence);
+        match resolution {
+            KeyStackResolution::NoMatch => {
                 self.clear_key_sequence();
                 self.universal_argument = None;
                 self.last_command_was_kill = false;
@@ -651,25 +661,39 @@ impl Editor {
                 self.minibuffer.set_message("Key is not bound");
                 Ok(EditorOutcome::Continue)
             }
-            KeyResolution::Prefix => {
+            KeyStackResolution::Prefix => {
                 self.minibuffer
                     .set_message(format_key_prefix_message(&self.key_sequence));
                 Ok(EditorOutcome::Continue)
             }
-            KeyResolution::Command(name) => {
+            KeyStackResolution::Command { command, .. } => {
                 let command_sequence = self.key_sequence.clone();
                 self.clear_key_sequence();
                 self.current_command_sequence = Some(command_sequence);
-                let result = self.execute_command_by_name(name);
+                let result = self.execute_command_by_id(command);
                 self.current_command_sequence = None;
                 result
             }
         }
     }
 
+    fn active_keymaps(&self) -> KeyMapStack<'_> {
+        match self.document().kind() {
+            DocumentKind::Help => KeyMapStack::new([&self.help_keymap, &self.keymap]),
+            DocumentKind::Messages => KeyMapStack::new([&self.messages_keymap, &self.keymap]),
+            DocumentKind::ShellOutput => {
+                KeyMapStack::new([&self.shell_output_keymap, &self.keymap])
+            }
+            DocumentKind::BufferList => KeyMapStack::new([&self.buffer_list_keymap, &self.keymap]),
+            DocumentKind::Normal | DocumentKind::Welcome | DocumentKind::Completions => {
+                KeyMapStack::global(&self.keymap)
+            }
+        }
+    }
+
     fn show_key_prefix_help(&mut self) -> EditorOutcome {
         let prefix = self.key_sequence.clone();
-        let text = format_key_prefix_help(&self.commands, &self.keymap, &prefix);
+        let text = format_key_prefix_help(&self.commands, &self.active_keymaps(), &prefix);
         self.clear_key_sequence();
         self.open_help_buffer(text)
     }
@@ -1343,12 +1367,11 @@ impl Editor {
             self.yank_state = None;
         }
 
-        let outcome = if let Some(handler) = command.handler {
-            let context = self.command_context(argument);
-            handler(self, context)?
-        } else {
-            self.execute_legacy_command(command_id, argument)?
-        };
+        let handler = command
+            .handler
+            .expect("registered commands should have handlers");
+        let context = self.command_context(argument);
+        let outcome = handler(self, context)?;
 
         if kill_command {
             self.last_command_was_kill = self.kill_recorded_this_command;
@@ -1368,118 +1391,6 @@ impl Editor {
             argument,
             invoked_by,
         }
-    }
-
-    fn execute_legacy_command(
-        &mut self,
-        command: Command,
-        argument: Option<i32>,
-    ) -> Result<CommandOutcome> {
-        use Command::*;
-
-        match command {
-            BackToIndentation => self.move_back_to_indentation(),
-            BackwardChar => self.repeat_signed(argument, Self::move_backward, Self::move_forward),
-            BackwardKillWord => {
-                self.repeat_signed_kill(argument, Self::backward_kill_word, Self::kill_word)
-            }
-            BackwardWord => {
-                self.repeat_signed(argument, Self::move_word_backward, Self::move_word_forward)
-            }
-            BeginningOfBuffer => self.move_beginning_of_buffer(),
-            BeginningOfLine => self.move_beginning_of_line(),
-            CallLastKeyboardMacro => {
-                return self
-                    .call_last_keyboard_macro(argument)
-                    .map(command_outcome_for_editor_outcome);
-            }
-            ClearRectangle => self.clear_rectangle(),
-            CopyRegionAsKill => self.copy_region_as_kill(),
-            CopyRectangleAsKill => self.copy_rectangle_as_kill(),
-            CopyRectangleToRegister => self.start_copy_rectangle_to_register(),
-            CopyToRegister => self.start_copy_to_register(),
-            DeleteBackwardChar => {
-                self.repeat_signed(argument, Self::delete_backward_char, Self::delete_char)
-            }
-            DeleteChar => {
-                self.repeat_signed(argument, Self::delete_char, Self::delete_backward_char)
-            }
-            DeleteRectangle => self.delete_rectangle_command(),
-            DeleteOtherWindows => self.delete_other_windows(),
-            DeleteWindow => self.delete_window(),
-            DescribeFunction => self.start_describe_function(),
-            DescribeKey => self.start_describe_key(),
-            EndKeyboardMacro => self.end_keyboard_macro(),
-            EndOfBuffer => self.move_end_of_buffer(),
-            EndOfLine => self.move_end_of_line(),
-            ExchangePointAndMark => self.exchange_point_and_mark(),
-            ExecuteExtendedCommand => self.start_extended_command(),
-            FindFile => self.start_find_file(),
-            FindFileReadOnly => self.start_find_file_read_only(),
-            ForwardChar => self.repeat_signed(argument, Self::move_forward, Self::move_backward),
-            ForwardWord => {
-                self.repeat_signed(argument, Self::move_word_forward, Self::move_word_backward)
-            }
-            GotoLine => self.start_goto_line(),
-            IncrementalSearchBackward => self.start_incremental_search(SearchDirection::Backward),
-            IncrementalSearchForward => self.start_incremental_search(SearchDirection::Forward),
-            InsertFile => self.start_insert_file(),
-            IncrementRegister => self.start_increment_register(argument),
-            InsertRegister => self.start_insert_register(),
-            JoinLine => self.join_line(),
-            JumpToRegister => self.start_jump_to_register(),
-            ListBuffers => self.list_buffers(),
-            KillLine => self.repeat_positive_kill(argument, Self::kill_line),
-            KillRegion => self.kill_region(),
-            KillRectangle => self.kill_rectangle_command(),
-            KillWord => {
-                self.repeat_signed_kill(argument, Self::kill_word, Self::backward_kill_word)
-            }
-            MarkWholeBuffer => self.mark_whole_buffer(),
-            NewlineAndIndent => self.repeat_positive(argument, Self::newline_and_indent),
-            NextLine => self.move_line_by_argument(argument, 1),
-            NumberToRegister => self.start_number_to_register(argument),
-            OpenLine => self.repeat_positive(argument, Self::open_line),
-            OpenRectangle => self.open_rectangle(),
-            PointToRegister => self.start_point_to_register(),
-            PreviousLine => self.move_line_by_argument(argument, -1),
-            QuotedInsert => self.start_quoted_insert(),
-            QueryReplace => self.start_query_replace(),
-            RectangleMarkMode => self.rectangle_mark_mode(),
-            RectangleNumberLines => self.rectangle_number_lines(argument),
-            Recenter => self.recenter(),
-            SaveBuffer => self.save_buffer(),
-            SaveBuffersKillTerminal => {
-                return Ok(command_outcome_for_editor_outcome(
-                    self.save_buffers_kill_terminal(),
-                ));
-            }
-            SetMarkCommand => self.set_mark_command(),
-            ShellCommand => self.start_shell_command(argument),
-            ShellCommandOnRegion => self.start_shell_command_on_region(argument),
-            StartKeyboardMacro => self.start_keyboard_macro(),
-            StringRectangle => self.start_string_rectangle(),
-            KillBuffer => self.start_kill_buffer(),
-            OtherWindow => self.other_window(),
-            ScrollPageBackward => self.scroll_page_backward(),
-            ScrollPageForward => self.scroll_page_forward(),
-            SwitchToBuffer => self.start_switch_to_buffer(),
-            SplitWindowBelow => self.split_window(SplitAxis::Horizontal),
-            SplitWindowRight => self.split_window(SplitAxis::Vertical),
-            ToggleLineNumbers => self.toggle_line_numbers(),
-            ToggleReadOnly => self.toggle_read_only(),
-            ToggleSearchHighlighting => self.toggle_search_highlighting(),
-            ToggleSyntaxHighlighting => self.toggle_syntax_highlighting(),
-            Undo => self.undo(),
-            UniversalArgument => self.extend_universal_argument(),
-            ViewEchoAreaMessages => self.open_messages_buffer(),
-            WriteFile => self.start_write_file(),
-            Yank => self.yank(),
-            YankRectangle => self.yank_rectangle_command(),
-            YankPop => self.yank_pop(),
-        }?;
-
-        Ok(CommandOutcome::Continue)
     }
 
     pub(crate) fn command_back_to_indentation(
@@ -1534,12 +1445,60 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_buffer_list_select(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.open_selected_buffer_list_entry();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_call_last_keyboard_macro(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.call_last_keyboard_macro(context.argument)
+            .map(command_outcome_for_editor_outcome)
+    }
+
+    pub(crate) fn command_clear_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.clear_rectangle()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_copy_region_as_kill(
         &mut self,
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.copy_region_as_kill()?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_copy_rectangle_as_kill(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.copy_rectangle_as_kill()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_copy_rectangle_to_register(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_copy_rectangle_to_register()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_copy_to_register(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_copy_to_register()?;
+        Ok(CommandOutcome::StartedPrompt)
     }
 
     pub(crate) fn command_delete_backward_char(
@@ -1563,6 +1522,54 @@ impl Editor {
             Self::delete_char,
             Self::delete_backward_char,
         )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_other_windows(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_other_windows()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_window(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_window()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_rectangle_command()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_describe_function(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_describe_function()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_describe_key(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_describe_key()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_end_keyboard_macro(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.end_keyboard_macro()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -1590,6 +1597,27 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_execute_extended_command(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_extended_command()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_find_file(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.start_find_file()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_find_file_read_only(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_find_file_read_only()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_forward_char(
         &mut self,
         context: CommandContext,
@@ -1615,9 +1643,65 @@ impl Editor {
         Ok(CommandOutcome::StartedPrompt)
     }
 
+    pub(crate) fn command_increment_register(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_increment_register(context.argument)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_incremental_search_backward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_incremental_search(SearchDirection::Backward)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_incremental_search_forward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_incremental_search(SearchDirection::Forward)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_insert_file(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_insert_file()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_insert_register(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_insert_register()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_join_line(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.join_line()?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_jump_to_register(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_jump_to_register()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_kill_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_kill_buffer()?;
+        Ok(CommandOutcome::StartedPrompt)
     }
 
     pub(crate) fn command_kill_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
@@ -1633,8 +1717,24 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_kill_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.kill_rectangle_command()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_kill_word(&mut self, context: CommandContext) -> Result<CommandOutcome> {
         self.repeat_signed_kill(context.argument, Self::kill_word, Self::backward_kill_word)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_list_buffers(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.list_buffers()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -1659,8 +1759,32 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_number_to_register(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_number_to_register(context.argument)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_open_line(&mut self, context: CommandContext) -> Result<CommandOutcome> {
         self.repeat_positive(context.argument, Self::open_line)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_open_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.open_rectangle()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_other_window(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.other_window()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -1672,6 +1796,22 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_point_to_register(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_point_to_register()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_query_replace(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_query_replace()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_quoted_insert(
         &mut self,
         _context: CommandContext,
@@ -1680,9 +1820,78 @@ impl Editor {
         Ok(CommandOutcome::StartedPrompt)
     }
 
+    pub(crate) fn command_quit_buffer_list(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.close_buffer_list_window();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_quit_help_window(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.restore_help_buffer();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_quit_messages_window(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.restore_messages_buffer();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_quit_shell_output_window(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.restore_shell_output_buffer();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_rectangle_mark_mode(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.rectangle_mark_mode()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_rectangle_number_lines(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.rectangle_number_lines(context.argument)?;
+        if context.argument.is_some() {
+            Ok(CommandOutcome::StartedPrompt)
+        } else {
+            Ok(CommandOutcome::Continue)
+        }
+    }
+
     pub(crate) fn command_recenter(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.recenter()?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_save_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.save_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_save_buffers_kill_terminal(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        Ok(command_outcome_for_editor_outcome(
+            self.save_buffers_kill_terminal(),
+        ))
     }
 
     pub(crate) fn command_scroll_page_backward(
@@ -1709,13 +1918,133 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_shell_command(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_shell_command(context.argument)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_shell_command_on_region(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_shell_command_on_region(context.argument)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_start_keyboard_macro(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_keyboard_macro()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_string_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_string_rectangle()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_split_window_below(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.split_window(SplitAxis::Horizontal)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_split_window_right(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.split_window(SplitAxis::Vertical)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_switch_to_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_switch_to_buffer()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_toggle_line_numbers(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.toggle_line_numbers()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_toggle_read_only(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.toggle_read_only()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_toggle_search_highlighting(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.toggle_search_highlighting()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_toggle_syntax_highlighting(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.toggle_syntax_highlighting()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_undo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.undo()?;
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_universal_argument(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.extend_universal_argument()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_view_echo_area_messages(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.open_messages_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_write_file(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_write_file()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_yank(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.yank()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_yank_rectangle(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.yank_rectangle_command()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -3306,19 +3635,20 @@ impl Editor {
         sequence.push(key);
         let sequence = sequence.clone();
 
-        match self.keymap.resolve(&sequence) {
-            KeyResolution::Prefix => {
+        match self.active_keymaps().resolve(&sequence) {
+            KeyStackResolution::Prefix => {
                 self.minibuffer
                     .set_message(format!("Describe key: {}-", format_key_sequence(&sequence)));
                 EditorOutcome::Continue
             }
-            KeyResolution::Command(command) => {
+            KeyStackResolution::Command { keymap, command } => {
                 self.describe_key = None;
+                let keymaps = self.active_keymaps();
                 let text =
-                    format_describe_key_help(&self.commands, &self.keymap, &sequence, command);
+                    format_describe_key_help(&self.commands, &keymaps, &sequence, keymap, command);
                 self.open_help_buffer(text)
             }
-            KeyResolution::NoMatch => {
+            KeyStackResolution::NoMatch => {
                 self.describe_key = None;
                 let text = format_unbound_key_help(&sequence);
                 self.open_help_buffer(text)
@@ -3332,7 +3662,12 @@ impl Editor {
                 .set_message(format!("No such command: {name}"));
             return EditorOutcome::Continue;
         };
-        let text = format_describe_function_help(&self.keymap, command.name, command.doc);
+        let text = format_describe_function_help(
+            &self.active_keymaps(),
+            command.command,
+            command.name,
+            command.doc,
+        );
         self.open_help_buffer(text)
     }
 
@@ -4892,25 +5227,27 @@ fn is_key_prefix_help(key: &KeyEvent) -> bool {
 
 fn format_key_prefix_help(
     commands: &CommandRegistry,
-    keymap: &KeyMap,
+    keymaps: &KeyMapStack<'_>,
     prefix: &[KeyEvent],
 ) -> String {
-    let mut text = format!(
-        "Global Bindings Starting With {}:\n\n",
-        format_key_sequence(prefix)
-    );
+    let title =
+        if keymaps.maps().len() == 1 && keymaps.maps()[0].id() == crate::keymap::KeyMapId::Global {
+            "Global Bindings"
+        } else {
+            "Active Bindings"
+        };
+    let mut text = format!("{title} Starting With {}:\n\n", format_key_sequence(prefix));
     text.push_str("Key             Binding                        Description\n");
     text.push_str("---             -------                        -----------\n\n");
 
-    for binding in keymap.bindings_starting_with(prefix) {
-        let description = commands
-            .get(binding.command)
-            .map(|command| command.summary)
-            .unwrap_or("");
+    for binding in keymaps.bindings_starting_with(prefix) {
+        let command = commands.get_by_id(binding.binding.command());
+        let name = command.map(|command| command.name).unwrap_or("<unknown>");
+        let description = command.map(|command| command.summary).unwrap_or("");
         text.push_str(&format!(
             "{:<15} {:<30} {}\n",
-            format_key_sequence(&binding.sequence),
-            binding.command,
+            format_key_sequence(&binding.binding.sequence),
+            name,
             description
         ));
     }
@@ -4920,22 +5257,38 @@ fn format_key_prefix_help(
 
 fn format_describe_key_help(
     commands: &CommandRegistry,
-    keymap: &KeyMap,
+    keymaps: &KeyMapStack<'_>,
     sequence: &[KeyEvent],
-    command: &str,
+    keymap: crate::keymap::KeyMapId,
+    command: Command,
 ) -> String {
+    let command = commands.get_by_id(command);
+    let name = command.map(|command| command.name).unwrap_or("<unknown>");
     let mut text = format!(
         "{} runs the command `{}`.\n\n",
         format_key_sequence(sequence),
-        command
+        name
     );
-    let description = commands.get(command).map(|command| command.doc);
-    text.push_str(&format_command_help(keymap, command, description));
+    if let Some(keymap_name) = keymaps.keymap_name(keymap) {
+        text.push_str(&format!("It was found in `{keymap_name}`.\n\n"));
+    }
+    let description = command.map(|command| command.doc);
+    text.push_str(&format_command_help(
+        keymaps,
+        command.map(|command| command.command),
+        name,
+        description,
+    ));
     text
 }
 
-fn format_describe_function_help(keymap: &KeyMap, name: &str, description: &str) -> String {
-    format_command_help(keymap, name, Some(description))
+fn format_describe_function_help(
+    keymaps: &KeyMapStack<'_>,
+    command: Command,
+    name: &str,
+    description: &str,
+) -> String {
+    format_command_help(keymaps, Some(command), name, Some(description))
 }
 
 fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
@@ -4945,18 +5298,25 @@ fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
     )
 }
 
-fn format_command_help(keymap: &KeyMap, name: &str, description: Option<&str>) -> String {
+fn format_command_help(
+    keymaps: &KeyMapStack<'_>,
+    command: Option<Command>,
+    name: &str,
+    description: Option<&str>,
+) -> String {
     let mut text = match description {
         Some(description) => format!("{} is an interactive command.\n\n{}\n", name, description),
         None => format!("{} is not a known interactive command.\n", name),
     };
-    let bindings = keymap.bindings_for_command(name);
+    let bindings = command
+        .map(|command| keymaps.bindings_for_command(command))
+        .unwrap_or_default();
     if bindings.is_empty() {
         text.push_str("\nIt is not bound to any key.\n");
     } else {
         let keys = bindings
             .iter()
-            .map(|binding| format_key_sequence(&binding.sequence))
+            .map(|binding| format_key_sequence(&binding.binding.sequence))
             .collect::<Vec<_>>()
             .join(", ");
         text.push_str(&format!("\nIt is bound to {}.\n", keys));
@@ -7973,6 +8333,34 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_key_reports_help_buffer_local_binding() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start in help buffer");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("describe-key should start");
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("describe-key should describe local q");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("q runs the command `quit-help-window`."));
+        assert!(help.contains("It was found in `help-mode-map`."));
+        assert!(help.contains("It is bound to q."));
+    }
+
+    #[test]
     fn special_buffers_are_read_only_but_normal_q_inserts() {
         let mut welcome = Editor::new(Document::welcome());
 
@@ -9239,6 +9627,11 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("split right should work");
         assert_eq!(editor.window_count(), 3);
         assert_eq!(editor.window_layouts(12, 80).len(), 3);
+
+        editor
+            .execute_command_by_name("other-window")
+            .expect("other window should work");
+        assert_eq!(editor.window_count(), 3);
 
         editor
             .execute_command_by_name("delete-window")

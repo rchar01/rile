@@ -1,5 +1,65 @@
 2026-06-23  Robert Charusta  <rch-public@posteo.net>
 
+	* src/command.rs: Add command-backed local actions for help, messages,
+	shell-output, and buffer-list special buffers.
+	* src/keymap.rs: Add named special-buffer keymaps and active stack binding
+	lookup helpers that hide shadowed lower-priority bindings.
+	* src/editor.rs: Route special-buffer q and RET behavior through the active
+	keymap stack and registry dispatch, and make describe-key/command help use
+	active binding lookup.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 3
+	special-buffer local keymap slice complete.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/keymap.rs: Add KeyMapStack and source-aware stack resolution with
+	tests for global fallback, higher-priority map precedence, and prefix
+	shadowing.
+	* src/editor.rs: Route normal key dispatch and describe-key lookup through
+	the active keymap stack for the current global keymap layer.
+	* docs/self-documentation-architecture-plan.md: Mark active keymap stack
+	resolution progress in Phase 3.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/keymap.rs: Add KeyMapId, KeySeq, BindingTarget, and command-ID-backed
+	key bindings for the global keymap.
+	* src/editor.rs, src/completion.rs: Resolve key dispatch, describe-key help,
+	key-prefix help, and command-completion key hints through typed command IDs.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 3 typed
+	global keymap slice complete.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs: Register handlers for all remaining command families and
+	test that every default command has a handler.
+	* src/editor.rs: Remove the legacy command dispatch fallback, route
+	universal-argument through the registry path, and add handlers for file,
+	search, shell, register, rectangle, macro, help, configuration, and system
+	commands.
+	* docs/self-documentation-architecture-plan.md: Mark Phase 2 command
+	dispatch migration complete.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs: Register handlers for buffer commands and test that the
+	buffer command family has handlers.
+	* src/editor.rs: Add command handler wrappers for buffer list, kill, and
+	switch prompts.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 2 buffer
+	command handler migration complete.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs: Register handlers for window commands and test that the
+	window command family has handlers.
+	* src/editor.rs: Add command handler wrappers for window split, delete, and
+	selection commands.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 2 window
+	command handler migration complete.
+
+2026-06-23  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs: Register handlers for editing-category commands and test
 	that the migrated command set has handlers.
 	* src/editor.rs: Add command handler wrappers for editing-category commands,

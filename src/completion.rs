@@ -142,7 +142,7 @@ impl CompletionSession {
             .interactive_commands()
             .map(|command| {
                 let candidate = CompletionCandidate::new(command.name, command.summary);
-                match keymap.bindings_for_command(command.name).first() {
+                match keymap.bindings_for_command(command.command).first() {
                     Some(binding) => {
                         candidate.with_key_binding(format_key_sequence(&binding.sequence))
                     }

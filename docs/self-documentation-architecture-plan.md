@@ -314,35 +314,39 @@ semantics.
 - [x] Convert movement commands to registered handlers.
 - [x] Convert editing-category commands, including normal kill/yank commands,
       to registered handlers.
-- [ ] Convert file, buffer, window, search, query-replace, shell, register,
-      rectangle, macro, and help commands to registered handlers.
-- [ ] Route key execution and `M-x` execution through the same command dispatch
+- [x] Convert window commands to registered handlers.
+- [x] Convert buffer commands to registered handlers.
+- [x] Convert file, search, query-replace, shell, register, rectangle, macro,
+      and help commands to registered handlers.
+- [x] Route key execution and `M-x` execution through the same command dispatch
       path.
-- [ ] Preserve universal argument, keyboard macro recording, kill-command
+- [x] Preserve universal argument, keyboard macro recording, kill-command
       coalescing, yank-pop state, minibuffer prompt startup, and exit outcomes.
 
 Validation gate:
 
-- [ ] Focused command execution tests pass.
-- [ ] `M-x` command completion and execution tests pass.
-- [ ] PTY smoke tests for common keybindings pass.
+- [x] Focused command execution tests pass.
+- [x] `M-x` command completion and execution tests pass.
+- [x] PTY smoke tests for common keybindings pass.
 
 ### Phase 3: Layered Keymaps
 
 Goal: Make all active bindings inspectable through named keymaps.
 
-- [ ] Introduce `KeyMapId`, named `KeyMap`, `KeySeq`, and `BindingTarget`.
-- [ ] Replace string command targets with `CommandId` targets.
-- [ ] Implement active keymap stack resolution.
-- [ ] Move special-buffer keys such as help `q`, messages `q`, buffer-list
+- [x] Introduce `KeyMapId`, named `KeyMap`, `KeySeq`, and `BindingTarget`.
+- [x] Replace string command targets with `CommandId` targets.
+- [x] Implement active keymap stack resolution for the current global layer.
+- [x] Move special-buffer keys such as help `q`, messages `q`, buffer-list
       `RET`, and buffer-list `q` into local keymaps.
-- [ ] Add shadowing-aware binding lookup for help output.
+- [x] Add shadowing-aware binding lookup for help output.
 
 Validation gate:
 
-- [ ] Tests prove every keybinding targets an existing command.
-- [ ] Tests prove active keymap precedence and shadowing behavior.
-- [ ] Prefix help and existing keybindings keep their visible behavior.
+- [x] Tests prove every keybinding targets an existing command.
+- [x] Tests prove active keymap precedence behavior.
+- [x] Tests prove shadowing behavior.
+- [x] Prefix help and existing keybindings keep their visible behavior after
+      local keymaps are added.
 
 ### Phase 4: Help Command Expansion
 
@@ -486,6 +490,12 @@ Validation gate:
 | 2026-06-23 | Phase 1 command registry foundations implemented. | Added typed command IDs, categories, dispatch context types, by-ID/category lookup, metadata validation tests, and a default-keybinding registry coverage test. |
 | 2026-06-23 | Phase 2 movement command dispatch migration started. | Registered handlers for movement commands and routed handler-backed commands through shared command bookkeeping with legacy fallback for unmigrated commands. |
 | 2026-06-23 | Phase 2 editing-category dispatch migration continued. | Registered handlers for editing-category commands, including normal kill/yank commands, and added registry coverage requiring those commands to use handlers. |
+| 2026-06-23 | Phase 2 window command dispatch migration continued. | Registered handlers for window commands and added registry coverage requiring those commands to use handlers. |
+| 2026-06-23 | Phase 2 buffer command dispatch migration continued. | Registered handlers for buffer commands and added registry coverage requiring those commands to use handlers. |
+| 2026-06-23 | Phase 2 command dispatch migration completed. | Registered handlers for every default command, removed the legacy dispatch fallback, added registry coverage requiring every command to use a handler, and verified with focused dispatch tests plus `make verify`. |
+| 2026-06-23 | Phase 3 layered keymap migration started. | Introduced typed keymap IDs, key sequences, binding targets, and command-ID-backed global key bindings; focused `keymap`, `completion`, `describe_key`, and key-dispatch tests passed before `make verify`. |
+| 2026-06-23 | Phase 3 active keymap stack plumbing added. | Added `KeyMapStack` resolution with keymap source metadata and tests covering global fallback plus higher-priority map precedence, including prefix shadowing. |
+| 2026-06-23 | Phase 3 special-buffer local keymaps added. | Moved help/messages/shell-output `q` plus buffer-list `q` and `RET` into named local keymaps backed by registered commands, and made help binding lookup use the active stack. |
 
 ## Decision Log
 

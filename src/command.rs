@@ -11,6 +11,7 @@ pub enum Command {
     BackwardWord,
     BeginningOfBuffer,
     BeginningOfLine,
+    BufferListSelect,
     CallLastKeyboardMacro,
     ClearRectangle,
     CopyRegionAsKill,
@@ -55,6 +56,10 @@ pub enum Command {
     OpenRectangle,
     PreviousLine,
     PointToRegister,
+    QuitBufferList,
+    QuitHelpWindow,
+    QuitMessagesWindow,
+    QuitShellOutputWindow,
     QuotedInsert,
     QueryReplace,
     RectangleMarkMode,
@@ -144,11 +149,13 @@ impl CommandCategory {
             | MarkWholeBuffer | NewlineAndIndent | OpenLine | QuotedInsert | SetMarkCommand
             | Undo | Yank | YankPop => Self::Editing,
             FindFile | FindFileReadOnly | InsertFile | SaveBuffer | WriteFile => Self::Files,
-            KillBuffer | ListBuffers | SwitchToBuffer => Self::Buffers,
+            BufferListSelect | KillBuffer | ListBuffers | QuitBufferList | SwitchToBuffer => {
+                Self::Buffers
+            }
             DeleteOtherWindows | DeleteWindow | OtherWindow | SplitWindowBelow
             | SplitWindowRight => Self::Windows,
             IncrementalSearchBackward | IncrementalSearchForward | QueryReplace => Self::Search,
-            ShellCommand | ShellCommandOnRegion => Self::Shell,
+            ShellCommand | ShellCommandOnRegion | QuitShellOutputWindow => Self::Shell,
             CopyRectangleToRegister
             | CopyToRegister
             | IncrementRegister
@@ -161,7 +168,8 @@ impl CommandCategory {
             | YankRectangle => Self::Rectangles,
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
-            DescribeFunction | DescribeKey | ViewEchoAreaMessages => Self::Help,
+            DescribeFunction | DescribeKey | QuitHelpWindow | QuitMessagesWindow
+            | ViewEchoAreaMessages => Self::Help,
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -183,6 +191,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         BackwardWord => "Move point backward by one word.",
         BeginningOfBuffer => "Move point to the beginning of the current buffer.",
         BeginningOfLine => "Move point to the beginning of the current line.",
+        BufferListSelect => "Visit the buffer named on the current buffer-list row.",
         CallLastKeyboardMacro => "Replay the most recently recorded keyboard macro.",
         ClearRectangle => "Replace the active rectangle contents with spaces.",
         CopyRegionAsKill => "Copy the active region to the kill ring without deleting it.",
@@ -227,6 +236,14 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         OpenRectangle => "Open blank columns across the active rectangle.",
         PreviousLine => "Move point to the previous visual line, preserving the goal column.",
         PointToRegister => "Store the current buffer and point in a prompted register.",
+        QuitBufferList => "Close the buffer list window or leave the buffer list buffer.",
+        QuitHelpWindow => "Restore the buffer that was active before the help window opened.",
+        QuitMessagesWindow => {
+            "Restore the buffer that was active before the messages window opened."
+        }
+        QuitShellOutputWindow => {
+            "Restore the buffer that was active before the shell output window opened."
+        }
         QuotedInsert => "Read the next key and insert it literally when supported.",
         QueryReplace => "Prompt for search and replacement strings and replace interactively.",
         RectangleMarkMode => "Activate rectangle mark mode for column-oriented region commands.",
@@ -300,6 +317,7 @@ pub enum CommandRegistryError {
     DuplicateName(&'static str),
     MissingSummary(CommandId),
     MissingDoc(CommandId),
+    MissingHandler(CommandId),
 }
 
 #[derive(Debug, Clone)]
@@ -387,6 +405,9 @@ impl CommandRegistry {
             {
                 return Err(CommandRegistryError::DuplicateName(command.name));
             }
+            if command.handler.is_none() {
+                return Err(CommandRegistryError::MissingHandler(command.command));
+            }
         }
 
         Ok(())
@@ -435,17 +456,26 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_beginning_of_line),
         CommandSpec::new(
+            "buffer-list-select",
+            "Visit buffer on current buffer-list row",
+            true,
+            BufferListSelect,
+        )
+        .with_handler(crate::editor::Editor::command_buffer_list_select),
+        CommandSpec::new(
             "call-last-kbd-macro",
             "Execute the last keyboard macro",
             true,
             CallLastKeyboardMacro,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_call_last_keyboard_macro),
         CommandSpec::new(
             "clear-rectangle",
             "Replace rectangle contents with spaces",
             true,
             ClearRectangle,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_clear_rectangle),
         CommandSpec::new(
             "copy-region-as-kill",
             "Copy active region to kill ring",
@@ -458,19 +488,22 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Copy rectangle to kill ring",
             true,
             CopyRectangleAsKill,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_copy_rectangle_as_kill),
         CommandSpec::new(
             "copy-rectangle-to-register",
             "Copy rectangle to a register",
             true,
             CopyRectangleToRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_copy_rectangle_to_register),
         CommandSpec::new(
             "copy-to-register",
             "Copy active region to a register",
             true,
             CopyToRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_copy_to_register),
         CommandSpec::new(
             "delete-backward-char",
             "Delete character before cursor",
@@ -490,27 +523,33 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Delete rectangle without saving it",
             true,
             DeleteRectangle,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_delete_rectangle),
         CommandSpec::new(
             "delete-other-windows",
             "Delete all other windows",
             true,
             DeleteOtherWindows,
-        ),
-        CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow),
+        )
+        .with_handler(crate::editor::Editor::command_delete_other_windows),
+        CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow)
+            .with_handler(crate::editor::Editor::command_delete_window),
         CommandSpec::new(
             "describe-function",
             "Describe an interactive command",
             true,
             DescribeFunction,
-        ),
-        CommandSpec::new("describe-key", "Describe a key binding", true, DescribeKey),
+        )
+        .with_handler(crate::editor::Editor::command_describe_function),
+        CommandSpec::new("describe-key", "Describe a key binding", true, DescribeKey)
+            .with_handler(crate::editor::Editor::command_describe_key),
         CommandSpec::new(
             "end-kbd-macro",
             "Finish defining a keyboard macro",
             true,
             EndKeyboardMacro,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_end_keyboard_macro),
         CommandSpec::new(
             "end-of-buffer",
             "Move cursor to end of buffer",
@@ -532,14 +571,17 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Run command by name",
             true,
             ExecuteExtendedCommand,
-        ),
-        CommandSpec::new("find-file", "Open file by path", true, FindFile),
+        )
+        .with_handler(crate::editor::Editor::command_execute_extended_command),
+        CommandSpec::new("find-file", "Open file by path", true, FindFile)
+            .with_handler(crate::editor::Editor::command_find_file),
         CommandSpec::new(
             "find-file-read-only",
             "Open file read-only by path",
             true,
             FindFileReadOnly,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_find_file_read_only),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar)
             .with_handler(crate::editor::Editor::command_forward_char),
         CommandSpec::new(
@@ -556,31 +598,36 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Search backward incrementally",
             true,
             IncrementalSearchBackward,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_incremental_search_backward),
         CommandSpec::new(
             "isearch-forward",
             "Search forward incrementally",
             true,
             IncrementalSearchForward,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_incremental_search_forward),
         CommandSpec::new(
             "insert-file",
             "Insert file contents at point",
             true,
             InsertFile,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_insert_file),
         CommandSpec::new(
             "increment-register",
             "Add numeric argument to a number register",
             true,
             IncrementRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_increment_register),
         CommandSpec::new(
             "insert-register",
             "Insert text, rectangle, or number from a register",
             true,
             InsertRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_insert_register),
         CommandSpec::new(
             "join-line",
             "Join current line to previous line",
@@ -593,8 +640,10 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Jump to a point register",
             true,
             JumpToRegister,
-        ),
-        CommandSpec::new("list-buffers", "List active buffers", true, ListBuffers),
+        )
+        .with_handler(crate::editor::Editor::command_jump_to_register),
+        CommandSpec::new("list-buffers", "List active buffers", true, ListBuffers)
+            .with_handler(crate::editor::Editor::command_list_buffers),
         CommandSpec::new(
             "newline-and-indent",
             "Insert newline and indent according to mode",
@@ -602,7 +651,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             NewlineAndIndent,
         )
         .with_handler(crate::editor::Editor::command_newline_and_indent),
-        CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer),
+        CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer)
+            .with_handler(crate::editor::Editor::command_kill_buffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine)
             .with_handler(crate::editor::Editor::command_kill_line),
         CommandSpec::new("kill-region", "Kill active region", true, KillRegion)
@@ -612,7 +662,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Kill rectangle to kill ring",
             true,
             KillRectangle,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_kill_rectangle),
         CommandSpec::new("kill-word", "Kill word after cursor", true, KillWord)
             .with_handler(crate::editor::Editor::command_kill_word),
         CommandSpec::new(
@@ -629,7 +680,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Store numeric argument in a register",
             true,
             NumberToRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_number_to_register),
         CommandSpec::new("open-line", "Insert newline after point", true, OpenLine)
             .with_handler(crate::editor::Editor::command_open_line),
         CommandSpec::new(
@@ -637,8 +689,10 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Insert blank space into rectangle columns",
             true,
             OpenRectangle,
-        ),
-        CommandSpec::new("other-window", "Select next window", true, OtherWindow),
+        )
+        .with_handler(crate::editor::Editor::command_open_rectangle),
+        CommandSpec::new("other-window", "Select next window", true, OtherWindow)
+            .with_handler(crate::editor::Editor::command_other_window),
         CommandSpec::new("previous-line", "Move cursor up", true, PreviousLine)
             .with_handler(crate::editor::Editor::command_previous_line),
         CommandSpec::new(
@@ -649,32 +703,65 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_quoted_insert),
         CommandSpec::new(
+            "quit-buffer-list",
+            "Close the buffer list window",
+            true,
+            QuitBufferList,
+        )
+        .with_handler(crate::editor::Editor::command_quit_buffer_list),
+        CommandSpec::new(
+            "quit-help-window",
+            "Restore the previous buffer from help",
+            true,
+            QuitHelpWindow,
+        )
+        .with_handler(crate::editor::Editor::command_quit_help_window),
+        CommandSpec::new(
+            "quit-messages-window",
+            "Restore the previous buffer from messages",
+            true,
+            QuitMessagesWindow,
+        )
+        .with_handler(crate::editor::Editor::command_quit_messages_window),
+        CommandSpec::new(
+            "quit-shell-output-window",
+            "Restore the previous buffer from shell output",
+            true,
+            QuitShellOutputWindow,
+        )
+        .with_handler(crate::editor::Editor::command_quit_shell_output_window),
+        CommandSpec::new(
             "point-to-register",
             "Store point in a register",
             true,
             PointToRegister,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_point_to_register),
         CommandSpec::new(
             "query-replace",
             "Interactively replace text",
             true,
             QueryReplace,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_query_replace),
         CommandSpec::new(
             "rectangle-mark-mode",
             "Mark a rectangular region",
             true,
             RectangleMarkMode,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_rectangle_mark_mode),
         CommandSpec::new(
             "rectangle-number-lines",
             "Insert line numbers at the rectangle left edge",
             true,
             RectangleNumberLines,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_rectangle_number_lines),
         CommandSpec::new("recenter", "Center cursor in window", true, Recenter)
             .with_handler(crate::editor::Editor::command_recenter),
-        CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer),
+        CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer)
+            .with_handler(crate::editor::Editor::command_save_buffer),
         CommandSpec::new(
             "scroll-page-backward",
             "Scroll one page backward",
@@ -694,7 +781,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Quit Rile",
             true,
             SaveBuffersKillTerminal,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_save_buffers_kill_terminal),
         CommandSpec::new(
             "set-mark-command",
             "Set mark at point",
@@ -702,67 +790,78 @@ pub fn default_commands() -> Vec<CommandSpec> {
             SetMarkCommand,
         )
         .with_handler(crate::editor::Editor::command_set_mark_command),
-        CommandSpec::new("shell-command", "Run a shell command", true, ShellCommand),
+        CommandSpec::new("shell-command", "Run a shell command", true, ShellCommand)
+            .with_handler(crate::editor::Editor::command_shell_command),
         CommandSpec::new(
             "shell-command-on-region",
             "Run a shell command with region as input",
             true,
             ShellCommandOnRegion,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_shell_command_on_region),
         CommandSpec::new(
             "start-kbd-macro",
             "Start defining a keyboard macro",
             true,
             StartKeyboardMacro,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_start_keyboard_macro),
         CommandSpec::new(
             "string-rectangle",
             "Replace rectangle contents with a string",
             true,
             StringRectangle,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_string_rectangle),
         CommandSpec::new(
             "split-window-below",
             "Split current window horizontally",
             true,
             SplitWindowBelow,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_split_window_below),
         CommandSpec::new(
             "split-window-right",
             "Split current window vertically",
             true,
             SplitWindowRight,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_split_window_right),
         CommandSpec::new(
             "switch-to-buffer",
             "Switch to a buffer by name",
             true,
             SwitchToBuffer,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_switch_to_buffer),
         CommandSpec::new(
             "toggle-line-numbers",
             "Toggle line numbers",
             true,
             ToggleLineNumbers,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_toggle_line_numbers),
         CommandSpec::new(
             "toggle-read-only",
             "Toggle buffer read-only state",
             true,
             ToggleReadOnly,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_toggle_read_only),
         CommandSpec::new(
             "toggle-search-highlighting",
             "Toggle search highlighting",
             true,
             ToggleSearchHighlighting,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_toggle_search_highlighting),
         CommandSpec::new(
             "toggle-syntax-highlighting",
             "Toggle syntax highlighting",
             true,
             ToggleSyntaxHighlighting,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_toggle_syntax_highlighting),
         CommandSpec::new("undo", "Undo last edit", true, Undo)
             .with_handler(crate::editor::Editor::command_undo),
         CommandSpec::new(
@@ -770,14 +869,17 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Set a numeric argument for the next command",
             true,
             UniversalArgument,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_universal_argument),
         CommandSpec::new(
             "view-echo-area-messages",
             "Show the message history",
             true,
             ViewEchoAreaMessages,
-        ),
-        CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile),
+        )
+        .with_handler(crate::editor::Editor::command_view_echo_area_messages),
+        CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile)
+            .with_handler(crate::editor::Editor::command_write_file),
         CommandSpec::new("yank", "Insert latest kill", true, Yank)
             .with_handler(crate::editor::Editor::command_yank),
         CommandSpec::new(
@@ -785,7 +887,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             "Insert latest killed rectangle",
             true,
             YankRectangle,
-        ),
+        )
+        .with_handler(crate::editor::Editor::command_yank_rectangle),
         CommandSpec::new("yank-pop", "Rotate the just-yanked kill", true, YankPop)
             .with_handler(crate::editor::Editor::command_yank_pop),
     ]
@@ -807,6 +910,7 @@ mod tests {
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));
         assert!(registry.contains("backward-word"));
+        assert!(registry.contains("buffer-list-select"));
         assert!(registry.contains("call-last-kbd-macro"));
         assert!(registry.contains("clear-rectangle"));
         assert!(registry.contains("copy-rectangle-as-kill"));
@@ -832,6 +936,10 @@ mod tests {
         assert!(registry.contains("number-to-register"));
         assert!(registry.contains("point-to-register"));
         assert!(registry.contains("quoted-insert"));
+        assert!(registry.contains("quit-buffer-list"));
+        assert!(registry.contains("quit-help-window"));
+        assert!(registry.contains("quit-messages-window"));
+        assert!(registry.contains("quit-shell-output-window"));
         assert!(registry.contains("switch-to-buffer"));
         assert!(registry.contains("kill-buffer"));
         assert!(registry.contains("kill-line"));
@@ -927,8 +1035,27 @@ mod tests {
 
         assert_eq!(
             buffers,
-            vec!["list-buffers", "kill-buffer", "switch-to-buffer"]
+            vec![
+                "buffer-list-select",
+                "list-buffers",
+                "kill-buffer",
+                "quit-buffer-list",
+                "switch-to-buffer"
+            ]
         );
+    }
+
+    #[test]
+    fn default_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+
+        for command in registry.commands() {
+            assert!(
+                command.handler.is_some(),
+                "{} should have a handler",
+                command.name
+            );
+        }
     }
 
     #[test]
@@ -951,6 +1078,97 @@ mod tests {
                 .commands_by_category(CommandCategory::Editing)
                 .all(|command| command.handler.is_some())
         );
+    }
+
+    #[test]
+    fn buffer_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+
+        assert!(
+            registry
+                .commands_by_category(CommandCategory::Buffers)
+                .all(|command| command.handler.is_some())
+        );
+    }
+
+    #[test]
+    fn phase_2_buffer_slice_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+        let commands = [
+            Command::BufferListSelect,
+            Command::KillBuffer,
+            Command::ListBuffers,
+            Command::QuitBufferList,
+            Command::SwitchToBuffer,
+        ];
+
+        for command in commands {
+            let spec = registry
+                .get_by_id(command)
+                .expect("command should be registered");
+            assert!(
+                spec.handler.is_some(),
+                "{} should have a handler",
+                spec.name
+            );
+        }
+    }
+
+    #[test]
+    fn phase_3_local_special_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+        let commands = [
+            Command::BufferListSelect,
+            Command::QuitBufferList,
+            Command::QuitHelpWindow,
+            Command::QuitMessagesWindow,
+            Command::QuitShellOutputWindow,
+        ];
+
+        for command in commands {
+            let spec = registry
+                .get_by_id(command)
+                .expect("command should be registered");
+            assert!(
+                spec.handler.is_some(),
+                "{} should have a handler",
+                spec.name
+            );
+        }
+    }
+
+    #[test]
+    fn window_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+
+        assert!(
+            registry
+                .commands_by_category(CommandCategory::Windows)
+                .all(|command| command.handler.is_some())
+        );
+    }
+
+    #[test]
+    fn phase_2_window_slice_commands_have_registered_handlers() {
+        let registry = CommandRegistry::default();
+        let commands = [
+            Command::DeleteOtherWindows,
+            Command::DeleteWindow,
+            Command::OtherWindow,
+            Command::SplitWindowBelow,
+            Command::SplitWindowRight,
+        ];
+
+        for command in commands {
+            let spec = registry
+                .get_by_id(command)
+                .expect("command should be registered");
+            assert!(
+                spec.handler.is_some(),
+                "{} should have a handler",
+                spec.name
+            );
+        }
     }
 
     #[test]
@@ -1055,6 +1273,21 @@ mod tests {
         assert_eq!(
             missing_doc.err(),
             Some(CommandRegistryError::MissingDoc(Command::SaveBuffer))
+        );
+    }
+
+    #[test]
+    fn registry_rejects_missing_handlers() {
+        let registry = CommandRegistry::try_new([CommandSpec::new(
+            "save-buffer",
+            "Save current buffer",
+            true,
+            Command::SaveBuffer,
+        )]);
+
+        assert_eq!(
+            registry.err(),
+            Some(CommandRegistryError::MissingHandler(Command::SaveBuffer))
         );
     }
 }

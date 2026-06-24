@@ -1,19 +1,43 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use crate::command::{Command, CommandId};
 use crate::input::{KeyEvent, SpecialKey};
+
+pub type KeySeq = Vec<KeyEvent>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum KeyMapId {
+    Minibuffer,
+    Transient,
+    SpecialBuffer,
+    MinorMode,
+    MajorMode,
+    Global,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum BindingTarget {
+    Command(CommandId),
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyBinding {
-    pub sequence: Vec<KeyEvent>,
-    pub command: &'static str,
+    pub sequence: KeySeq,
+    pub target: BindingTarget,
 }
 
 impl KeyBinding {
-    pub fn new(sequence: impl Into<Vec<KeyEvent>>, command: &'static str) -> Self {
+    pub fn new(sequence: impl Into<KeySeq>, command: CommandId) -> Self {
         Self {
             sequence: sequence.into(),
-            command,
+            target: BindingTarget::Command(command),
+        }
+    }
+
+    pub fn command(&self) -> CommandId {
+        match self.target {
+            BindingTarget::Command(command) => command,
         }
     }
 }
@@ -22,11 +46,30 @@ impl KeyBinding {
 pub enum KeyResolution {
     NoMatch,
     Prefix,
-    Command(&'static str),
+    Command(CommandId),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyStackResolution {
+    NoMatch,
+    Prefix,
+    Command {
+        keymap: KeyMapId,
+        command: CommandId,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeyStackBinding<'a> {
+    pub keymap: KeyMapId,
+    pub keymap_name: &'static str,
+    pub binding: &'a KeyBinding,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyMap {
+    id: KeyMapId,
+    name: &'static str,
     bindings: Vec<KeyBinding>,
 }
 
@@ -38,9 +81,23 @@ impl Default for KeyMap {
 
 impl KeyMap {
     pub fn new(bindings: impl Into<Vec<KeyBinding>>) -> Self {
+        Self::named(KeyMapId::Global, "global-map", bindings)
+    }
+
+    pub fn named(id: KeyMapId, name: &'static str, bindings: impl Into<Vec<KeyBinding>>) -> Self {
         Self {
+            id,
+            name,
             bindings: bindings.into(),
         }
+    }
+
+    pub fn id(&self) -> KeyMapId {
+        self.id
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
     }
 
     pub fn resolve(&self, sequence: &[KeyEvent]) -> KeyResolution {
@@ -48,7 +105,7 @@ impl KeyMap {
 
         for binding in &self.bindings {
             if binding.sequence == sequence {
-                return KeyResolution::Command(binding.command);
+                return KeyResolution::Command(binding.command());
             }
             if binding.sequence.starts_with(sequence) {
                 has_prefix = true;
@@ -77,11 +134,100 @@ impl KeyMap {
             .find(|binding| binding.sequence == sequence)
     }
 
-    pub fn bindings_for_command(&self, command: &str) -> Vec<&KeyBinding> {
+    pub fn bindings_for_command(&self, command: CommandId) -> Vec<&KeyBinding> {
         self.bindings
             .iter()
-            .filter(|binding| binding.command == command)
+            .filter(|binding| binding.command() == command)
             .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyMapStack<'a> {
+    maps: Vec<&'a KeyMap>,
+}
+
+impl<'a> KeyMapStack<'a> {
+    pub fn new(maps: impl Into<Vec<&'a KeyMap>>) -> Self {
+        Self { maps: maps.into() }
+    }
+
+    pub fn global(global: &'a KeyMap) -> Self {
+        Self::new([global])
+    }
+
+    pub fn maps(&self) -> &[&'a KeyMap] {
+        &self.maps
+    }
+
+    pub fn resolve(&self, sequence: &[KeyEvent]) -> KeyStackResolution {
+        for &keymap in &self.maps {
+            match keymap.resolve(sequence) {
+                KeyResolution::Command(command) => {
+                    return KeyStackResolution::Command {
+                        keymap: keymap.id(),
+                        command,
+                    };
+                }
+                KeyResolution::Prefix => return KeyStackResolution::Prefix,
+                KeyResolution::NoMatch => {}
+            }
+        }
+
+        KeyStackResolution::NoMatch
+    }
+
+    pub fn bindings_starting_with(&self, prefix: &[KeyEvent]) -> Vec<KeyStackBinding<'a>> {
+        let mut bindings = Vec::new();
+        for &keymap in &self.maps {
+            bindings.extend(
+                keymap
+                    .bindings_starting_with(prefix)
+                    .into_iter()
+                    .filter(|binding| self.binding_is_active(keymap, binding))
+                    .map(|binding| KeyStackBinding {
+                        keymap: keymap.id(),
+                        keymap_name: keymap.name(),
+                        binding,
+                    }),
+            );
+        }
+        bindings
+    }
+
+    pub fn bindings_for_command(&self, command: CommandId) -> Vec<KeyStackBinding<'a>> {
+        let mut bindings = Vec::new();
+        for &keymap in &self.maps {
+            bindings.extend(
+                keymap
+                    .bindings_for_command(command)
+                    .into_iter()
+                    .filter(|binding| self.binding_is_active(keymap, binding))
+                    .map(|binding| KeyStackBinding {
+                        keymap: keymap.id(),
+                        keymap_name: keymap.name(),
+                        binding,
+                    }),
+            );
+        }
+        bindings
+    }
+
+    pub fn keymap_name(&self, id: KeyMapId) -> Option<&'static str> {
+        self.maps()
+            .iter()
+            .find(|keymap| keymap.id() == id)
+            .map(|keymap| keymap.name())
+    }
+
+    fn binding_is_active(&self, keymap: &KeyMap, binding: &KeyBinding) -> bool {
+        matches!(
+            self.resolve(&binding.sequence),
+            KeyStackResolution::Command {
+                keymap: resolved_keymap,
+                command,
+            } if resolved_keymap == keymap.id() && command == binding.command()
+        )
     }
 }
 
@@ -124,135 +270,124 @@ fn format_special_key(key: SpecialKey) -> String {
 
 pub fn default_bindings() -> Vec<KeyBinding> {
     use crate::input::SpecialKey;
+    use Command::*;
 
     vec![
-        KeyBinding::new([KeyEvent::Ctrl('b')], "backward-char"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowLeft)], "backward-char"),
-        KeyBinding::new([KeyEvent::Ctrl('f')], "forward-char"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], "forward-char"),
-        KeyBinding::new([KeyEvent::Meta('b')], "backward-word"),
-        KeyBinding::new([KeyEvent::Meta('f')], "forward-word"),
-        KeyBinding::new([KeyEvent::Meta('^')], "join-line"),
-        KeyBinding::new([KeyEvent::Meta('d')], "kill-word"),
-        KeyBinding::new([KeyEvent::Meta('m')], "back-to-indentation"),
+        KeyBinding::new([KeyEvent::Ctrl('b')], BackwardChar),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowLeft)], BackwardChar),
+        KeyBinding::new([KeyEvent::Ctrl('f')], ForwardChar),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], ForwardChar),
+        KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
+        KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
+        KeyBinding::new([KeyEvent::Meta('^')], JoinLine),
+        KeyBinding::new([KeyEvent::Meta('d')], KillWord),
+        KeyBinding::new([KeyEvent::Meta('m')], BackToIndentation),
         KeyBinding::new(
             [KeyEvent::MetaSpecial(SpecialKey::Backspace)],
-            "backward-kill-word",
+            BackwardKillWord,
         ),
-        KeyBinding::new([KeyEvent::Meta('<')], "beginning-of-buffer"),
-        KeyBinding::new([KeyEvent::Meta('>')], "end-of-buffer"),
-        KeyBinding::new([KeyEvent::Ctrl('p')], "previous-line"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], "previous-line"),
-        KeyBinding::new([KeyEvent::Ctrl('n')], "next-line"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowDown)], "next-line"),
-        KeyBinding::new([KeyEvent::Ctrl('v')], "scroll-page-forward"),
-        KeyBinding::new([KeyEvent::Meta('v')], "scroll-page-backward"),
-        KeyBinding::new(
-            [KeyEvent::Special(SpecialKey::PageDown)],
-            "scroll-page-forward",
-        ),
-        KeyBinding::new(
-            [KeyEvent::Special(SpecialKey::PageUp)],
-            "scroll-page-backward",
-        ),
-        KeyBinding::new([KeyEvent::Ctrl('a')], "beginning-of-line"),
-        KeyBinding::new([KeyEvent::Ctrl('l')], "recenter"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::Home)], "beginning-of-line"),
-        KeyBinding::new([KeyEvent::Ctrl('e')], "end-of-line"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::End)], "end-of-line"),
-        KeyBinding::new([KeyEvent::Ctrl('d')], "delete-char"),
-        KeyBinding::new([KeyEvent::Ctrl('j')], "newline-and-indent"),
-        KeyBinding::new([KeyEvent::Ctrl('o')], "open-line"),
-        KeyBinding::new([KeyEvent::Ctrl('q')], "quoted-insert"),
-        KeyBinding::new([KeyEvent::Ctrl('u')], "universal-argument"),
-        KeyBinding::new([KeyEvent::Ctrl('@')], "set-mark-command"),
+        KeyBinding::new([KeyEvent::Meta('<')], BeginningOfBuffer),
+        KeyBinding::new([KeyEvent::Meta('>')], EndOfBuffer),
+        KeyBinding::new([KeyEvent::Ctrl('p')], PreviousLine),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], PreviousLine),
+        KeyBinding::new([KeyEvent::Ctrl('n')], NextLine),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowDown)], NextLine),
+        KeyBinding::new([KeyEvent::Ctrl('v')], ScrollPageForward),
+        KeyBinding::new([KeyEvent::Meta('v')], ScrollPageBackward),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::PageDown)], ScrollPageForward),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::PageUp)], ScrollPageBackward),
+        KeyBinding::new([KeyEvent::Ctrl('a')], BeginningOfLine),
+        KeyBinding::new([KeyEvent::Ctrl('l')], Recenter),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::Home)], BeginningOfLine),
+        KeyBinding::new([KeyEvent::Ctrl('e')], EndOfLine),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::End)], EndOfLine),
+        KeyBinding::new([KeyEvent::Ctrl('d')], DeleteChar),
+        KeyBinding::new([KeyEvent::Ctrl('j')], NewlineAndIndent),
+        KeyBinding::new([KeyEvent::Ctrl('o')], OpenLine),
+        KeyBinding::new([KeyEvent::Ctrl('q')], QuotedInsert),
+        KeyBinding::new([KeyEvent::Ctrl('u')], UniversalArgument),
+        KeyBinding::new([KeyEvent::Ctrl('@')], SetMarkCommand),
         KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("e".to_owned())],
-            "view-echo-area-messages",
+            ViewEchoAreaMessages,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())],
-            "describe-function",
+            DescribeFunction,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())],
-            "describe-key",
+            DescribeKey,
         ),
-        KeyBinding::new([KeyEvent::Ctrl('_')], "undo"),
-        KeyBinding::new([KeyEvent::Ctrl('k')], "kill-line"),
-        KeyBinding::new([KeyEvent::Ctrl('s')], "isearch-forward"),
-        KeyBinding::new([KeyEvent::Ctrl('w')], "kill-region"),
-        KeyBinding::new([KeyEvent::Ctrl('r')], "isearch-backward"),
-        KeyBinding::new([KeyEvent::Ctrl('y')], "yank"),
-        KeyBinding::new([KeyEvent::Special(SpecialKey::Delete)], "delete-char"),
+        KeyBinding::new([KeyEvent::Ctrl('_')], Undo),
+        KeyBinding::new([KeyEvent::Ctrl('k')], KillLine),
+        KeyBinding::new([KeyEvent::Ctrl('s')], IncrementalSearchForward),
+        KeyBinding::new([KeyEvent::Ctrl('w')], KillRegion),
+        KeyBinding::new([KeyEvent::Ctrl('r')], IncrementalSearchBackward),
+        KeyBinding::new([KeyEvent::Ctrl('y')], Yank),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::Delete)], DeleteChar),
         KeyBinding::new(
             [KeyEvent::Special(SpecialKey::Backspace)],
-            "delete-backward-char",
+            DeleteBackwardChar,
         ),
-        KeyBinding::new([KeyEvent::Meta('x')], "execute-extended-command"),
-        KeyBinding::new([KeyEvent::Meta('y')], "yank-pop"),
+        KeyBinding::new([KeyEvent::Meta('x')], ExecuteExtendedCommand),
+        KeyBinding::new([KeyEvent::Meta('y')], YankPop),
         KeyBinding::new(
             [KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())],
-            "goto-line",
+            GotoLine,
         ),
-        KeyBinding::new([KeyEvent::Meta('%')], "query-replace"),
-        KeyBinding::new([KeyEvent::Meta('!')], "shell-command"),
-        KeyBinding::new([KeyEvent::Meta('|')], "shell-command-on-region"),
-        KeyBinding::new([KeyEvent::Meta('w')], "copy-region-as-kill"),
+        KeyBinding::new([KeyEvent::Meta('%')], QueryReplace),
+        KeyBinding::new([KeyEvent::Meta('!')], ShellCommand),
+        KeyBinding::new([KeyEvent::Meta('|')], ShellCommandOnRegion),
+        KeyBinding::new([KeyEvent::Meta('w')], CopyRegionAsKill),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())],
-            "delete-window",
+            DeleteWindow,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("1".to_owned())],
-            "delete-other-windows",
+            DeleteOtherWindows,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("2".to_owned())],
-            "split-window-below",
+            SplitWindowBelow,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("3".to_owned())],
-            "split-window-right",
+            SplitWindowRight,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("b".to_owned())],
-            "switch-to-buffer",
+            SwitchToBuffer,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("i".to_owned())],
-            "insert-file",
+            InsertFile,
         ),
-        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], "find-file"),
-        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('b')], "list-buffers"),
-        KeyBinding::new(
-            [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')],
-            "toggle-read-only",
-        ),
-        KeyBinding::new(
-            [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')],
-            "find-file-read-only",
-        ),
-        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], "write-file"),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], FindFile),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('b')], ListBuffers),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')], ToggleReadOnly),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')], FindFileReadOnly),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], WriteFile),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
-            "start-kbd-macro",
+            StartKeyboardMacro,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())],
-            "end-kbd-macro",
+            EndKeyboardMacro,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("e".to_owned())],
-            "call-last-kbd-macro",
+            CallLastKeyboardMacro,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("h".to_owned())],
-            "mark-whole-buffer",
+            MarkWholeBuffer,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text(" ".to_owned())],
-            "rectangle-mark-mode",
+            RectangleMarkMode,
         ),
         KeyBinding::new(
             [
@@ -260,7 +395,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text(" ".to_owned()),
             ],
-            "point-to-register",
+            PointToRegister,
         ),
         KeyBinding::new(
             [
@@ -268,7 +403,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("+".to_owned()),
             ],
-            "increment-register",
+            IncrementRegister,
         ),
         KeyBinding::new(
             [
@@ -276,7 +411,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("N".to_owned()),
             ],
-            "rectangle-number-lines",
+            RectangleNumberLines,
         ),
         KeyBinding::new(
             [
@@ -284,7 +419,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("c".to_owned()),
             ],
-            "clear-rectangle",
+            ClearRectangle,
         ),
         KeyBinding::new(
             [
@@ -292,7 +427,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("d".to_owned()),
             ],
-            "delete-rectangle",
+            DeleteRectangle,
         ),
         KeyBinding::new(
             [
@@ -300,7 +435,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("i".to_owned()),
             ],
-            "insert-register",
+            InsertRegister,
         ),
         KeyBinding::new(
             [
@@ -308,7 +443,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("j".to_owned()),
             ],
-            "jump-to-register",
+            JumpToRegister,
         ),
         KeyBinding::new(
             [
@@ -316,7 +451,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("k".to_owned()),
             ],
-            "kill-rectangle",
+            KillRectangle,
         ),
         KeyBinding::new(
             [
@@ -324,7 +459,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("n".to_owned()),
             ],
-            "number-to-register",
+            NumberToRegister,
         ),
         KeyBinding::new(
             [
@@ -332,7 +467,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Meta('w'),
             ],
-            "copy-rectangle-as-kill",
+            CopyRectangleAsKill,
         ),
         KeyBinding::new(
             [
@@ -340,7 +475,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("o".to_owned()),
             ],
-            "open-rectangle",
+            OpenRectangle,
         ),
         KeyBinding::new(
             [
@@ -348,7 +483,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("r".to_owned()),
             ],
-            "copy-rectangle-to-register",
+            CopyRectangleToRegister,
         ),
         KeyBinding::new(
             [
@@ -356,7 +491,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("s".to_owned()),
             ],
-            "copy-to-register",
+            CopyToRegister,
         ),
         KeyBinding::new(
             [
@@ -364,7 +499,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("t".to_owned()),
             ],
-            "string-rectangle",
+            StringRectangle,
         ),
         KeyBinding::new(
             [
@@ -372,32 +507,88 @@ pub fn default_bindings() -> Vec<KeyBinding> {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("y".to_owned()),
             ],
-            "yank-rectangle",
+            YankRectangle,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')],
-            "exchange-point-and-mark",
+            ExchangePointAndMark,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())],
-            "kill-buffer",
+            KillBuffer,
         ),
-        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')], "save-buffer"),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')], SaveBuffer),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("o".to_owned())],
-            "other-window",
+            OtherWindow,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Ctrl('c')],
-            "save-buffers-kill-terminal",
+            SaveBuffersKillTerminal,
         ),
     ]
 }
 
+pub fn help_keymap() -> KeyMap {
+    use Command::*;
+
+    KeyMap::named(
+        KeyMapId::SpecialBuffer,
+        "help-mode-map",
+        [KeyBinding::new(
+            [KeyEvent::Text("q".to_owned())],
+            QuitHelpWindow,
+        )],
+    )
+}
+
+pub fn messages_keymap() -> KeyMap {
+    use Command::*;
+
+    KeyMap::named(
+        KeyMapId::SpecialBuffer,
+        "messages-mode-map",
+        [KeyBinding::new(
+            [KeyEvent::Text("q".to_owned())],
+            QuitMessagesWindow,
+        )],
+    )
+}
+
+pub fn shell_output_keymap() -> KeyMap {
+    use Command::*;
+
+    KeyMap::named(
+        KeyMapId::SpecialBuffer,
+        "shell-output-mode-map",
+        [KeyBinding::new(
+            [KeyEvent::Text("q".to_owned())],
+            QuitShellOutputWindow,
+        )],
+    )
+}
+
+pub fn buffer_list_keymap() -> KeyMap {
+    use crate::input::SpecialKey;
+    use Command::*;
+
+    KeyMap::named(
+        KeyMapId::SpecialBuffer,
+        "buffer-list-mode-map",
+        [
+            KeyBinding::new([KeyEvent::Text("q".to_owned())], QuitBufferList),
+            KeyBinding::new([KeyEvent::Special(SpecialKey::Enter)], BufferListSelect),
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{KeyMap, KeyResolution};
-    use crate::command::CommandRegistry;
+    use super::{
+        KeyBinding, KeyMap, KeyMapId, KeyMapStack, KeyResolution, KeyStackResolution,
+        buffer_list_keymap, help_keymap, messages_keymap, shell_output_keymap,
+    };
+    use crate::command::{Command::*, CommandRegistry};
     use crate::input::{KeyEvent, SpecialKey};
 
     #[test]
@@ -406,115 +597,115 @@ mod tests {
 
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('f')]),
-            KeyResolution::Command("forward-char")
+            KeyResolution::Command(ForwardChar)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('f')]),
-            KeyResolution::Command("forward-word")
+            KeyResolution::Command(ForwardWord)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('b')]),
-            KeyResolution::Command("backward-word")
+            KeyResolution::Command(BackwardWord)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('d')]),
-            KeyResolution::Command("kill-word")
+            KeyResolution::Command(KillWord)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('m')]),
-            KeyResolution::Command("back-to-indentation")
+            KeyResolution::Command(BackToIndentation)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::MetaSpecial(SpecialKey::Backspace)]),
-            KeyResolution::Command("backward-kill-word")
+            KeyResolution::Command(BackwardKillWord)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('<')]),
-            KeyResolution::Command("beginning-of-buffer")
+            KeyResolution::Command(BeginningOfBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('>')]),
-            KeyResolution::Command("end-of-buffer")
+            KeyResolution::Command(EndOfBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),
-            KeyResolution::Command("isearch-forward")
+            KeyResolution::Command(IncrementalSearchForward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('v')]),
-            KeyResolution::Command("scroll-page-forward")
+            KeyResolution::Command(ScrollPageForward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('v')]),
-            KeyResolution::Command("scroll-page-backward")
+            KeyResolution::Command(ScrollPageBackward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Special(SpecialKey::PageDown)]),
-            KeyResolution::Command("scroll-page-forward")
+            KeyResolution::Command(ScrollPageForward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Special(SpecialKey::PageUp)]),
-            KeyResolution::Command("scroll-page-backward")
+            KeyResolution::Command(ScrollPageBackward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('l')]),
-            KeyResolution::Command("recenter")
+            KeyResolution::Command(Recenter)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('r')]),
-            KeyResolution::Command("isearch-backward")
+            KeyResolution::Command(IncrementalSearchBackward)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('k')]),
-            KeyResolution::Command("kill-line")
+            KeyResolution::Command(KillLine)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('j')]),
-            KeyResolution::Command("newline-and-indent")
+            KeyResolution::Command(NewlineAndIndent)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('o')]),
-            KeyResolution::Command("open-line")
+            KeyResolution::Command(OpenLine)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('^')]),
-            KeyResolution::Command("join-line")
+            KeyResolution::Command(JoinLine)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('q')]),
-            KeyResolution::Command("quoted-insert")
+            KeyResolution::Command(QuotedInsert)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('w')]),
-            KeyResolution::Command("kill-region")
+            KeyResolution::Command(KillRegion)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('y')]),
-            KeyResolution::Command("yank")
+            KeyResolution::Command(Yank)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('_')]),
-            KeyResolution::Command("undo")
+            KeyResolution::Command(Undo)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('@')]),
-            KeyResolution::Command("set-mark-command")
+            KeyResolution::Command(SetMarkCommand)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('w')]),
-            KeyResolution::Command("copy-region-as-kill")
+            KeyResolution::Command(CopyRegionAsKill)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('%')]),
-            KeyResolution::Command("query-replace")
+            KeyResolution::Command(QueryReplace)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('!')]),
-            KeyResolution::Command("shell-command")
+            KeyResolution::Command(ShellCommand)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('|')]),
-            KeyResolution::Command("shell-command-on-region")
+            KeyResolution::Command(ShellCommandOnRegion)
         );
     }
 
@@ -536,63 +727,63 @@ mod tests {
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("e".to_owned())]),
-            KeyResolution::Command("view-echo-area-messages")
+            KeyResolution::Command(ViewEchoAreaMessages)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("f".to_owned())]),
-            KeyResolution::Command("describe-function")
+            KeyResolution::Command(DescribeFunction)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())]),
-            KeyResolution::Command("describe-key")
+            KeyResolution::Command(DescribeKey)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]),
-            KeyResolution::Command("goto-line")
+            KeyResolution::Command(GotoLine)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')]),
-            KeyResolution::Command("save-buffer")
+            KeyResolution::Command(SaveBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')]),
-            KeyResolution::Command("find-file")
+            KeyResolution::Command(FindFile)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('b')]),
-            KeyResolution::Command("list-buffers")
+            KeyResolution::Command(ListBuffers)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),
-            KeyResolution::Command("find-file-read-only")
+            KeyResolution::Command(FindFileReadOnly)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')]),
-            KeyResolution::Command("toggle-read-only")
+            KeyResolution::Command(ToggleReadOnly)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')]),
-            KeyResolution::Command("write-file")
+            KeyResolution::Command(WriteFile)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())]),
-            KeyResolution::Command("start-kbd-macro")
+            KeyResolution::Command(StartKeyboardMacro)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())]),
-            KeyResolution::Command("end-kbd-macro")
+            KeyResolution::Command(EndKeyboardMacro)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("e".to_owned())]),
-            KeyResolution::Command("call-last-kbd-macro")
+            KeyResolution::Command(CallLastKeyboardMacro)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("h".to_owned())]),
-            KeyResolution::Command("mark-whole-buffer")
+            KeyResolution::Command(MarkWholeBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(" ".to_owned())]),
-            KeyResolution::Command("rectangle-mark-mode")
+            KeyResolution::Command(RectangleMarkMode)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("r".to_owned())]),
@@ -604,7 +795,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text(" ".to_owned())
             ]),
-            KeyResolution::Command("point-to-register")
+            KeyResolution::Command(PointToRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -612,7 +803,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("+".to_owned())
             ]),
-            KeyResolution::Command("increment-register")
+            KeyResolution::Command(IncrementRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -620,7 +811,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("N".to_owned())
             ]),
-            KeyResolution::Command("rectangle-number-lines")
+            KeyResolution::Command(RectangleNumberLines)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -628,7 +819,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("c".to_owned())
             ]),
-            KeyResolution::Command("clear-rectangle")
+            KeyResolution::Command(ClearRectangle)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -636,7 +827,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("d".to_owned())
             ]),
-            KeyResolution::Command("delete-rectangle")
+            KeyResolution::Command(DeleteRectangle)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -644,7 +835,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("i".to_owned())
             ]),
-            KeyResolution::Command("insert-register")
+            KeyResolution::Command(InsertRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -652,7 +843,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("j".to_owned())
             ]),
-            KeyResolution::Command("jump-to-register")
+            KeyResolution::Command(JumpToRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -660,7 +851,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("k".to_owned())
             ]),
-            KeyResolution::Command("kill-rectangle")
+            KeyResolution::Command(KillRectangle)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -668,7 +859,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("n".to_owned())
             ]),
-            KeyResolution::Command("number-to-register")
+            KeyResolution::Command(NumberToRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -676,7 +867,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Meta('w')
             ]),
-            KeyResolution::Command("copy-rectangle-as-kill")
+            KeyResolution::Command(CopyRectangleAsKill)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -684,7 +875,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("o".to_owned())
             ]),
-            KeyResolution::Command("open-rectangle")
+            KeyResolution::Command(OpenRectangle)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -692,7 +883,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("r".to_owned())
             ]),
-            KeyResolution::Command("copy-rectangle-to-register")
+            KeyResolution::Command(CopyRectangleToRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -700,7 +891,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("s".to_owned())
             ]),
-            KeyResolution::Command("copy-to-register")
+            KeyResolution::Command(CopyToRegister)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -708,7 +899,7 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("t".to_owned())
             ]),
-            KeyResolution::Command("string-rectangle")
+            KeyResolution::Command(StringRectangle)
         );
         assert_eq!(
             keymap.resolve(&[
@@ -716,43 +907,43 @@ mod tests {
                 KeyEvent::Text("r".to_owned()),
                 KeyEvent::Text("y".to_owned())
             ]),
-            KeyResolution::Command("yank-rectangle")
+            KeyResolution::Command(YankRectangle)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('x')]),
-            KeyResolution::Command("exchange-point-and-mark")
+            KeyResolution::Command(ExchangePointAndMark)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("b".to_owned())]),
-            KeyResolution::Command("switch-to-buffer")
+            KeyResolution::Command(SwitchToBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("i".to_owned())]),
-            KeyResolution::Command("insert-file")
+            KeyResolution::Command(InsertFile)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())]),
-            KeyResolution::Command("kill-buffer")
+            KeyResolution::Command(KillBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("2".to_owned())]),
-            KeyResolution::Command("split-window-below")
+            KeyResolution::Command(SplitWindowBelow)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("3".to_owned())]),
-            KeyResolution::Command("split-window-right")
+            KeyResolution::Command(SplitWindowRight)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("0".to_owned())]),
-            KeyResolution::Command("delete-window")
+            KeyResolution::Command(DeleteWindow)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("1".to_owned())]),
-            KeyResolution::Command("delete-other-windows")
+            KeyResolution::Command(DeleteOtherWindows)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("o".to_owned())]),
-            KeyResolution::Command("other-window")
+            KeyResolution::Command(OtherWindow)
         );
     }
 
@@ -767,12 +958,148 @@ mod tests {
     }
 
     #[test]
+    fn active_keymap_stack_resolves_global_bindings() {
+        let keymap = KeyMap::default();
+        let stack = KeyMapStack::global(&keymap);
+
+        assert_eq!(stack.maps().len(), 1);
+        assert_eq!(stack.maps()[0].id(), KeyMapId::Global);
+        assert_eq!(stack.maps()[0].name(), "global-map");
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('f')]),
+            KeyStackResolution::Command {
+                keymap: KeyMapId::Global,
+                command: ForwardChar,
+            }
+        );
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('x')]),
+            KeyStackResolution::Prefix
+        );
+    }
+
+    #[test]
+    fn active_keymap_stack_respects_priority_order() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new([KeyEvent::Ctrl('f')], OtherWindow)],
+        );
+        let global = KeyMap::default();
+        let stack = KeyMapStack::new([&special, &global]);
+
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('f')]),
+            KeyStackResolution::Command {
+                keymap: KeyMapId::SpecialBuffer,
+                command: OtherWindow,
+            }
+        );
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('b')]),
+            KeyStackResolution::Command {
+                keymap: KeyMapId::Global,
+                command: BackwardChar,
+            }
+        );
+    }
+
+    #[test]
+    fn active_keymap_stack_prefix_shadows_lower_priority_command() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new(
+                [KeyEvent::Ctrl('f'), KeyEvent::Text("q".to_owned())],
+                OtherWindow,
+            )],
+        );
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [KeyBinding::new([KeyEvent::Ctrl('f')], ForwardChar)],
+        );
+        let stack = KeyMapStack::new([&special, &global]);
+
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('f')]),
+            KeyStackResolution::Prefix
+        );
+        assert_eq!(
+            stack.resolve(&[KeyEvent::Ctrl('f'), KeyEvent::Text("q".to_owned())]),
+            KeyStackResolution::Command {
+                keymap: KeyMapId::SpecialBuffer,
+                command: OtherWindow,
+            }
+        );
+    }
+
+    #[test]
+    fn active_keymap_stack_reports_active_bindings_with_sources() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new(
+                [KeyEvent::Text("q".to_owned())],
+                OtherWindow,
+            )],
+        );
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [
+                KeyBinding::new([KeyEvent::Text("q".to_owned())], ForwardChar),
+                KeyBinding::new([KeyEvent::Ctrl('b')], BackwardChar),
+            ],
+        );
+        let stack = KeyMapStack::new([&special, &global]);
+
+        let other_window_bindings = stack.bindings_for_command(OtherWindow);
+        assert_eq!(other_window_bindings.len(), 1);
+        assert_eq!(other_window_bindings[0].keymap, KeyMapId::SpecialBuffer);
+        assert_eq!(other_window_bindings[0].keymap_name, "special-buffer-map");
+        assert_eq!(other_window_bindings[0].binding.command(), OtherWindow);
+
+        assert!(stack.bindings_for_command(ForwardChar).is_empty());
+        assert_eq!(stack.bindings_for_command(BackwardChar).len(), 1);
+    }
+
+    #[test]
+    fn local_special_buffer_keymaps_resolve_local_commands() {
+        assert_eq!(help_keymap().name(), "help-mode-map");
+        assert_eq!(messages_keymap().name(), "messages-mode-map");
+        assert_eq!(shell_output_keymap().name(), "shell-output-mode-map");
+        assert_eq!(buffer_list_keymap().name(), "buffer-list-mode-map");
+
+        assert_eq!(
+            help_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),
+            KeyResolution::Command(QuitHelpWindow)
+        );
+        assert_eq!(
+            messages_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),
+            KeyResolution::Command(QuitMessagesWindow)
+        );
+        assert_eq!(
+            shell_output_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),
+            KeyResolution::Command(QuitShellOutputWindow)
+        );
+        assert_eq!(
+            buffer_list_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),
+            KeyResolution::Command(QuitBufferList)
+        );
+        assert_eq!(
+            buffer_list_keymap().resolve(&[KeyEvent::Special(SpecialKey::Enter)]),
+            KeyResolution::Command(BufferListSelect)
+        );
+    }
+
+    #[test]
     fn lists_bindings_starting_with_prefix() {
         let keymap = KeyMap::default();
         let bindings = keymap.bindings_starting_with(&[KeyEvent::Meta('g')]);
 
         assert_eq!(bindings.len(), 1);
-        assert_eq!(bindings[0].command, "goto-line");
+        assert_eq!(bindings[0].command(), GotoLine);
         assert_eq!(
             bindings[0].sequence,
             vec![KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]
@@ -786,11 +1113,11 @@ mod tests {
         assert_eq!(
             keymap
                 .binding_for_sequence(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')])
-                .map(|binding| binding.command),
-            Some("find-file")
+                .map(|binding| binding.command()),
+            Some(FindFile)
         );
-        assert_eq!(keymap.bindings_for_command("find-file").len(), 1);
-        assert!(keymap.bindings_for_command("missing-command").is_empty());
+        assert_eq!(keymap.bindings_for_command(FindFile).len(), 1);
+        assert!(!keymap.bindings_for_command(SaveBuffer).is_empty());
     }
 
     #[test]
@@ -800,10 +1127,32 @@ mod tests {
 
         for binding in &keymap.bindings {
             assert!(
-                commands.contains(binding.command),
-                "{} should target a registered command",
-                binding.command
+                commands.get_by_id(binding.command()).is_some(),
+                "{:?} should target a registered command",
+                binding.command()
             );
+        }
+    }
+
+    #[test]
+    fn local_special_bindings_target_registered_commands() {
+        let commands = CommandRegistry::default();
+        let keymaps = [
+            help_keymap(),
+            messages_keymap(),
+            shell_output_keymap(),
+            buffer_list_keymap(),
+        ];
+
+        for keymap in keymaps {
+            for binding in keymap.bindings_starting_with(&[]) {
+                assert!(
+                    commands.get_by_id(binding.command()).is_some(),
+                    "{:?} in {} should target a registered command",
+                    binding.command(),
+                    keymap.name()
+                );
+            }
         }
     }
 }
