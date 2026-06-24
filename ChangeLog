@@ -1,5 +1,22 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/option.rs: Add typed option IDs, specs, values, registry validation,
+	parsing, defaults, and metadata coverage tests.
+	* src/config.rs: Build defaults from option specs and route config parsing
+	through the option registry.
+	* src/completion.rs: Add option-name completion sessions.
+	* src/command.rs: Register describe-variable.
+	* src/keymap.rs: Bind describe-variable to C-h v.
+	* src/minibuffer.rs: Add a describe-variable prompt kind.
+	* src/editor.rs: Add describe-variable prompt handling, current option value
+	lookup, option help rendering, and tests.
+	* tests/pty_movement.rs: Cover opening describe-variable help through C-h v.
+	* README.md, NEWS, docs/development.md,
+	docs/self-documentation-architecture-plan.md: Document option registry and
+	describe-variable behavior.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/terminal/mod.rs: Show normal mode-line position as scroll status,
 	line, and display column, and update stale tests for the old line-only
 	format.

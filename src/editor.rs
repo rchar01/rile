@@ -19,6 +19,7 @@ use crate::keymap::{
     messages_keymap, shell_output_keymap,
 };
 use crate::minibuffer::{MinibufferState, PromptKind};
+use crate::option::{OptionId, OptionRegistry, OptionSpec, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
@@ -464,6 +465,7 @@ impl Editor {
         if !matches!(
             prompt.kind,
             PromptKind::DescribeFunction
+                | PromptKind::DescribeVariable
                 | PromptKind::ExtendedCommand
                 | PromptKind::FindFile
                 | PromptKind::FindFileReadOnly
@@ -1092,6 +1094,9 @@ impl Editor {
             Some(CompletionSource::Commands) if self.commands.contains(trimmed) => {
                 return trimmed.to_owned();
             }
+            Some(CompletionSource::Options) if OptionRegistry::default().contains(trimmed) => {
+                return trimmed.to_owned();
+            }
             Some(CompletionSource::Files) => return self.file_completion_accept_input(input),
             Some(CompletionSource::Buffers)
                 if matches!(kind, PromptKind::KillBuffer | PromptKind::SwitchToBuffer) =>
@@ -1338,6 +1343,7 @@ impl Editor {
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
         match kind {
             PromptKind::DescribeFunction => Ok(self.describe_function(input.trim())),
+            PromptKind::DescribeVariable => Ok(self.describe_variable(input.trim())),
             PromptKind::ExtendedCommand => self.submit_extended_command(input.trim()),
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
@@ -1591,6 +1597,14 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.start_describe_key(DescribeKeyMode::Brief)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_describe_variable(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_describe_variable()?;
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -3660,6 +3674,17 @@ impl Editor {
         Ok(())
     }
 
+    fn start_describe_variable(&mut self) -> Result<()> {
+        self.minibuffer
+            .start_prompt(PromptKind::DescribeVariable, "Describe variable: ");
+        self.completion = Some(CompletionSession::options(
+            &OptionRegistry::default(),
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
+        Ok(())
+    }
+
     fn start_describe_key(&mut self, mode: DescribeKeyMode) -> Result<()> {
         self.describe_key = Some(DescribeKeyState {
             sequence: Vec::new(),
@@ -3733,6 +3758,38 @@ impl Editor {
         };
         let text = format_describe_function_help(&self.active_keymaps(), command);
         self.open_help_buffer(text)
+    }
+
+    fn describe_variable(&mut self, name: &str) -> EditorOutcome {
+        let registry = OptionRegistry::default();
+        let Some(option) = registry.get(name) else {
+            self.minibuffer
+                .set_message(format!("No such variable: {name}"));
+            return EditorOutcome::Continue;
+        };
+        let text = format_describe_variable_help(option, self.option_value(option.id));
+        self.open_help_buffer(text)
+    }
+
+    fn option_value(&self, option: OptionId) -> OptionValue {
+        match option {
+            OptionId::TabWidth => OptionValue::Integer(self.tab_width),
+            OptionId::LineNumbers => OptionValue::Boolean(self.line_numbers),
+            OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_enabled),
+            OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
+            OptionId::BackupOnSave => OptionValue::Boolean(self.backup_on_save),
+            OptionId::Theme => OptionValue::Choice(self.theme.name()),
+            OptionId::CompletionStyle => OptionValue::Choice(self.completion_config.style.name()),
+            OptionId::CompletionMaxCandidates => {
+                OptionValue::Integer(self.completion_config.max_candidates)
+            }
+            OptionId::CompletionShowAnnotations => {
+                OptionValue::Boolean(self.completion_config.show_annotations)
+            }
+            OptionId::CompletionMatching => {
+                OptionValue::Choice(self.completion_config.matching.name())
+            }
+        }
     }
 
     fn start_find_file(&mut self) -> Result<()> {
@@ -5309,6 +5366,10 @@ fn append_command_field(text: &mut String, label: &str, value: &str) {
     text.push_str(&format!("{label}: {value}\n"));
 }
 
+fn append_option_field(text: &mut String, label: &str, value: impl std::fmt::Display) {
+    text.push_str(&format!("{label}: {value}\n"));
+}
+
 fn append_wrapped_prose(text: &mut String, prose: &str) {
     for (index, block) in prose.split("\n\n").enumerate() {
         if index > 0 {
@@ -5537,6 +5598,24 @@ fn format_describe_key_brief_message(
 
 fn format_describe_function_help(keymaps: &KeyMapStack<'_>, command: CommandSpec) -> String {
     format_command_help(keymaps, Some(command), command.name)
+}
+
+fn format_describe_variable_help(option: &OptionSpec, current_value: OptionValue) -> String {
+    let mut text = String::new();
+    append_help_heading(
+        &mut text,
+        &format!("{} is a configuration variable.", option.name),
+    );
+    append_option_field(&mut text, "Name", option.name);
+    append_option_field(&mut text, "Config key", option.config_key);
+    append_option_field(&mut text, "Current value", current_value);
+    append_option_field(&mut text, "Default value", option.default);
+    append_option_field(&mut text, "Type", option.value_type.label());
+    append_option_field(&mut text, "Valid values", option.valid_values);
+    append_option_field(&mut text, "Summary", option.summary);
+    text.push('\n');
+    append_wrapped_prose(&mut text, option.doc);
+    text
 }
 
 fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
@@ -5920,6 +5999,7 @@ fn format_rectangle_number(format: &str, number: i32) -> Result<String> {
 fn prompt_label(kind: PromptKind) -> &'static str {
     match kind {
         PromptKind::DescribeFunction => "Describe function: ",
+        PromptKind::DescribeVariable => "Describe variable: ",
         PromptKind::ExtendedCommand => "M-x ",
         PromptKind::FindFile => "Find file: ",
         PromptKind::FindFileReadOnly => "Find file read-only: ",
@@ -5949,6 +6029,7 @@ fn prompt_kind_uses_history(kind: PromptKind) -> bool {
         kind,
         PromptKind::ExtendedCommand
             | PromptKind::DescribeFunction
+            | PromptKind::DescribeVariable
             | PromptKind::FindFile
             | PromptKind::FindFileReadOnly
             | PromptKind::GotoLine
@@ -6031,7 +6112,8 @@ mod tests {
 
     use super::{
         Editor, EditorOutcome, HELP_FILL_WIDTH, KillEntry, append_wrapped_prose,
-        format_describe_bindings_help, format_describe_key_help, format_rectangle_number,
+        format_describe_bindings_help, format_describe_key_help, format_describe_variable_help,
+        format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -6041,6 +6123,7 @@ mod tests {
     use crate::input::{KeyEvent, SpecialKey};
     use crate::keymap::{KeyBinding, KeyMap, KeyMapId, KeyMapStack};
     use crate::minibuffer::PromptKind;
+    use crate::option::{OptionId, OptionRegistry, OptionValue};
     use crate::render::{DecorationProvider, Face, Span};
     use crate::syntax::{MajorMode, SyntaxMode};
 
@@ -8683,6 +8766,101 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .buffer()
                 .serialize()
                 .contains("find-file is an interactive command.")
+        );
+    }
+
+    #[test]
+    fn describe_variable_opens_help_for_option() {
+        let config = Config {
+            tab_width: 2,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(Document::scratch(), config);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("v".to_owned()))
+            .expect("describe-variable should start");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Describe variable: ")
+        );
+        editor
+            .handle_key(KeyEvent::Text("tab_width".to_owned()))
+            .expect("describe-variable input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-variable should submit");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("tab_width is a configuration variable."));
+        assert!(help.contains("Name: tab_width"));
+        assert!(help.contains("Config key: tab_width"));
+        assert!(help.contains("Current value: 2"));
+        assert!(help.contains("Default value: 4"));
+        assert!(help.contains("Type: integer"));
+        assert!(help.contains("Valid values: integer from 1 through 16"));
+        assert!(help.contains("Display width used for tab characters."));
+    }
+
+    #[test]
+    fn describe_variable_completion_selects_option() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("v".to_owned()))
+            .expect("describe-variable should start");
+        editor
+            .handle_key(KeyEvent::Text("completion_mat".to_owned()))
+            .expect("describe-variable input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-variable should accept selected completion");
+
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("completion_matching is a configuration variable.")
+        );
+    }
+
+    #[test]
+    fn describe_variable_help_formats_option_metadata() {
+        let registry = OptionRegistry::default();
+        let option = registry
+            .get("completion_matching")
+            .expect("completion_matching option should exist");
+
+        let help = format_describe_variable_help(option, OptionValue::Choice("substring"));
+
+        assert!(help.contains("completion_matching is a configuration variable."));
+        assert!(help.contains("Current value: substring"));
+        assert!(help.contains("Default value: prefix"));
+        assert!(help.contains("Valid values: prefix or substring"));
+    }
+
+    #[test]
+    fn editor_reports_current_option_values() {
+        let config = Config {
+            completion: CompletionConfig {
+                matching: CompletionMatching::Substring,
+                ..CompletionConfig::default()
+            },
+            ..Config::default()
+        };
+        let editor = Editor::with_config(Document::scratch(), config);
+
+        assert_eq!(
+            editor.option_value(OptionId::CompletionMatching),
+            OptionValue::Choice("substring")
         );
     }
 

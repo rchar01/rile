@@ -27,6 +27,7 @@ pub enum Command {
     DescribeFunction,
     DescribeKey,
     DescribeKeyBriefly,
+    DescribeVariable,
     EndKeyboardMacro,
     EndOfBuffer,
     EndOfLine,
@@ -190,7 +191,9 @@ impl CommandCategory {
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
             DescribeBindings | DescribeFunction | DescribeKey | DescribeKeyBriefly
-            | QuitHelpWindow | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
+            | DescribeVariable | QuitHelpWindow | QuitMessagesWindow | ViewEchoAreaMessages => {
+                Self::Help
+            }
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -228,6 +231,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DescribeFunction => "Prompt for an interactive command and show its help buffer.",
         DescribeKey => "Read a key sequence and describe the command bound to it.",
         DescribeKeyBriefly => "Read a key sequence and echo the command bound to it.",
+        DescribeVariable => "Prompt for a configuration option and show its help buffer.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
         EndOfBuffer => "Move point to the end of the current buffer.",
         EndOfLine => "Move point to the end of the current line.",
@@ -580,6 +584,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             DescribeKeyBriefly,
         )
         .with_handler(crate::editor::Editor::command_describe_key_briefly),
+        CommandSpec::new(
+            "describe-variable",
+            "Describe a configuration option",
+            true,
+            DescribeVariable,
+        )
+        .with_handler(crate::editor::Editor::command_describe_variable),
         CommandSpec::new(
             "end-kbd-macro",
             "Finish defining a keyboard macro",
@@ -1017,6 +1028,7 @@ mod tests {
         assert!(registry.contains("describe-function"));
         assert!(registry.contains("describe-key"));
         assert!(registry.contains("describe-key-briefly"));
+        assert!(registry.contains("describe-variable"));
         assert!(registry.contains("other-window"));
         assert!(!registry.contains("save"));
     }

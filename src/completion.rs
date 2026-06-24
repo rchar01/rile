@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::command::CommandRegistry;
 use crate::keymap::{KeyMap, format_key_sequence};
+use crate::option::OptionRegistry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionStyle {
@@ -116,6 +117,7 @@ pub enum CompletionSource {
     Commands,
     Files,
     Buffers,
+    Options,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,6 +155,25 @@ impl CompletionSession {
         let mut session = Self {
             source: CompletionSource::Commands,
             title: "M-x".to_owned(),
+            config,
+            base_dir: None,
+            candidates,
+            matches: Vec::new(),
+            selected: 0,
+            selection_explicit: false,
+        };
+        session.update("");
+        session
+    }
+
+    pub fn options(registry: &OptionRegistry, config: CompletionConfig) -> Self {
+        let candidates = registry
+            .options()
+            .map(|option| CompletionCandidate::new(option.name, option.summary))
+            .collect::<Vec<_>>();
+        let mut session = Self {
+            source: CompletionSource::Options,
+            title: "Describe variable".to_owned(),
             config,
             base_dir: None,
             candidates,
@@ -228,14 +249,15 @@ impl CompletionSession {
 
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
-            CompletionSource::Commands | CompletionSource::Buffers => self
-                .candidates
-                .iter()
-                .enumerate()
-                .filter_map(|(index, candidate)| {
-                    self.matches_input(candidate, input).then_some(index)
-                })
-                .collect(),
+            CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
+                self.candidates
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, candidate)| {
+                        self.matches_input(candidate, input).then_some(index)
+                    })
+                    .collect()
+            }
             CompletionSource::Files => {
                 self.refresh_file_candidates(input);
                 (0..self.candidates.len()).collect()
@@ -420,6 +442,7 @@ mod tests {
     use super::{CompletionCandidate, CompletionConfig, CompletionSession};
     use crate::command::CommandRegistry;
     use crate::keymap::KeyMap;
+    use crate::option::OptionRegistry;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -507,6 +530,25 @@ mod tests {
 
         let candidate = session.selected().expect("save-buffer should be selected");
         assert_eq!(candidate.annotation, "Save current buffer");
+    }
+
+    #[test]
+    fn option_completion_filters_and_uses_summaries() {
+        let registry = OptionRegistry::default();
+        let mut session = CompletionSession::options(&registry, CompletionConfig::default());
+
+        session.update("completion_mat");
+
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("completion_matching")
+        );
+        assert_eq!(
+            session
+                .selected()
+                .map(|candidate| candidate.annotation.as_str()),
+            Some("Completion matching")
+        );
     }
 
     #[test]

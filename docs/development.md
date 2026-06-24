@@ -243,17 +243,25 @@ are `completion_style`, `completion_max_candidates`,
 
 Post-Milestone 14 prompt-history polish adds in-session `M-p` and `M-n` history
 navigation for command, file, buffer, write-file, goto-line, rectangle, shell
-command, and describe-function minibuffer prompts. Prompt history is stored per
-prompt kind, preserves the current draft while navigating, avoids consecutive
-duplicate entries, and refreshes completion candidates after recalling history in
-completion-enabled prompts. Incremental search and query-replace history remain
-deferred because they have separate interaction models.
+command, describe-function, and describe-variable minibuffer prompts. Prompt
+history is stored per prompt kind, preserves the current draft while navigating,
+avoids consecutive duplicate entries, and refreshes completion candidates after
+recalling history in completion-enabled prompts. Incremental search and
+query-replace history remain deferred because they have separate interaction
+models.
 
-Post-Milestone 14 help polish adds `C-h k` and `C-h f` using Rile's existing
-read-only `*Help*` special buffer. `C-h k` reads a complete key sequence and
-shows the bound command plus its description. `C-h f` uses the shared command
-completion source, then shows the selected interactive command's description and
-current key bindings. `C-h e` / `view-echo-area-messages` opens a read-only
+Configuration parsing is backed by a typed option registry. Each supported
+config key has an `OptionSpec` with its name, summary, full documentation, type,
+default value, valid values, and validator. `describe-variable` (`C-h v`) uses
+the same registry to complete option names and render live option help with the
+current editor value.
+
+Post-Milestone 14 help polish adds `C-h k`, `C-h f`, and `C-h v` using Rile's
+existing read-only `*Help*` special buffer. `C-h k` reads a complete key
+sequence and shows the bound command plus its description. `C-h f` uses the
+shared command completion source, then shows the selected interactive command's
+description and current key bindings. `C-h v` uses the shared option registry to
+describe configuration variables. `C-h e` / `view-echo-area-messages` opens a read-only
 `*Messages*` buffer containing prior minibuffer status and error messages; `q`
 restores the previous buffer. Terminal input parsing uses the original termios
 erase byte, so `0x08` remains Backspace on `stty erase ^H` terminals and

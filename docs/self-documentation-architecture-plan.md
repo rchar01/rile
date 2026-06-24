@@ -380,19 +380,19 @@ Validation gate:
 
 Goal: Make config options typed, validated, documented, and inspectable.
 
-- [ ] Introduce `OptionId`, `OptionSpec`, `OptionType`, and `OptionValue`.
-- [ ] Move config defaults and validation into option specs.
-- [ ] Route config parsing through the option registry.
-- [ ] Add command-name-style completion for `describe-variable`.
-- [ ] Render option name, config key, current value, default value, type,
+- [x] Introduce `OptionId`, `OptionSpec`, `OptionType`, and `OptionValue`.
+- [x] Move config defaults and validation into option specs.
+- [x] Route config parsing through the option registry.
+- [x] Add command-name-style completion for `describe-variable`.
+- [x] Render option name, config key, current value, default value, type,
       valid values or range, and docs.
 
 Validation gate:
 
-- [ ] Config parser tests pass through the option registry.
-- [ ] Tests require every option to have summary, docs, type, default, and
+- [x] Config parser tests pass through the option registry.
+- [x] Tests require every option to have summary, docs, type, default, and
       validation.
-- [ ] `describe-variable` unit and PTY tests pass.
+- [x] `describe-variable` unit and PTY tests pass.
 
 ### Phase 6: Modes And Buffer Inspection
 
@@ -500,6 +500,7 @@ Validation gate:
 | 2026-06-23 | Phase 3 special-buffer local keymaps added. | Moved help/messages/shell-output `q` plus buffer-list `q` and `RET` into named local keymaps backed by registered commands, and made help binding lookup use the active stack. |
 | 2026-06-24 | Phase 4 command and key help expansion continued. | Kept Emacs-compatible `describe-function`, expanded command help with registry metadata, and added `describe-key` shadowed-binding output. |
 | 2026-06-24 | Phase 4 help formatting completed. | Added reusable help formatting helpers, wrapped generated prose near 70 columns, preserved table/preformatted blocks, and covered prose filling in unit tests. |
+| 2026-06-24 | Phase 5 option registry and variable help implemented. | Added typed option specs, registry-backed config defaults and parsing, `describe-variable` with option completion, and unit plus PTY coverage. |
 
 ## Decision Log
 

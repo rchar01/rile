@@ -327,6 +327,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())],
             DescribeKey,
         ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('h'), KeyEvent::Text("v".to_owned())],
+            DescribeVariable,
+        ),
         KeyBinding::new([KeyEvent::Ctrl('_')], Undo),
         KeyBinding::new([KeyEvent::Ctrl('k')], KillLine),
         KeyBinding::new([KeyEvent::Ctrl('s')], IncrementalSearchForward),
@@ -752,6 +756,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("k".to_owned())]),
             KeyResolution::Command(DescribeKey)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('h'), KeyEvent::Text("v".to_owned())]),
+            KeyResolution::Command(DescribeVariable)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('g'), KeyEvent::Text("g".to_owned())]),

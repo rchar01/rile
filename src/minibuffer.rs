@@ -13,6 +13,7 @@ pub struct MinibufferState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PromptKind {
     DescribeFunction,
+    DescribeVariable,
     ExtendedCommand,
     FindFile,
     FindFileReadOnly,

@@ -221,6 +221,30 @@ fn describe_function_opens_help_for_command() -> Result<()> {
 }
 
 #[test]
+fn describe_variable_opens_help_for_option() -> Result<()> {
+    let file = fixtures::named_temp_file("line 001\nline 002\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("line 001")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.assert_screen_contains("Describe variable:")?;
+    rile.send("tab_width", b"tab_width")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("tab_width is a configuration variable.")?;
+    rile.assert_screen_contains("Current value: 4")?;
+    rile.assert_screen_contains("Default value: 4")?;
+    rile.assert_screen_contains("Valid values: integer from 1 through 16")?;
+
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("line 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn narrow_help_wraps_with_continuation_marker() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 24)?;

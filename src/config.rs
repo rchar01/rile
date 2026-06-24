@@ -5,6 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
+use crate::option::{OptionId, OptionRegistry, OptionValue};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,15 +36,14 @@ pub struct Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Self {
-            tab_width: 4,
-            line_numbers: false,
-            syntax_highlighting: true,
-            search_highlighting: true,
-            backup_on_save: false,
-            theme: ThemeName::Default,
-            completion: CompletionConfig::default(),
+        let registry = OptionRegistry::default();
+        let mut config = Self::empty_for_registry_defaults();
+        for option in registry.options() {
+            config
+                .apply_option_value(option.id, option.default)
+                .expect("default option values should match config fields");
         }
+        config
     }
 }
 
@@ -64,6 +64,7 @@ impl Config {
     }
 
     pub fn parse(text: &str) -> Result<Self> {
+        let registry = OptionRegistry::default();
         let mut config = Self::default();
         for (line_index, raw_line) in text.lines().enumerate() {
             let line_number = line_index + 1;
@@ -76,34 +77,96 @@ impl Config {
             };
             let key = key.trim();
             let value = strip_inline_comment(value.trim()).trim();
-            match key {
-                "tab_width" => config.tab_width = parse_tab_width(value, line_number)?,
-                "line_numbers" => config.line_numbers = parse_bool(value, line_number)?,
-                "syntax_highlighting" => {
-                    config.syntax_highlighting = parse_bool(value, line_number)?;
-                }
-                "search_highlighting" => {
-                    config.search_highlighting = parse_bool(value, line_number)?;
-                }
-                "backup_on_save" => config.backup_on_save = parse_bool(value, line_number)?,
-                "theme" => config.theme = parse_theme(value, line_number)?,
-                "completion_style" => {
-                    config.completion.style = parse_completion_style(value, line_number)?;
-                }
-                "completion_max_candidates" => {
-                    config.completion.max_candidates =
-                        parse_completion_max_candidates(value, line_number)?;
-                }
-                "completion_show_annotations" => {
-                    config.completion.show_annotations = parse_bool(value, line_number)?;
-                }
-                "completion_matching" => {
-                    config.completion.matching = parse_completion_matching(value, line_number)?;
-                }
-                _ => return Err(config_error(line_number, format!("unknown key `{key}`"))),
-            }
+            let Some(option) = registry.get_by_config_key(key) else {
+                return Err(config_error(line_number, format!("unknown key `{key}`")));
+            };
+            let value = option
+                .parse_value(value)
+                .map_err(|message| config_error(line_number, message))?;
+            config
+                .apply_option_value(option.id, value)
+                .map_err(|message| config_error(line_number, message))?;
         }
         Ok(config)
+    }
+
+    pub fn option_value(&self, option: OptionId) -> OptionValue {
+        match option {
+            OptionId::TabWidth => OptionValue::Integer(self.tab_width),
+            OptionId::LineNumbers => OptionValue::Boolean(self.line_numbers),
+            OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_highlighting),
+            OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
+            OptionId::BackupOnSave => OptionValue::Boolean(self.backup_on_save),
+            OptionId::Theme => OptionValue::Choice(self.theme.name()),
+            OptionId::CompletionStyle => OptionValue::Choice(self.completion.style.name()),
+            OptionId::CompletionMaxCandidates => {
+                OptionValue::Integer(self.completion.max_candidates)
+            }
+            OptionId::CompletionShowAnnotations => {
+                OptionValue::Boolean(self.completion.show_annotations)
+            }
+            OptionId::CompletionMatching => OptionValue::Choice(self.completion.matching.name()),
+        }
+    }
+
+    fn empty_for_registry_defaults() -> Self {
+        Self {
+            tab_width: 0,
+            line_numbers: false,
+            syntax_highlighting: false,
+            search_highlighting: false,
+            backup_on_save: false,
+            theme: ThemeName::Default,
+            completion: CompletionConfig {
+                style: CompletionStyle::Vertical,
+                max_candidates: 0,
+                show_annotations: false,
+                matching: CompletionMatching::Prefix,
+            },
+        }
+    }
+
+    fn apply_option_value(
+        &mut self,
+        option: OptionId,
+        value: OptionValue,
+    ) -> std::result::Result<(), &'static str> {
+        match (option, value) {
+            (OptionId::TabWidth, OptionValue::Integer(value)) => self.tab_width = value,
+            (OptionId::LineNumbers, OptionValue::Boolean(value)) => self.line_numbers = value,
+            (OptionId::SyntaxHighlighting, OptionValue::Boolean(value)) => {
+                self.syntax_highlighting = value;
+            }
+            (OptionId::SearchHighlighting, OptionValue::Boolean(value)) => {
+                self.search_highlighting = value;
+            }
+            (OptionId::BackupOnSave, OptionValue::Boolean(value)) => self.backup_on_save = value,
+            (OptionId::Theme, OptionValue::Choice("default")) => self.theme = ThemeName::Default,
+            (OptionId::Theme, OptionValue::Choice("mono")) => self.theme = ThemeName::Mono,
+            (OptionId::CompletionStyle, OptionValue::Choice("vertical")) => {
+                self.completion.style = CompletionStyle::Vertical;
+            }
+            (OptionId::CompletionStyle, OptionValue::Choice("completions-buffer")) => {
+                self.completion.style = CompletionStyle::CompletionsBuffer;
+            }
+            (OptionId::CompletionStyle, OptionValue::Choice("ido")) => {
+                self.completion.style = CompletionStyle::Ido;
+            }
+            (OptionId::CompletionMaxCandidates, OptionValue::Integer(value)) => {
+                self.completion.max_candidates = value;
+            }
+            (OptionId::CompletionShowAnnotations, OptionValue::Boolean(value)) => {
+                self.completion.show_annotations = value;
+            }
+            (OptionId::CompletionMatching, OptionValue::Choice("prefix")) => {
+                self.completion.matching = CompletionMatching::Prefix;
+            }
+            (OptionId::CompletionMatching, OptionValue::Choice("substring")) => {
+                self.completion.matching = CompletionMatching::Substring;
+            }
+            _ => return Err("option value does not match option type"),
+        }
+        Ok(())
     }
 }
 
@@ -132,81 +195,6 @@ fn strip_inline_comment(value: &str) -> &str {
     value
 }
 
-fn parse_tab_width(value: &str, line_number: usize) -> Result<usize> {
-    let width = value
-        .parse::<usize>()
-        .map_err(|_| config_error(line_number, "tab_width must be an integer"))?;
-    if !(1..=16).contains(&width) {
-        return Err(config_error(
-            line_number,
-            "tab_width must be between 1 and 16",
-        ));
-    }
-    Ok(width)
-}
-
-fn parse_bool(value: &str, line_number: usize) -> Result<bool> {
-    match value {
-        "true" => Ok(true),
-        "false" => Ok(false),
-        _ => Err(config_error(line_number, "expected true or false")),
-    }
-}
-
-fn parse_theme(value: &str, line_number: usize) -> Result<ThemeName> {
-    match unquote(value) {
-        "default" => Ok(ThemeName::Default),
-        "mono" => Ok(ThemeName::Mono),
-        _ => Err(config_error(
-            line_number,
-            "theme must be `default` or `mono`",
-        )),
-    }
-}
-
-fn parse_completion_style(value: &str, line_number: usize) -> Result<CompletionStyle> {
-    match unquote(value) {
-        "vertical" => Ok(CompletionStyle::Vertical),
-        "completions-buffer" => Ok(CompletionStyle::CompletionsBuffer),
-        "ido" => Ok(CompletionStyle::Ido),
-        _ => Err(config_error(
-            line_number,
-            "completion_style must be `vertical`, `completions-buffer`, or `ido`",
-        )),
-    }
-}
-
-fn parse_completion_max_candidates(value: &str, line_number: usize) -> Result<usize> {
-    let max = value
-        .parse::<usize>()
-        .map_err(|_| config_error(line_number, "completion_max_candidates must be an integer"))?;
-    if !(1..=20).contains(&max) {
-        return Err(config_error(
-            line_number,
-            "completion_max_candidates must be between 1 and 20",
-        ));
-    }
-    Ok(max)
-}
-
-fn parse_completion_matching(value: &str, line_number: usize) -> Result<CompletionMatching> {
-    match unquote(value) {
-        "prefix" => Ok(CompletionMatching::Prefix),
-        "substring" => Ok(CompletionMatching::Substring),
-        _ => Err(config_error(
-            line_number,
-            "completion_matching must be `prefix` or `substring`",
-        )),
-    }
-}
-
-fn unquote(value: &str) -> &str {
-    value
-        .strip_prefix('"')
-        .and_then(|value| value.strip_suffix('"'))
-        .unwrap_or(value)
-}
-
 fn config_error(line_number: usize, message: impl Into<String>) -> RileError {
     RileError::InvalidInput(format!("config line {line_number}: {}", message.into()))
 }
@@ -214,6 +202,7 @@ fn config_error(line_number: usize, message: impl Into<String>) -> RileError {
 #[cfg(test)]
 mod tests {
     use super::{CompletionMatching, CompletionStyle, Config, ThemeName};
+    use crate::option::{OptionId, OptionRegistry, OptionValue};
 
     #[test]
     fn parses_minimal_toml_subset() {
@@ -256,5 +245,40 @@ mod tests {
         assert!(Config::parse("completion_max_candidates = 0").is_err());
         assert!(Config::parse("completion_matching = \"fuzzy\"").is_err());
         assert!(Config::parse("unknown = true").is_err());
+    }
+
+    #[test]
+    fn default_values_come_from_option_registry() {
+        let config = Config::default();
+        let registry = OptionRegistry::default();
+
+        for option in registry.options() {
+            assert_eq!(
+                config.option_value(option.id),
+                option.default,
+                "{} default should match registry",
+                option.name
+            );
+        }
+    }
+
+    #[test]
+    fn exposes_current_option_values() {
+        let config = Config::parse(
+            r#"
+            tab_width = 2
+            completion_matching = "substring"
+            "#,
+        )
+        .expect("config should parse");
+
+        assert_eq!(
+            config.option_value(OptionId::TabWidth),
+            OptionValue::Integer(2)
+        );
+        assert_eq!(
+            config.option_value(OptionId::CompletionMatching),
+            OptionValue::Choice("substring")
+        );
     }
 }
