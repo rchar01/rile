@@ -1,5 +1,11 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/terminal/mod.rs: Show normal mode-line position as scroll status,
+	line, and display column, and update stale tests for the old line-only
+	format.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* src/command.rs: Add describe-key-briefly as a registered help command and
 	add labels for command categories.
 	* src/keymap.rs: Bind describe-key-briefly to C-h c.

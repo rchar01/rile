@@ -798,11 +798,10 @@ fn format_mode_line(
     };
     let new_file = if document.missing_on_open() { "N" } else { "-" };
     let major_mode = editor.major_mode_for_buffer(viewport.buffer).name();
-    let scroll = mode_line_scroll_position(document.buffer(), viewport, text_rows)?;
+    let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
     Ok(format!(
-        "{active}-:{modified}{read_only}{final_newline}{new_file} {}   {scroll} L{}   ({major_mode})",
-        mode_line_document_name(document),
-        viewport.cursor.line + 1
+        "{active}-:{modified}{read_only}{final_newline}{new_file} {}   {position}   ({major_mode})",
+        mode_line_document_name(document)
     ))
 }
 
@@ -812,28 +811,6 @@ fn mode_line_document_name(document: &Document) -> String {
         .and_then(Path::file_name)
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_else(|| document.display_name())
-}
-
-fn mode_line_scroll_position(
-    buffer: &Buffer,
-    viewport: &Viewport,
-    text_rows: usize,
-) -> Result<String> {
-    buffer.validate_position(viewport.cursor)?;
-    let line_count = buffer.line_count();
-    let visible_end = viewport.first_visible_line.saturating_add(text_rows);
-    if viewport.first_visible_line == 0 && visible_end >= line_count {
-        Ok("All".to_owned())
-    } else if viewport.first_visible_line == 0 {
-        Ok("Top".to_owned())
-    } else if visible_end >= line_count {
-        Ok("Bot".to_owned())
-    } else {
-        Ok(format!(
-            "{}%",
-            ((viewport.cursor.line + 1) * 100 / line_count).clamp(1, 99)
-        ))
-    }
 }
 
 fn mode_line_position(
@@ -1538,7 +1515,7 @@ mod tests {
 
         assert!(frame.contains("=-:"));
         assert!(frame.contains("*scratch*"));
-        assert!(frame.contains("All L1"));
+        assert!(frame.contains("All (1,0)"));
         assert!(frame.contains("(Fundamental)"));
     }
 
@@ -1709,17 +1686,17 @@ mod tests {
                 .expect("cursor should move down");
             rendered_frame(&mut editor, size);
         }
-        assert!(rendered_frame(&mut editor, size).contains("Bot L6"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot (6,0)"));
 
         editor
             .handle_key(KeyEvent::Ctrl('p'))
             .expect("cursor should move up");
-        assert!(rendered_frame(&mut editor, size).contains("Bot L5"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot (5,0)"));
 
         editor
             .handle_key(KeyEvent::Ctrl('p'))
             .expect("cursor should move up again");
-        assert!(rendered_frame(&mut editor, size).contains("Bot L4"));
+        assert!(rendered_frame(&mut editor, size).contains("Bot (4,0)"));
     }
 
     #[test]
