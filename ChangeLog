@@ -1,3 +1,12 @@
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
+	* src/command.rs: Add describe-bindings as a registered help command.
+	* src/keymap.rs: Bind describe-bindings to C-h b.
+	* src/editor.rs: Render active keymap-stack binding help grouped by keymap
+	and cover normal and special-buffer local maps in tests.
+	* docs/self-documentation-architecture-plan.md: Mark the Phase 4
+	describe-bindings slice complete.
+
 2026-06-23  Robert Charusta  <rch-public@posteo.net>
 
 	* src/command.rs: Add command-backed local actions for help, messages,

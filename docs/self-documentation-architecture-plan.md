@@ -359,7 +359,7 @@ Goal: Make help output render command and keymap registries.
 - [ ] Expand `describe-key` to show key sequence, resolved command, source
       keymap, summary, full docs, and shadowed bindings when applicable.
 - [ ] Add `describe-key-briefly` for echo-area command-name lookup.
-- [ ] Add `describe-bindings` for the current active keymap stack.
+- [x] Add `describe-bindings` for the current active keymap stack.
 - [ ] Add reusable help formatting for headings, key tables, command tables,
       and wrapped prose.
 - [ ] Format generated help prose to an explicit readable fill width near 70
@@ -369,8 +369,9 @@ Goal: Make help output render command and keymap registries.
 
 Validation gate:
 
-- [ ] Unit tests cover help rendering for command, key, brief-key, and bindings
+- [x] Unit tests cover help rendering for existing command, key, and bindings
       output.
+- [ ] Unit tests cover brief-key output.
 - [ ] Unit tests cover help prose filling and narrow-window continuation rows.
 - [ ] PTY tests cover opening and leaving help buffers.
 

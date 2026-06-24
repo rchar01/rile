@@ -1565,6 +1565,15 @@ impl Editor {
         Ok(CommandOutcome::StartedPrompt)
     }
 
+    pub(crate) fn command_describe_bindings(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        let text = format_describe_bindings_help(&self.commands, &self.active_keymaps());
+        self.open_help_buffer(text);
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_end_keyboard_macro(
         &mut self,
         _context: CommandContext,
@@ -5255,6 +5264,77 @@ fn format_key_prefix_help(
     text
 }
 
+fn format_describe_bindings_help(commands: &CommandRegistry, keymaps: &KeyMapStack<'_>) -> String {
+    let mut text = String::from("Active Key Bindings:\n\n");
+    text.push_str("Keymap Stack:\n");
+    for keymap in keymaps.maps() {
+        text.push_str(&format!("- {}\n", keymap.name()));
+    }
+    text.push('\n');
+
+    for keymap in keymaps.maps() {
+        text.push_str(&format!("{}:\n\n", keymap.name()));
+        text.push_str("Key             Binding                        Description\n");
+        text.push_str("---             -------                        -----------\n");
+
+        let mut has_bindings = false;
+        for binding in keymap.bindings_starting_with(&[]) {
+            has_bindings = true;
+            let command = commands.get_by_id(binding.command());
+            let name = command.map(|command| command.name).unwrap_or("<unknown>");
+            let mut description = command
+                .map(|command| command.summary)
+                .unwrap_or("")
+                .to_owned();
+            if let Some(shadowed_by) = describe_shadowing(commands, keymaps, keymap, binding) {
+                if !description.is_empty() {
+                    description.push(' ');
+                }
+                description.push_str(&shadowed_by);
+            }
+            text.push_str(&format!(
+                "{:<15} {:<30} {}\n",
+                format_key_sequence(&binding.sequence),
+                name,
+                description
+            ));
+        }
+        if !has_bindings {
+            text.push_str("(No active bindings)\n");
+        }
+        text.push('\n');
+    }
+
+    text
+}
+
+fn describe_shadowing(
+    commands: &CommandRegistry,
+    keymaps: &KeyMapStack<'_>,
+    keymap: &KeyMap,
+    binding: &crate::keymap::KeyBinding,
+) -> Option<String> {
+    match keymaps.resolve(&binding.sequence) {
+        KeyStackResolution::Command {
+            keymap: resolved_keymap,
+            command,
+        } if resolved_keymap == keymap.id() && command == binding.command() => None,
+        KeyStackResolution::Command {
+            keymap: resolved_keymap,
+            command,
+        } => {
+            let keymap_name = keymaps.keymap_name(resolved_keymap).unwrap_or("<unknown>");
+            let command_name = commands
+                .get_by_id(command)
+                .map(|command| command.name)
+                .unwrap_or("<unknown>");
+            Some(format!("(shadowed by {keymap_name} {command_name})"))
+        }
+        KeyStackResolution::Prefix => Some("(shadowed by higher-priority prefix)".to_owned()),
+        KeyStackResolution::NoMatch => Some("(shadowed)".to_owned()),
+    }
+}
+
 fn format_describe_key_help(
     commands: &CommandRegistry,
     keymaps: &KeyMapStack<'_>,
@@ -5761,12 +5841,16 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{Editor, EditorOutcome, KillEntry, format_rectangle_number};
+    use super::{
+        Editor, EditorOutcome, KillEntry, format_describe_bindings_help, format_rectangle_number,
+    };
     use crate::buffer::{BufferId, Position, TextRange};
+    use crate::command::{Command, CommandRegistry};
     use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
+    use crate::keymap::{KeyBinding, KeyMap, KeyMapId, KeyMapStack};
     use crate::minibuffer::PromptKind;
     use crate::render::{DecorationProvider, Face, Span};
     use crate::syntax::{MajorMode, SyntaxMode};
@@ -8299,6 +8383,110 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .serialize()
                 .contains("find-file is an interactive command.")
         );
+    }
+
+    #[test]
+    fn describe_bindings_shows_global_keymap() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("describe-bindings should open help");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("Active Key Bindings:"));
+        assert!(help.contains("Keymap Stack:\n- global-map"));
+        assert!(help.contains("global-map:"));
+        assert!(help.contains("C-h b"));
+        assert!(help.contains("describe-bindings"));
+        assert!(help.contains("C-x C-f"));
+        assert!(help.contains("find-file"));
+    }
+
+    #[test]
+    fn describe_bindings_shows_special_buffer_local_map() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('g'))
+            .expect("goto-line prefix should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Backspace))
+            .expect("prefix help should open");
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start in help buffer");
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("describe-bindings should open help");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("Keymap Stack:\n- help-mode-map\n- global-map"));
+        assert!(help.contains("help-mode-map:"));
+        assert!(help.contains("q               quit-help-window"));
+        assert!(help.contains("global-map:"));
+        assert!(help.contains("C-h b"));
+        assert!(help.contains("describe-bindings"));
+    }
+
+    #[test]
+    fn describe_bindings_marks_shadowed_bindings() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new(
+                [KeyEvent::Text("q".to_owned())],
+                Command::OtherWindow,
+            )],
+        );
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [KeyBinding::new(
+                [KeyEvent::Text("q".to_owned())],
+                Command::ForwardChar,
+            )],
+        );
+        let stack = KeyMapStack::new([&special, &global]);
+
+        let help = format_describe_bindings_help(&CommandRegistry::default(), &stack);
+
+        assert!(help.contains("special-buffer-map:"));
+        assert!(help.contains("q               other-window"));
+        assert!(help.contains("global-map:"));
+        assert!(help.contains("q               forward-char"));
+        assert!(help.contains("(shadowed by special-buffer-map other-window)"));
+    }
+
+    #[test]
+    fn describe_bindings_marks_bindings_shadowed_by_prefix() {
+        let special = KeyMap::named(
+            KeyMapId::SpecialBuffer,
+            "special-buffer-map",
+            [KeyBinding::new(
+                [KeyEvent::Ctrl('f'), KeyEvent::Text("q".to_owned())],
+                Command::OtherWindow,
+            )],
+        );
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [KeyBinding::new([KeyEvent::Ctrl('f')], Command::ForwardChar)],
+        );
+        let stack = KeyMapStack::new([&special, &global]);
+
+        let help = format_describe_bindings_help(&CommandRegistry::default(), &stack);
+
+        assert!(help.contains("C-f q"));
+        assert!(help.contains("other-window"));
+        assert!(help.contains("C-f             forward-char"));
+        assert!(help.contains("(shadowed by higher-priority prefix)"));
     }
 
     #[test]

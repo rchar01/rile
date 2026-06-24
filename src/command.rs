@@ -23,6 +23,7 @@ pub enum Command {
     DeleteRectangle,
     DeleteOtherWindows,
     DeleteWindow,
+    DescribeBindings,
     DescribeFunction,
     DescribeKey,
     EndKeyboardMacro,
@@ -168,8 +169,8 @@ impl CommandCategory {
             | YankRectangle => Self::Rectangles,
             CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
-            DescribeFunction | DescribeKey | QuitHelpWindow | QuitMessagesWindow
-            | ViewEchoAreaMessages => Self::Help,
+            DescribeBindings | DescribeFunction | DescribeKey | QuitHelpWindow
+            | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -203,6 +204,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DeleteRectangle => "Delete the active rectangle without saving it to the kill ring.",
         DeleteOtherWindows => "Delete every window except the selected window.",
         DeleteWindow => "Delete the selected window when another window is available.",
+        DescribeBindings => "Show the active keymap stack and its key bindings.",
         DescribeFunction => "Prompt for an interactive command and show its help buffer.",
         DescribeKey => "Read a key sequence and describe the command bound to it.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
@@ -534,6 +536,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_delete_other_windows),
         CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow)
             .with_handler(crate::editor::Editor::command_delete_window),
+        CommandSpec::new(
+            "describe-bindings",
+            "Show active key bindings",
+            true,
+            DescribeBindings,
+        )
+        .with_handler(crate::editor::Editor::command_describe_bindings),
         CommandSpec::new(
             "describe-function",
             "Describe an interactive command",
@@ -976,6 +985,7 @@ mod tests {
         assert!(registry.contains("delete-rectangle"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
+        assert!(registry.contains("describe-bindings"));
         assert!(registry.contains("describe-function"));
         assert!(registry.contains("describe-key"));
         assert!(registry.contains("other-window"));
