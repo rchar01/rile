@@ -313,6 +313,7 @@ fn draw_editor_frame_with_options<W: Write>(
     size: TerminalSize,
     options: FrameOptions,
 ) -> Result<()> {
+    editor.refresh_messages_buffer();
     terminal.hide_cursor()?;
     if options.clear_screen {
         terminal.move_cursor(1, 1)?;
@@ -1517,6 +1518,34 @@ mod tests {
         assert!(frame.contains("*scratch*"));
         assert!(frame.contains("All (1,0)"));
         assert!(frame.contains("(Fundamental)"));
+    }
+
+    #[test]
+    fn redraw_refreshes_visible_messages_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("missing-command")
+            .expect("unknown command should set message");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("read-only insert should set message");
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+        rendered_frame(&mut editor, size);
+
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("Buffer is read-only: *Messages*")
+        );
     }
 
     #[test]

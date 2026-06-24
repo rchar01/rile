@@ -61,7 +61,7 @@ Editing features:
   config path, current directory, and diagnostic guidance with C-h C-a /
   about-rile.
 * Review transient status and error history with C-h e in a read-only
-  *Messages* buffer.
+  *Messages* buffer that updates while it is visible.
 * Recall minibuffer prompt history with M-p and M-n.
 
 Interface features:

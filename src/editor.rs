@@ -498,6 +498,22 @@ impl Editor {
         &self.minibuffer
     }
 
+    pub(crate) fn refresh_messages_buffer(&mut self) {
+        let Some(messages) = self.buffers.find_by_name("*Messages*") else {
+            return;
+        };
+        let text = self.minibuffer.messages_text();
+        let Some(document) = self.buffers.document(messages) else {
+            return;
+        };
+        if document.buffer().serialize() == text {
+            return;
+        }
+        if let Some(document) = self.buffers.document_mut(messages) {
+            *document = Document::messages(text);
+        }
+    }
+
     pub fn minibuffer_display_text(&self) -> Option<String> {
         let Some(completion) = &self.completion else {
             return self.minibuffer.display_text();

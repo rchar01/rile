@@ -1,5 +1,12 @@
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Add a refresh hook for an existing *Messages* buffer.
+	* src/terminal/mod.rs: Refresh message history before drawing frames and
+	cover live *Messages* updates in tests.
+	* NEWS: Document live *Messages* updates.
+
+2026-06-24  Robert Charusta  <rch-public@posteo.net>
+
 	* docs/testing.md: Document metadata coverage tests and PTY help-command
 	coverage expectations.
 	* docs/self-documentation-architecture-plan.md: Mark the documentation phase
