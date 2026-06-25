@@ -57,6 +57,8 @@ Initial inspection scenarios:
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
 - `query-replace-core`: base Emacs `M-%` query-replace prompts, choices, and
   completion status.
+- `recenter-core`: base Emacs repeated `C-l` recenter behavior in short and
+  long buffers.
 - `rectangle-commands-core`: base Emacs explicit `C-x r` rectangle copy, yank,
   kill, delete, clear, and open behavior.
 - `rectangle-mark-core`: base Emacs `C-x SPC` rectangle mark mode with regular

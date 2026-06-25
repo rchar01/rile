@@ -1,5 +1,17 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Make repeated C-l cycle point between window center, top, and
+	bottom. Add short-buffer and repeated-cycle tests.
+	* src/command.rs, README.md, docs/development.md, NEWS: Document the C-l
+	center/top/bottom cycle.
+	* tests/pty_scrolling.rs: Cover repeated C-l in the terminal UI.
+	* tools/reference/emacs/scenarios/recenter-core.scenario: New file.
+	* tools/reference/rile/scenarios/recenter.scenario: New file.
+	* docs/reference-testing.md, tools/reference/emacs/README.md,
+	tools/reference/rile/README.md: Document recenter reference captures.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Add unit matrix coverage for minibuffer history and
 	completion movement keys across prompt kinds.
 	* tests/pty_completion.rs: Cover M-p, M-n, C-n, C-p, C-v, and M-v in

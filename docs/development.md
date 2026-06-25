@@ -191,8 +191,8 @@ Post-Milestone 14 navigation polish adds `M-g g` and `goto-line` with `line` or
 `line:column` minibuffer input, clamping out-of-range targets to the current
 buffer bounds. It also adds `M-<` and `M->` for moving to the beginning and end
 of the current buffer, `C-v`/PageDown and `M-v`/PageUp for visible-page
-scrolling with one-line overlap, `C-l` for recentering point in the current
-window, and `M-m` for moving to the current line's first non-whitespace
+scrolling with one-line overlap, repeated `C-l` for cycling point through the
+current window's center, top, and bottom, and `M-m` for moving to the current line's first non-whitespace
 character or to line end on all-whitespace lines. Pending key prefixes echo the
 current sequence with a `C-h` help hint,
 and `C-h` opens a generated read-only `*Help*` buffer for that prefix. Help

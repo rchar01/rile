@@ -1,0 +1,82 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=recenter-core
+SCENARIO_DESCRIPTION='Observe base Emacs C-l recenter behavior in short and long buffers.'
+EMACS_PROFILE=core
+WIDTH=80
+HEIGHT=12
+FIXTURE_NAME=recenter-core/short.txt
+FIXTURE_CONTENT=$'short 000
+short 001
+short 002
+short 003
+'
+
+setup_reference_files() {
+  local capture_dir=$1
+  mkdir -p "$capture_dir/recenter-core"
+  for line in $(seq 0 39); do
+    printf 'long %03d\n' "$line"
+  done > "$capture_dir/recenter-core/long.txt"
+}
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /short 000/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-short-open.png
+Sleep 500ms
+Ctrl+N
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-short-before-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-short-after-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-short-after-second-c-l.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "long.txt"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-long-open.png
+Sleep 500ms
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-long-before-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-long-after-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-long-after-second-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-long-after-third-c-l.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

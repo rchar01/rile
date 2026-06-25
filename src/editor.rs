@@ -76,6 +76,7 @@ pub struct Editor {
     registers: HashMap<char, RegisterValue>,
     kill_ring: Vec<KillEntry>,
     yank_state: Option<YankState>,
+    recenter_cycle_index: usize,
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
@@ -404,6 +405,7 @@ impl Editor {
             registers: HashMap::new(),
             kill_ring: Vec::new(),
             yank_state: None,
+            recenter_cycle_index: 0,
             last_command_was_kill: false,
             kill_recorded_this_command: false,
             undo_stack: Vec::new(),
@@ -669,29 +671,35 @@ impl Editor {
         self.record_keyboard_macro_key(&key);
 
         if self.minibuffer.prompt().is_some() {
+            self.reset_recenter_cycle();
             return self.handle_prompt_key(key);
         }
 
         self.clear_transient_message();
 
         if self.query_replace.is_some() {
+            self.reset_recenter_cycle();
             return self.handle_query_replace_key(key);
         }
 
         if self.quoted_insert {
+            self.reset_recenter_cycle();
             return self.handle_quoted_insert_key(key);
         }
 
         if key == KeyEvent::Ctrl('g') {
+            self.reset_recenter_cycle();
             self.quit_current_operation();
             return Ok(EditorOutcome::Continue);
         }
 
         if self.pending_register.is_some() {
+            self.reset_recenter_cycle();
             return self.handle_pending_register_key(key);
         }
 
         if self.describe_key.is_some() {
+            self.reset_recenter_cycle();
             return Ok(self.handle_describe_key(key));
         }
 
@@ -713,12 +721,14 @@ impl Editor {
                 self.clear_key_sequence();
                 self.universal_argument = None;
                 self.clear_insert_group();
+                self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
                 self.clear_key_sequence();
+                self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
@@ -727,6 +737,7 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Enter) => {
                 self.clear_key_sequence();
+                self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
@@ -735,6 +746,7 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Tab) => {
                 self.clear_key_sequence();
+                self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
@@ -786,6 +798,7 @@ impl Editor {
             KeyStackResolution::NoMatch => {
                 self.clear_key_sequence();
                 self.universal_argument = None;
+                self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 self.minibuffer.set_message("Key is not bound");
@@ -1520,6 +1533,9 @@ impl Editor {
         argument: Option<i32>,
     ) -> Result<EditorOutcome> {
         let command_id = command.command;
+        if command_id != Command::Recenter {
+            self.reset_recenter_cycle();
+        }
         let kill_command = is_kill_command(command_id);
         let yank_command = is_yank_command(command_id);
         if kill_command {
@@ -2726,10 +2742,23 @@ impl Editor {
         let text_rows = self.windows.current().viewport().text_rows.max(1);
         let line_count = self.document().buffer().line_count();
         let max_first_visible_line = line_count.saturating_sub(text_rows);
-        let centered_first_visible_line = self.cursor.line.saturating_sub(text_rows / 2);
+        let first_visible_line = match self.recenter_cycle_index % 3 {
+            0 => self
+                .cursor
+                .line
+                .saturating_sub(text_rows / 2)
+                .min(max_first_visible_line),
+            1 => self.cursor.line,
+            _ => self.cursor.line.saturating_add(1).saturating_sub(text_rows),
+        };
+        self.recenter_cycle_index = (self.recenter_cycle_index + 1) % 3;
         self.windows.current_mut().viewport_mut().first_visible_line =
-            centered_first_visible_line.min(max_first_visible_line);
+            first_visible_line.min(line_count.saturating_sub(1));
         Ok(())
+    }
+
+    fn reset_recenter_cycle(&mut self) {
+        self.recenter_cycle_index = 0;
     }
 
     fn move_beginning_of_buffer(&mut self) -> Result<()> {
@@ -8935,7 +8964,7 @@ mod tests {
     }
 
     #[test]
-    fn recenter_moves_viewport_without_moving_cursor() {
+    fn recenter_cycles_viewport_without_moving_cursor() {
         let text = (0..20)
             .map(|line| format!("line {line:03}"))
             .collect::<Vec<_>>()
@@ -8964,6 +8993,124 @@ mod tests {
                 .expect("current window should exist")
                 .first_visible_line,
             9
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("second C-l should put point at top");
+        assert_eq!(editor.cursor(), Position::new(12, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            12
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("third C-l should put point at bottom");
+        assert_eq!(editor.cursor(), Position::new(12, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            7
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("fourth C-l should cycle back to center");
+        assert_eq!(editor.cursor(), Position::new(12, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            9
+        );
+    }
+
+    #[test]
+    fn recenter_top_cycle_can_leave_blank_space_below_short_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(
+                Position::new(0, 0),
+                "short 000\nshort 001\nshort 002\nshort 003\n",
+            )
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.ensure_current_window_contains_cursor(10, 80, 0);
+        for _ in 0..2 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+        }
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("first C-l should keep short buffer fully visible");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            0
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("second C-l should put point at top");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            2
+        );
+    }
+
+    #[test]
+    fn recenter_cycle_resets_after_other_commands() {
+        let text = (0..20)
+            .map(|line| format!("line {line:03}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &text)
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.ensure_current_window_contains_cursor(6, 80, 0);
+        for _ in 0..12 {
+            editor
+                .handle_key(KeyEvent::Ctrl('n'))
+                .expect("cursor should move down");
+        }
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("first C-l should center");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("intervening command should reset recenter cycle");
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("C-l after another command should center again");
+
+        assert_eq!(editor.cursor(), Position::new(13, 0));
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            10
         );
     }
 

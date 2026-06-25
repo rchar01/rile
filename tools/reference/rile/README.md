@@ -33,6 +33,11 @@ binary under `artifacts/reference/rile/build/target/` and launches it as:
 artifacts/reference/rile/build/target/debug/rile --visual-test --test-size WIDTHxHEIGHT <fixture>
 ```
 
+Navigation comparison scenarios:
+
+- `recenter`: Rile repeated `C-l` recenter behavior in short and long buffers,
+  aligned with the Emacs core `recenter-core` scenario.
+
 Completion comparison scenarios:
 
 - `m-x-completion-modern`: Rile command completion frames aligned with the

@@ -82,6 +82,16 @@ fn recenter_keeps_point_and_moves_viewport() -> Result<()> {
     rile.assert_screen_contains("009 | 0123456789")?;
     rile.assert_cursor(3, 0)?;
 
+    rile.send("C-l", keys::control('l'))?;
+    rile.assert_status_contains("Ln 013 Col 000")?;
+    rile.assert_screen_contains("012 | 0123456789")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.send("C-l", keys::control('l'))?;
+    rile.assert_status_contains("Ln 013 Col 000")?;
+    rile.assert_screen_contains("007 | 0123456789")?;
+    rile.assert_cursor(5, 0)?;
+
     rile.quit()?;
     Ok(())
 }

@@ -280,7 +280,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         QueryReplace => "Prompt for search and replacement strings and replace interactively.",
         RectangleMarkMode => "Activate rectangle mark mode for column-oriented region commands.",
         RectangleNumberLines => "Insert formatted line numbers down the active rectangle.",
-        Recenter => "Scroll the selected window so point is near the vertical center.",
+        Recenter => "Cycle point between center, top, and bottom of the selected window.",
         SaveBuffer => "Write the current file-backed buffer to disk.",
         SaveBuffersKillTerminal => "Quit Rile, prompting before exit when buffers are modified.",
         SetMarkCommand => "Set mark at point and activate the region.",
@@ -822,8 +822,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             RectangleNumberLines,
         )
         .with_handler(crate::editor::Editor::command_rectangle_number_lines),
-        CommandSpec::new("recenter", "Center cursor in window", true, Recenter)
-            .with_handler(crate::editor::Editor::command_recenter),
+        CommandSpec::new(
+            "recenter",
+            "Cycle cursor position in window",
+            true,
+            Recenter,
+        )
+        .with_handler(crate::editor::Editor::command_recenter),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer)
             .with_handler(crate::editor::Editor::command_save_buffer),
         CommandSpec::new(

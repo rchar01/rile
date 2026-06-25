@@ -15,8 +15,8 @@ Editing features:
 * Open existing UTF-8 files and create missing files from the terminal.
 * Save through a same-directory temporary file and rename.
 * Insert printable UTF-8 text, tabs, and new lines.
-* Move by character, line, visible page, beginning/end of line, indentation,
-  and word.
+* Move by character, line, visible page, repeated C-l center/top/bottom
+  recentering, beginning/end of line, indentation, and word.
 * Delete characters, kill words and lines, set a mark, mark the whole buffer,
   kill/copy regions, yank coalesced consecutive kills, and rotate yanks with
   M-y.
