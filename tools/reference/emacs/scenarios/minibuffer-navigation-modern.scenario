@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=minibuffer-navigation-modern
-SCENARIO_DESCRIPTION='Observe Vertico/Marginalia minibuffer history, candidate movement, and paging keys.'
+SCENARIO_DESCRIPTION='Observe Vertico/Marginalia minibuffer history, line movement, and page movement keys.'
 EMACS_PROFILE=modern
 WIDTH=100
 HEIGHT=24
@@ -42,33 +42,62 @@ Sleep 500ms
 Escape
 Type "x"
 Sleep 500ms
-Type "find-file"
+Screenshot {{FRAME_DIR}}/04-m-x-before-line-move.png
 Sleep 500ms
 Ctrl+N
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/04-after-c-n.png
+Screenshot {{FRAME_DIR}}/05-m-x-after-c-n.png
 Sleep 500ms
 Ctrl+P
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/05-after-c-p.png
+Screenshot {{FRAME_DIR}}/06-m-x-after-c-p.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms
-Escape
-Type "x"
+Ctrl+H
+Type "f"
 Sleep 500ms
-Type "find"
-Sleep 500ms
-Screenshot {{FRAME_DIR}}/06-before-page.png
+Screenshot {{FRAME_DIR}}/07-describe-function-before-page.png
 Sleep 500ms
 Ctrl+V
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/07-after-c-v.png
+Screenshot {{FRAME_DIR}}/08-describe-function-after-c-v.png
 Sleep 500ms
 Escape
 Type "v"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/08-after-m-v.png
+Screenshot {{FRAME_DIR}}/09-describe-function-after-m-v.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+H
+Type "v"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-describe-variable-before-page.png
+Sleep 500ms
+Ctrl+V
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-describe-variable-after-c-v.png
+Sleep 500ms
+Escape
+Type "v"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/12-describe-variable-after-m-v.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/13-find-file-before-line-move.png
+Sleep 500ms
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/14-find-file-after-c-n.png
+Sleep 500ms
+Ctrl+P
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/15-find-file-after-c-p.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms

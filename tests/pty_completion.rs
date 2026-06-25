@@ -8,6 +8,35 @@ use std::fs;
 
 use support::{fixtures, keys, pty::RilePty};
 
+fn assert_prompt_counter(rile: &RilePty, selected: usize, prompt: &str) -> Result<()> {
+    rile.assert_screen_contains(&format!("{selected}/"))?;
+    rile.assert_screen_contains(prompt)
+}
+
+fn exercise_prompt_movement_keys(rile: &mut RilePty, prompt: &str) -> Result<()> {
+    assert_prompt_counter(rile, 1, prompt)?;
+
+    rile.send("C-n", keys::control('n'))?;
+    assert_prompt_counter(rile, 2, prompt)?;
+
+    rile.send("C-p", keys::control('p'))?;
+    assert_prompt_counter(rile, 1, prompt)?;
+
+    rile.send("C-v", keys::control('v'))?;
+    assert_prompt_counter(rile, 9, prompt)?;
+
+    rile.send("M-v", keys::meta('v'))?;
+    assert_prompt_counter(rile, 1, prompt)
+}
+
+fn open_file_by_path(rile: &mut RilePty, path: &std::path::Path, visible_text: &str) -> Result<()> {
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let path = path.display().to_string();
+    rile.send("file path", path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains(visible_text)
+}
+
 #[test]
 fn vertical_mx_completion_filters_and_accepts_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
@@ -99,6 +128,63 @@ fn vertical_mx_completion_pages_with_page_keys() -> Result<()> {
     rile.send("PageDown", keys::PAGE_DOWN)?;
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Syntax highlighting disabled")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_completion_movement_keys_cover_prompt_sources() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    for index in 0..10 {
+        fs::write(
+            directory.path().join(format!("alpha-{index:02}.txt")),
+            format!("alpha {index}\n"),
+        )?;
+        fs::write(
+            directory.path().join(format!("buffer-{index:02}.txt")),
+            format!("buffer {index}\n"),
+        )?;
+    }
+
+    let mut rile = RilePty::spawn(&start, 18, 100)?;
+    rile.wait_for_screen_contains("start")?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    exercise_prompt_movement_keys(&mut rile, "M-x")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    exercise_prompt_movement_keys(&mut rile, "Describe function:")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    exercise_prompt_movement_keys(&mut rile, "Describe variable:")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("alpha prefix", b"alpha-")?;
+    exercise_prompt_movement_keys(&mut rile, "Find file: alpha-")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    for index in 0..10 {
+        let path = directory.path().join(format!("buffer-{index:02}.txt"));
+        open_file_by_path(&mut rile, &path, &format!("buffer {index}"))?;
+    }
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    exercise_prompt_movement_keys(&mut rile, "Switch to buffer")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("k", b"k")?;
+    exercise_prompt_movement_keys(&mut rile, "Kill buffer")?;
+    rile.send("C-g", keys::control('g'))?;
 
     rile.quit()?;
     Ok(())
@@ -1173,6 +1259,81 @@ fn vertical_mx_prompt_history_recalls_previous_command() -> Result<()> {
     rile.assert_screen_contains("M-x")?;
 
     rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_prompt_history_meta_keys_cover_completion_prompt_sources() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let alpha = directory.path().join("alpha-history.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&alpha, "alpha history\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("alpha-history", b"alpha-history.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha history")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("file draft", b"draft-file")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Find file: alpha-history.txt")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Find file: draft-file")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("find-file is an interactive command.")?;
+    rile.send("q", b"q")?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("function draft", b"toggle")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Describe function: find-file")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Describe function: toggle")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.send("completion_style", b"completion_style")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("completion_style is a configuration variable.")?;
+    rile.send("q", b"q")?;
+
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.send("variable draft", b"completion")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Describe variable: completion_style")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Describe variable: completion")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("start buffer", b"start.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("start")?;
+
+    rile.send("C-x b", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("buffer draft", b"draft-buffer")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Switch to buffer (default alpha-history.txt): start.txt")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Switch to buffer (default alpha-history.txt): draft-buffer")?;
+    rile.send("C-g", keys::control('g'))?;
+
     rile.quit()?;
     Ok(())
 }

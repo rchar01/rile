@@ -303,9 +303,10 @@ descent, exact files, and no-match raw missing-file input. Rile's matching
 capture also records arbitrary-substring input so reviewers can see that file
 prompts do not inherit global Orderless matching.
 
-The Emacs and Rile `minibuffer-navigation-modern` captures cover minibuffer
-history with `M-p`/`M-n`, literal control-key candidate movement with
-`C-n`/`C-p`, and candidate-list paging with `C-v`/`M-v`.
+The Emacs and Rile `minibuffer-navigation-modern` captures focus on
+minibuffer movement: history with `M-p`/`M-n`, line candidate movement with
+`C-n`/`C-p`, and visible-page candidate movement with `C-v`/`M-v` across
+command, help, variable, and file prompts.
 
 Scenario conclusion: Rile now aligns with the modern Emacs completion model for
 the user-visible mechanics it intentionally implements: selected-candidate

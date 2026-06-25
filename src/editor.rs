@@ -6451,7 +6451,9 @@ mod tests {
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
-    use crate::completion::{CompletionConfig, CompletionMatching, CompletionStyle};
+    use crate::completion::{
+        CompletionConfig, CompletionMatching, CompletionSession, CompletionStyle,
+    };
     use crate::config::{Config, ThemeName};
     use crate::file::Document;
     use crate::input::{KeyEvent, SpecialKey};
@@ -6574,6 +6576,65 @@ mod tests {
             .handle_key(KeyEvent::Text("r".to_owned()))
             .expect("C-x r prefix should start");
         editor.handle_key(key).expect("C-x r command should run");
+    }
+
+    fn editor_with_small_completion_page(document: Document) -> Editor {
+        Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    max_candidates: 2,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        )
+    }
+
+    fn selected_completion_value(editor: &Editor) -> Option<&str> {
+        editor
+            .completion()
+            .and_then(|completion| completion.selected())
+            .map(|candidate| candidate.value.as_str())
+    }
+
+    fn assert_completion_movement_keys(
+        editor: &mut Editor,
+        first: &str,
+        next: &str,
+        page_forward: &str,
+    ) {
+        assert_eq!(selected_completion_value(editor), Some(first));
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("C-n should select next candidate");
+        assert_eq!(selected_completion_value(editor), Some(next));
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("C-p should select previous candidate");
+        assert_eq!(selected_completion_value(editor), Some(first));
+        editor
+            .handle_key(KeyEvent::Ctrl('v'))
+            .expect("C-v should page forward");
+        assert_eq!(selected_completion_value(editor), Some(page_forward));
+        editor
+            .handle_key(KeyEvent::Meta('v'))
+            .expect("M-v should page backward");
+        assert_eq!(selected_completion_value(editor), Some(first));
+    }
+
+    fn start_test_completion_prompt(
+        editor: &mut Editor,
+        kind: PromptKind,
+        completion: CompletionSession,
+        input: &str,
+    ) {
+        editor
+            .minibuffer
+            .start_prompt(kind, super::prompt_label(kind));
+        editor.completion = Some(completion);
+        editor.minibuffer.set_prompt_input(input);
+        editor.update_completion_from_prompt();
     }
 
     fn mark_columns_one_to_three_across_two_lines(editor: &mut Editor) {
@@ -8468,6 +8529,46 @@ mod tests {
     }
 
     #[test]
+    fn prompt_history_navigation_covers_history_prompt_kinds() {
+        let history_kinds = [
+            PromptKind::ExtendedCommand,
+            PromptKind::DescribeFunction,
+            PromptKind::DescribeVariable,
+            PromptKind::FindFile,
+            PromptKind::FindFileReadOnly,
+            PromptKind::GotoLine,
+            PromptKind::InsertFile,
+            PromptKind::KillBuffer,
+            PromptKind::RectangleNumberFormat,
+            PromptKind::RectangleNumberStart,
+            PromptKind::ShellCommand,
+            PromptKind::StringRectangle,
+            PromptKind::SwitchToBuffer,
+            PromptKind::WriteFile,
+        ];
+
+        for kind in history_kinds {
+            assert!(super::prompt_kind_uses_history(kind));
+            let mut editor = Editor::new(Document::scratch());
+            editor.record_prompt_history(kind, "previous input");
+            editor
+                .minibuffer
+                .start_prompt(kind, super::prompt_label(kind));
+            editor.minibuffer.set_prompt_input("draft input");
+
+            editor
+                .handle_key(KeyEvent::Meta('p'))
+                .expect("M-p should recall prompt history");
+            assert_eq!(editor.minibuffer().prompt_input(), Some("previous input"));
+
+            editor
+                .handle_key(KeyEvent::Meta('n'))
+                .expect("M-n should restore prompt draft");
+            assert_eq!(editor.minibuffer().prompt_input(), Some("draft input"));
+        }
+    }
+
+    #[test]
     fn prompt_history_recalls_previous_m_x_input() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -8584,67 +8685,106 @@ mod tests {
     }
 
     #[test]
-    fn completion_prompt_navigation_uses_control_and_page_keys() {
-        let mut editor = Editor::with_config(
-            Document::scratch(),
-            Config {
-                completion: CompletionConfig {
-                    max_candidates: 2,
-                    ..CompletionConfig::default()
-                },
-                ..Config::default()
-            },
+    fn completion_prompt_navigation_uses_control_and_page_keys_for_all_sources() {
+        for kind in [PromptKind::ExtendedCommand, PromptKind::DescribeFunction] {
+            let mut editor = editor_with_small_completion_page(Document::scratch());
+            let completion = CompletionSession::commands(
+                &CommandRegistry::default(),
+                &KeyMap::default(),
+                editor.completion_config,
+            );
+            start_test_completion_prompt(&mut editor, kind, completion, "toggle-");
+            assert_completion_movement_keys(
+                &mut editor,
+                "toggle-read-only",
+                "toggle-line-numbers",
+                "toggle-search-highlighting",
+            );
+        }
+
+        let mut editor = editor_with_small_completion_page(Document::scratch());
+        let completion =
+            CompletionSession::options(&OptionRegistry::default(), editor.completion_config);
+        start_test_completion_prompt(
+            &mut editor,
+            PromptKind::DescribeVariable,
+            completion,
+            "completion_",
+        );
+        assert_completion_movement_keys(
+            &mut editor,
+            "completion_style",
+            "completion_matching",
+            "completion_max_candidates",
         );
 
-        editor
-            .handle_key(KeyEvent::Meta('x'))
-            .expect("M-x should start prompt");
-        editor
-            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
-            .expect("prompt input should update completion");
-        editor
-            .handle_key(KeyEvent::Ctrl('n'))
-            .expect("C-n should select next candidate");
-        assert_eq!(
-            editor
-                .completion()
-                .and_then(|completion| completion.selected())
-                .map(|candidate| candidate.value.as_str()),
-            Some("toggle-syntax-highlighting")
-        );
+        let directory = TestDir::new();
+        fs::write(directory.path().join("alpha-one.txt"), "one").expect("fixture should write");
+        fs::write(directory.path().join("alpha-two.txt"), "two").expect("fixture should write");
+        fs::write(directory.path().join("alpha-three.txt"), "three").expect("fixture should write");
+        for kind in [
+            PromptKind::FindFile,
+            PromptKind::FindFileReadOnly,
+            PromptKind::InsertFile,
+        ] {
+            let mut editor = editor_with_small_completion_page(Document::scratch());
+            let completion = CompletionSession::files(directory.path(), editor.completion_config);
+            start_test_completion_prompt(&mut editor, kind, completion, "alpha");
+            assert_completion_movement_keys(
+                &mut editor,
+                "alpha-one.txt",
+                "alpha-three.txt",
+                "alpha-two.txt",
+            );
+        }
 
-        editor
-            .handle_key(KeyEvent::Ctrl('p'))
-            .expect("C-p should select previous candidate");
-        assert_eq!(
-            editor
-                .completion()
-                .and_then(|completion| completion.selected())
-                .map(|candidate| candidate.value.as_str()),
-            Some("toggle-search-highlighting")
-        );
+        for kind in [PromptKind::SwitchToBuffer, PromptKind::KillBuffer] {
+            let mut editor = editor_with_small_completion_page(Document::scratch());
+            let completion = CompletionSession::buffers(
+                ["alpha-one", "alpha-two", "alpha-three"].map(str::to_owned),
+                editor.completion_config,
+            );
+            start_test_completion_prompt(&mut editor, kind, completion, "alpha");
+            assert_completion_movement_keys(&mut editor, "alpha-one", "alpha-two", "alpha-three");
+        }
+    }
 
-        editor
-            .handle_key(KeyEvent::Ctrl('v'))
-            .expect("C-v should page forward");
-        assert_eq!(
-            editor
-                .completion()
-                .and_then(|completion| completion.selected())
-                .map(|candidate| candidate.value.as_str()),
-            Some("toggle-syntax-highlighting")
-        );
+    #[test]
+    fn non_completion_prompts_ignore_completion_movement_keys() {
+        let non_completion_kinds = [
+            PromptKind::GotoLine,
+            PromptKind::IncrementalSearch,
+            PromptKind::KillDirtyBuffer,
+            PromptKind::QueryReplaceReplacement,
+            PromptKind::QueryReplaceSearch,
+            PromptKind::QuitDirtyBuffers,
+            PromptKind::RectangleNumberFormat,
+            PromptKind::RectangleNumberStart,
+            PromptKind::ShellCommand,
+            PromptKind::StringRectangle,
+            PromptKind::WriteFile,
+        ];
 
-        editor
-            .handle_key(KeyEvent::Meta('v'))
-            .expect("M-v should page backward");
-        assert_eq!(
+        for kind in non_completion_kinds {
+            let mut editor = Editor::new(Document::scratch());
             editor
-                .completion()
-                .and_then(|completion| completion.selected())
-                .map(|candidate| candidate.value.as_str()),
-            Some("toggle-search-highlighting")
-        );
+                .minibuffer
+                .start_prompt(kind, super::prompt_label(kind));
+            editor.minibuffer.set_prompt_input("draft");
+
+            for key in [
+                KeyEvent::Ctrl('n'),
+                KeyEvent::Ctrl('p'),
+                KeyEvent::Ctrl('v'),
+                KeyEvent::Meta('v'),
+            ] {
+                editor
+                    .handle_key(key)
+                    .expect("movement key should be ignored");
+                assert_eq!(editor.minibuffer().prompt_kind(), Some(kind));
+                assert_eq!(editor.minibuffer().prompt_input(), Some("draft"));
+            }
+        }
     }
 
     #[test]

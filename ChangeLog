@@ -1,5 +1,17 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Add unit matrix coverage for minibuffer history and
+	completion movement keys across prompt kinds.
+	* tests/pty_completion.rs: Cover M-p, M-n, C-n, C-p, C-v, and M-v in
+	representative command, help, variable, file, and buffer prompts.
+	* tools/reference/emacs/scenarios/minibuffer-navigation-modern.scenario,
+	tools/reference/rile/scenarios/minibuffer-navigation-modern.scenario: Focus
+	the movement capture on history, line movement, and page movement sections.
+	* docs/reference-testing.md, tools/reference/emacs/README.md,
+	tools/reference/rile/README.md: Update minibuffer navigation scenario wording.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs: Add page-sized completion selection movement.
 	* src/editor.rs: Handle C-v, M-v, PageDown, and PageUp in completion
 	prompts.
