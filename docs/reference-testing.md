@@ -277,16 +277,23 @@ prompts:
 - Tab inserts the selected candidate into the minibuffer;
 - Enter accepts the selected candidate, and an explicitly moved selection wins
   over exact minibuffer text;
-- file prompts use basic-substring matching, still preserve no-match raw
-  missing-file input, and descend into directories after Tab insertion, exact
-  input, or explicit selection;
+- command, option, and buffer prompts use orderless component matching by
+  default;
+- file prompts use Emacs file-category prefix/basic partial-completion matching
+  by default, still preserve no-match raw missing-file input, and descend into
+  directories after Tab insertion, exact input, or explicit selection;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
+The `m-x-completion-modern` capture covers modern Vertico/Marginalia command
+completion review with selected-candidate Tab insertion and selected Enter over
+exact input. Orderless component and regexp behavior is covered by Rile's PTY
+tests, because interactive VHS space input can be misleading for `M-x`.
+
 The `find-file-completion-modern` capture covers file prompt prefix filtering,
-substring filtering, selected-candidate Tab insertion, selected Enter over
-substring and exact input, directory descent, exact files, and no-match raw
-missing-file input.
+file-category word-component partial-completion matching, selected-candidate Tab
+insertion, selected Enter over exact input, directory descent, exact files, and
+no-match raw missing-file input.
 
 ## Kill Buffer Completion Review Notes
 

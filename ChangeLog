@@ -1,5 +1,22 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* Cargo.toml: Add regex dependency for orderless completion components.
+	* src/completion.rs: Add orderless completion matching and make it the
+	default for non-file sources. Keep basic-substring as an explicit matching
+	option.
+	* src/config.rs, src/option.rs: Register the orderless completion matching
+	value and default.
+	* src/editor.rs, tests/pty_completion.rs: Update completion tests for
+	orderless command matching and file-category prefix/basic behavior.
+	* tools/reference/emacs/Containerfile, tools/reference/emacs/profiles/modern.el:
+	Add the Orderless package and configure file category overrides.
+	* tools/reference/emacs/scenarios/find-file-completion-modern.scenario: Capture
+	file-category word-component and partial-completion matching behavior.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md: Document
+	orderless completion and file-category matching.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs: Add basic-substring completion matching and make it the
 	default.
 	* src/editor.rs: Let file prompts accept selected existing substring matches

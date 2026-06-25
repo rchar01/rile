@@ -222,20 +222,24 @@ path the visited file. Empty input reports `Error: missing file name`.
 Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
 completion for `C-x C-f`, and buffer-name completion for `C-x b` and `C-x k`.
 The completion core is separate from the UI style and supports command-name,
-file-name, and buffer-name sources, prefix, substring, or basic-substring
-matching, selected candidate movement with `C-n`/Down and `C-p`/Up, and Enter
-acceptance. For completion prompts, including `M-x`, `C-h f`, `C-h v`,
-`C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab inserts the selected
-candidate and an explicitly moved selection wins over exact minibuffer text on
-Enter.
+file-name, and buffer-name sources, orderless, prefix, substring, or
+basic-substring matching, selected candidate movement with `C-n`/Down and
+`C-p`/Up, and Enter acceptance. For completion prompts, including `M-x`,
+`C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab
+inserts the selected candidate and an explicitly moved selection wins over exact
+minibuffer text on Enter.
 File completion resolves relative candidates against the current buffer's
 directory when available, accepts selected existing candidates on Enter, keeps
 no-match raw missing-file input working, descends into selected directories, and
 opens existing files by exact input when the selected candidate has not been
 moved explicitly. Directory candidates descend after Tab insertion, exact input,
 or explicit selection so directory-first substring matches do not hijack raw
-missing-file input. The default `completion_matching = "basic-substring"` uses
-prefix matches when available and otherwise falls back to substring matches.
+missing-file input. The default `completion_matching = "orderless"` uses
+component-based matching for non-file prompts: every space-separated component
+must match in any order, lowercase components match case-insensitively, valid
+regular expressions are honored, and invalid regular expressions fall back to
+literal substring matching. File prompts override the global orderless default
+with Emacs-style file-category prefix/basic partial-completion matching.
 C-x b empty input switches to the default previous buffer, while C-x k empty
 input kills the default current buffer. The default `completion_style =
 "vertical"` reserves rows above the minibuffer and shows candidate annotations.

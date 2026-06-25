@@ -15,13 +15,16 @@
         (when (file-directory-p directory)
           (add-to-list 'load-path directory))))))
 
-(dolist (package '("compat" "vertico" "marginalia"))
+(dolist (package '("compat" "vertico" "marginalia" "orderless"))
   (rile-reference-add-elpa-package package))
 
 (require 'vertico)
 (require 'marginalia)
+(require 'orderless)
 
-(setq completion-styles '(basic substring))
+(setq completion-styles '(orderless basic))
+(setq completion-category-defaults nil)
+(setq completion-category-overrides '((file (styles basic partial-completion))))
 (setq completion-cycle-threshold nil)
 (setq read-file-name-completion-ignore-case nil)
 (setq read-buffer-completion-ignore-case nil)

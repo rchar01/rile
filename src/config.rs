@@ -121,7 +121,7 @@ impl Config {
                 style: CompletionStyle::Vertical,
                 max_candidates: 0,
                 show_annotations: false,
-                matching: CompletionMatching::BasicSubstring,
+                matching: CompletionMatching::Orderless,
             },
         }
     }
@@ -160,6 +160,9 @@ impl Config {
             }
             (OptionId::CompletionMatching, OptionValue::Choice("prefix")) => {
                 self.completion.matching = CompletionMatching::Prefix;
+            }
+            (OptionId::CompletionMatching, OptionValue::Choice("orderless")) => {
+                self.completion.matching = CompletionMatching::Orderless;
             }
             (OptionId::CompletionMatching, OptionValue::Choice("basic-substring")) => {
                 self.completion.matching = CompletionMatching::BasicSubstring;
@@ -221,7 +224,7 @@ mod tests {
             completion_style = "ido"
             completion_max_candidates = 5
             completion_show_annotations = false
-            completion_matching = "basic-substring"
+            completion_matching = "orderless"
             "#,
         )
         .expect("config should parse");
@@ -235,10 +238,7 @@ mod tests {
         assert_eq!(config.completion.style, CompletionStyle::Ido);
         assert_eq!(config.completion.max_candidates, 5);
         assert!(!config.completion.show_annotations);
-        assert_eq!(
-            config.completion.matching,
-            CompletionMatching::BasicSubstring
-        );
+        assert_eq!(config.completion.matching, CompletionMatching::Orderless);
     }
 
     #[test]

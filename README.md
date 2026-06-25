@@ -172,15 +172,18 @@ theme = "default" # or "mono"
 completion_style = "vertical" # "completions-buffer" or "ido"
 completion_max_candidates = 8
 completion_show_annotations = true
-completion_matching = "basic-substring" # "prefix" or "substring"
+completion_matching = "orderless" # "orderless", "basic-substring", "prefix", or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
 `C-x b`/`C-x k` buffer names. Completion prompts use Vertico-style selected
-candidate insertion on Tab. The default `basic-substring` matching uses prefix
-matches when available and falls back to substring matches. File prompts preserve
-no-match missing-file input and directory descent.
+candidate insertion on Tab. The default `orderless` matching for command,
+option, and buffer prompts splits input on spaces and requires every component
+to match in any order, with lowercase components matched case-insensitively.
+File prompts follow Emacs file-category behavior instead: they use prefix/basic
+partial-completion matching by default, preserve no-match missing-file input,
+and keep directory descent separate from orderless command matching.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 

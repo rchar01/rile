@@ -4,6 +4,8 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use regex::{Regex, RegexBuilder};
+
 use crate::command::CommandRegistry;
 use crate::keymap::{KeyMap, format_key_sequence};
 use crate::option::OptionRegistry;
@@ -27,6 +29,7 @@ impl CompletionStyle {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionMatching {
+    Orderless,
     Prefix,
     BasicSubstring,
     Substring,
@@ -35,6 +38,7 @@ pub enum CompletionMatching {
 impl CompletionMatching {
     pub const fn name(self) -> &'static str {
         match self {
+            Self::Orderless => "orderless",
             Self::Prefix => "prefix",
             Self::BasicSubstring => "basic-substring",
             Self::Substring => "substring",
@@ -56,7 +60,7 @@ impl Default for CompletionConfig {
             style: CompletionStyle::Vertical,
             max_candidates: 8,
             show_annotations: true,
-            matching: CompletionMatching::BasicSubstring,
+            matching: CompletionMatching::Orderless,
         }
     }
 }
@@ -252,20 +256,49 @@ impl CompletionSession {
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
             CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
-                let matching = item_matching_for(
-                    self.config.matching,
+                let matching = if self.config.matching == CompletionMatching::BasicSubstring {
+                    item_matching_for(
+                        self.config.matching,
+                        self.candidates
+                            .iter()
+                            .map(|candidate| candidate.value.as_str()),
+                        input,
+                    )
+                } else {
+                    self.config.matching
+                };
+                if matching == CompletionMatching::Orderless && !input.is_empty() {
+                    let components = parse_orderless_components(input);
+                    let mut matches = self
+                        .candidates
+                        .iter()
+                        .enumerate()
+                        .filter_map(|(index, candidate)| {
+                            orderless_match_score_for_components(&candidate.value, &components)
+                                .map(|score| (index, score))
+                        })
+                        .collect::<Vec<_>>();
+                    matches.sort_by(|(left_index, left_score), (right_index, right_score)| {
+                        left_score
+                            .cmp(right_score)
+                            .then_with(|| {
+                                self.candidates[*left_index]
+                                    .value
+                                    .len()
+                                    .cmp(&self.candidates[*right_index].value.len())
+                            })
+                            .then_with(|| left_index.cmp(right_index))
+                    });
+                    matches.into_iter().map(|(index, _)| index).collect()
+                } else {
                     self.candidates
                         .iter()
-                        .map(|candidate| candidate.value.as_str()),
-                    input,
-                );
-                self.candidates
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(index, candidate)| {
-                        item_matches(matching, &candidate.value, input).then_some(index)
-                    })
-                    .collect()
+                        .enumerate()
+                        .filter_map(|(index, candidate)| {
+                            item_matches(matching, &candidate.value, input).then_some(index)
+                        })
+                        .collect()
+                }
             }
             CompletionSource::Files => {
                 self.refresh_file_candidates(input);
@@ -381,11 +414,17 @@ impl CompletionSession {
             entries.iter().map(|(name, _)| name.as_str()),
             &parts.name_prefix,
         );
+        let use_file_category_matching = self.config.matching == CompletionMatching::Orderless;
 
         let mut candidates = entries
             .into_iter()
             .filter_map(|(name, file_type)| {
-                if !item_matches(matching, &name, &parts.name_prefix) {
+                let matches = if use_file_category_matching {
+                    file_category_matches(&name, &parts.name_prefix)
+                } else {
+                    item_matches(matching, &name, &parts.name_prefix)
+                };
+                if !matches {
                     return None;
                 }
                 let value = format!("{}{}", parts.display_prefix, name);
@@ -411,6 +450,9 @@ fn item_matching_for<'a>(
     values: impl IntoIterator<Item = &'a str>,
     input: &str,
 ) -> CompletionMatching {
+    if matching == CompletionMatching::Orderless {
+        return CompletionMatching::Prefix;
+    }
     if matching != CompletionMatching::BasicSubstring {
         return matching;
     }
@@ -448,10 +490,224 @@ fn file_completion_parts(base_dir: &Path, input: &str) -> Option<FileCompletionP
 }
 
 fn item_matches(matching: CompletionMatching, value: &str, input: &str) -> bool {
-    match matching {
-        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => value.starts_with(input),
-        CompletionMatching::Substring => value.contains(input),
+    item_match_score(matching, value, input).is_some()
+}
+
+fn file_category_matches(name: &str, input: &str) -> bool {
+    name.starts_with(input) || partial_completion_matches(name, input)
+}
+
+fn partial_completion_matches(name: &str, input: &str) -> bool {
+    let mut components = input.split('-').filter(|component| !component.is_empty());
+    let Some(first) = components.next() else {
+        return true;
+    };
+    let mut words = name.split(['-', '_', '.', ' ']);
+    if !words.any(|word| word.starts_with(first)) {
+        return false;
     }
+    for component in components {
+        if !words.any(|word| word.starts_with(component)) {
+            return false;
+        }
+    }
+    true
+}
+
+fn item_match_score(matching: CompletionMatching, value: &str, input: &str) -> Option<MatchScore> {
+    match matching {
+        CompletionMatching::Orderless => orderless_match_score(value, input),
+        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => value
+            .starts_with(input)
+            .then_some(prefix_match_score(value, input)),
+        CompletionMatching::Substring => value
+            .contains(input)
+            .then_some(substring_match_score(value, input)),
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct MatchScore {
+    quality: MatchQuality,
+    component_count: usize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum MatchQuality {
+    Exact,
+    Prefix,
+    WordBoundary,
+    Substring,
+    Regex,
+}
+
+fn prefix_match_score(value: &str, input: &str) -> MatchScore {
+    MatchScore {
+        quality: if value == input {
+            MatchQuality::Exact
+        } else {
+            MatchQuality::Prefix
+        },
+        component_count: 1,
+    }
+}
+
+fn substring_match_score(value: &str, input: &str) -> MatchScore {
+    MatchScore {
+        quality: literal_match_quality(value, input, true).unwrap_or(MatchQuality::Substring),
+        component_count: 1,
+    }
+}
+
+fn orderless_match_score(value: &str, input: &str) -> Option<MatchScore> {
+    let components = parse_orderless_components(input);
+    orderless_match_score_for_components(value, &components)
+}
+
+fn orderless_match_score_for_components(
+    value: &str,
+    components: &[OrderlessComponent],
+) -> Option<MatchScore> {
+    if components.is_empty() {
+        return Some(MatchScore {
+            quality: MatchQuality::Prefix,
+            component_count: 0,
+        });
+    }
+    let mut quality = MatchQuality::Exact;
+    for component in components {
+        let component_quality = component.match_quality(value)?;
+        quality = quality.max(component_quality);
+    }
+    Some(MatchScore {
+        quality,
+        component_count: components.len(),
+    })
+}
+
+#[derive(Debug)]
+struct OrderlessComponent {
+    text: String,
+    case_sensitive: bool,
+    matcher: OrderlessMatcher,
+}
+
+#[derive(Debug)]
+enum OrderlessMatcher {
+    Regex(Regex),
+    Literal,
+}
+
+impl OrderlessComponent {
+    fn new(text: String) -> Self {
+        let case_sensitive = text.chars().any(char::is_uppercase);
+        let matcher = RegexBuilder::new(&text)
+            .case_insensitive(!case_sensitive)
+            .build()
+            .map(OrderlessMatcher::Regex)
+            .unwrap_or(OrderlessMatcher::Literal);
+        Self {
+            text,
+            case_sensitive,
+            matcher,
+        }
+    }
+
+    fn match_quality(&self, value: &str) -> Option<MatchQuality> {
+        match &self.matcher {
+            OrderlessMatcher::Regex(regex) => {
+                if !regex.is_match(value) {
+                    return None;
+                }
+                Some(
+                    literal_match_quality(value, &self.text, self.case_sensitive)
+                        .unwrap_or(MatchQuality::Regex),
+                )
+            }
+            OrderlessMatcher::Literal => {
+                literal_match_quality(value, &self.text, self.case_sensitive)
+            }
+        }
+    }
+}
+
+fn parse_orderless_components(input: &str) -> Vec<OrderlessComponent> {
+    split_orderless_components(input)
+        .into_iter()
+        .map(OrderlessComponent::new)
+        .collect()
+}
+
+fn split_orderless_components(input: &str) -> Vec<String> {
+    let mut components = Vec::new();
+    let mut current = String::new();
+    let mut characters = input.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character == '\\' {
+            if characters.peek().is_some_and(char::is_ascii_whitespace) {
+                if let Some(escaped) = characters.next() {
+                    current.push(escaped);
+                }
+            } else {
+                current.push(character);
+            }
+        } else if character.is_ascii_whitespace() {
+            if !current.is_empty() {
+                components.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push(character);
+        }
+    }
+    if !current.is_empty() {
+        components.push(current);
+    }
+    components
+}
+
+fn literal_match_quality(
+    value: &str,
+    component: &str,
+    case_sensitive: bool,
+) -> Option<MatchQuality> {
+    if component.is_empty() {
+        return Some(MatchQuality::Prefix);
+    }
+    let (value, component) = if case_sensitive {
+        (value.to_owned(), component.to_owned())
+    } else {
+        (value.to_lowercase(), component.to_lowercase())
+    };
+    if value == component {
+        return Some(MatchQuality::Exact);
+    }
+    if value.starts_with(&component) {
+        return Some(MatchQuality::Prefix);
+    }
+    if word_boundary_contains(&value, &component) {
+        return Some(MatchQuality::WordBoundary);
+    }
+    value
+        .contains(&component)
+        .then_some(MatchQuality::Substring)
+}
+
+fn word_boundary_contains(value: &str, component: &str) -> bool {
+    value
+        .match_indices(component)
+        .any(|(index, _)| index > 0 && is_word_boundary(value, index))
+}
+
+fn is_word_boundary(value: &str, index: usize) -> bool {
+    let mut before = value[..index].chars().rev();
+    let Some(previous) = before.next() else {
+        return true;
+    };
+    let Some(current) = value[index..].chars().next() else {
+        return false;
+    };
+    !previous.is_ascii_alphanumeric()
+        || (previous.is_ascii_lowercase() && current.is_ascii_uppercase())
 }
 
 fn common_prefix(left: &str, right: &str) -> String {
@@ -562,6 +818,126 @@ mod tests {
     }
 
     #[test]
+    fn orderless_completion_requires_all_components_in_any_order() {
+        let mut session = CompletionSession::buffers(
+            [
+                "copy-rectangle-to-register".to_owned(),
+                "rectangle-number-lines".to_owned(),
+                "insert-register".to_owned(),
+                "string-rectangle".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("rect reg");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["copy-rectangle-to-register"]);
+
+        session.update("reg rect");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["copy-rectangle-to-register"]);
+    }
+
+    #[test]
+    fn orderless_completion_uses_smart_case() {
+        let mut session = CompletionSession::buffers(
+            ["find-file".to_owned(), "Find-Function".to_owned()],
+            CompletionConfig::default(),
+        );
+
+        session.update("find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file", "Find-Function"]);
+
+        session.update("Find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["Find-Function"]);
+    }
+
+    #[test]
+    fn orderless_completion_supports_regex_and_literal_fallback() {
+        let mut session = CompletionSession::buffers(
+            [
+                "find-file".to_owned(),
+                "project-find-file".to_owned(),
+                "literal-[name".to_owned(),
+                "foo.txt".to_owned(),
+                "fooxtxt".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("^find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file"]);
+
+        session.update("file$");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file", "project-find-file"]);
+
+        session.update("[");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("literal-[name")
+        );
+
+        session.update(r"foo\.txt");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["foo.txt"]);
+    }
+
+    #[test]
+    fn orderless_completion_ranks_exact_prefix_before_substring() {
+        let mut session = CompletionSession::buffers(
+            [
+                "project-find-file".to_owned(),
+                "find-file-read-only".to_owned(),
+                "find-file".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("find-file");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec!["find-file", "find-file-read-only", "project-find-file"]
+        );
+    }
+
+    #[test]
     fn option_completion_filters_and_uses_summaries() {
         let registry = OptionRegistry::default();
         let mut session = CompletionSession::options(&registry, CompletionConfig::default());
@@ -607,12 +983,56 @@ mod tests {
     }
 
     #[test]
-    fn file_completion_uses_substring_when_prefix_has_no_matches() {
+    fn default_file_completion_does_not_use_arbitrary_substring() {
+        let directory = TestDir::new();
+        fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
+        fs::write(directory.path().join("beta-note.txt"), "beta").expect("fixture should write");
+        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+
+        session.update("ote");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert!(values.is_empty());
+    }
+
+    #[test]
+    fn default_file_completion_uses_partial_completion() {
+        let directory = TestDir::new();
+        fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
+        fs::write(directory.path().join("alphabet.txt"), "alphabet").expect("fixture should write");
+        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+
+        session.update("a-n");
+
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("alpha-note.txt")
+        );
+
+        session.update("note");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("alpha-note.txt")
+        );
+    }
+
+    #[test]
+    fn basic_substring_file_completion_uses_substring_when_prefix_has_no_matches() {
         let directory = TestDir::new();
         fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
         fs::write(directory.path().join("beta-note.txt"), "beta").expect("fixture should write");
         fs::write(directory.path().join("plain.txt"), "plain").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session = CompletionSession::files(
+            directory.path(),
+            CompletionConfig {
+                matching: CompletionMatching::BasicSubstring,
+                ..CompletionConfig::default()
+            },
+        );
 
         session.update("note");
 
@@ -632,7 +1052,10 @@ mod tests {
                 "notes-alpha.txt".to_owned(),
                 "alphabet-buffer.txt".to_owned(),
             ],
-            CompletionConfig::default(),
+            CompletionConfig {
+                matching: CompletionMatching::BasicSubstring,
+                ..CompletionConfig::default()
+            },
         );
 
         session.update("alpha");
@@ -679,6 +1102,7 @@ mod tests {
                 "notes.txt".to_owned(),
                 "alpha-buffer.txt".to_owned(),
                 "alphabet-buffer.txt".to_owned(),
+                "notes-alpha.txt".to_owned(),
             ],
             CompletionConfig::default(),
         );
@@ -690,7 +1114,10 @@ mod tests {
             .into_iter()
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
-        assert_eq!(values, vec!["alpha-buffer.txt", "alphabet-buffer.txt"]);
+        assert_eq!(
+            values,
+            vec!["alpha-buffer.txt", "alphabet-buffer.txt", "notes-alpha.txt"]
+        );
 
         session.update("alpha-b");
 

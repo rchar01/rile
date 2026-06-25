@@ -168,7 +168,8 @@ impl Default for OptionRegistry {
 
 const THEME_VALUES: &[&str] = &["default", "mono"];
 const COMPLETION_STYLE_VALUES: &[&str] = &["vertical", "completions-buffer", "ido"];
-const COMPLETION_MATCHING_VALUES: &[&str] = &["basic-substring", "prefix", "substring"];
+const COMPLETION_MATCHING_VALUES: &[&str] =
+    &["orderless", "basic-substring", "prefix", "substring"];
 
 fn default_options() -> Vec<OptionSpec> {
     vec![
@@ -284,13 +285,13 @@ fn default_options() -> Vec<OptionSpec> {
             id: OptionId::CompletionMatching,
             name: "completion_matching",
             summary: "Completion matching",
-            doc: "Matching strategy used for command, buffer, and file completion candidates.",
+            doc: "Matching strategy used for command, option, and buffer completion candidates. File prompts use a file-category prefix/partial-completion override when this is `orderless`.",
             value_type: OptionType::Choice(COMPLETION_MATCHING_VALUES),
-            default: OptionValue::Choice("basic-substring"),
-            valid_values: "basic-substring, prefix, or substring",
+            default: OptionValue::Choice("orderless"),
+            valid_values: "orderless, basic-substring, prefix, or substring",
             validator: valid_completion_matching,
-            parse_error: "completion_matching must be `basic-substring`, `prefix`, or `substring`",
-            validation_error: "completion_matching must be `basic-substring`, `prefix`, or `substring`",
+            parse_error: "completion_matching must be `orderless`, `basic-substring`, `prefix`, or `substring`",
+            validation_error: "completion_matching must be `orderless`, `basic-substring`, `prefix`, or `substring`",
         }),
     ]
 }
@@ -350,7 +351,7 @@ fn valid_completion_max_candidates(value: &OptionValue) -> bool {
 fn valid_completion_matching(value: &OptionValue) -> bool {
     matches!(
         value,
-        OptionValue::Choice("basic-substring" | "prefix" | "substring")
+        OptionValue::Choice("orderless" | "basic-substring" | "prefix" | "substring")
     )
 }
 
@@ -452,7 +453,7 @@ mod tests {
             (
                 "completion_matching",
                 "\"fuzzy\"",
-                "completion_matching must be `basic-substring`, `prefix`, or `substring`",
+                "completion_matching must be `orderless`, `basic-substring`, `prefix`, or `substring`",
             ),
         ];
 

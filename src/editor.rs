@@ -7138,14 +7138,51 @@ mod tests {
     }
 
     #[test]
-    fn find_file_completion_accepts_selected_substring_file() {
+    fn find_file_completion_keeps_raw_non_prefix_input_by_default() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let missing = directory.path().join("ote");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(directory.path().join("alpha-note.txt"), "alpha")
+            .expect("alpha fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("ote".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open raw non-prefix input");
+
+        assert_eq!(editor.document().path(), Some(missing.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn basic_substring_file_completion_accepts_selected_substring_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
         let alpha = directory.path().join("alpha-note.txt");
         fs::write(&start, "start").expect("start fixture should write");
         fs::write(&alpha, "alpha").expect("alpha fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
-        let mut editor = Editor::new(document);
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    matching: CompletionMatching::BasicSubstring,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
 
         editor
             .handle_key(KeyEvent::Ctrl('x'))
@@ -7174,7 +7211,16 @@ mod tests {
         fs::write(directory.path().join("beta-note.txt"), "beta")
             .expect("beta fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
-        let mut editor = Editor::new(document);
+        let mut editor = Editor::with_config(
+            document,
+            Config {
+                completion: CompletionConfig {
+                    matching: CompletionMatching::BasicSubstring,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
 
         editor
             .handle_key(KeyEvent::Ctrl('x'))
@@ -7665,10 +7711,7 @@ mod tests {
             .expect("exact buffer name should update prompt");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
-            .expect("down should select exact buffer");
-        editor
-            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
-            .expect("second down should select prefixed buffer");
+            .expect("down should select prefixed buffer");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("enter should switch to explicitly selected buffer");
@@ -7714,8 +7757,8 @@ mod tests {
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("enter should accept selected buffer");
 
-        assert_eq!(editor.current_buffer_name(), "alpha-buffer.txt");
-        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(editor.current_buffer_name(), "alphabet-buffer.txt");
+        assert_eq!(editor.document().buffer().serialize(), "alphabet");
     }
 
     #[test]
@@ -7852,10 +7895,7 @@ mod tests {
             .handle_key(KeyEvent::Special(SpecialKey::Tab))
             .expect("tab should accept selected default candidate");
 
-        assert_eq!(
-            editor.minibuffer().prompt_input(),
-            Some("alphabet-buffer.txt")
-        );
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-buffer.txt"));
     }
 
     #[test]
@@ -7890,10 +7930,10 @@ mod tests {
             .expect("enter should kill selected default candidate");
 
         assert_eq!(editor.buffer_count(), 2);
-        assert!(editor.buffers.find_by_name("alphabet-buffer.txt").is_none());
+        assert!(editor.buffers.find_by_name("alpha-buffer.txt").is_none());
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("Killed buffer alphabet-buffer.txt")
+            Some("Killed buffer alpha-buffer.txt")
         );
     }
 
@@ -9481,7 +9521,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("v".to_owned()))
             .expect("describe-variable should start");
         editor
-            .handle_key(KeyEvent::Text("completion_m".to_owned()))
+            .handle_key(KeyEvent::Text("completion".to_owned()))
             .expect("describe-variable input should update");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
@@ -9506,7 +9546,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("v".to_owned()))
             .expect("describe-variable should start");
         editor
-            .handle_key(KeyEvent::Text("completion_m".to_owned()))
+            .handle_key(KeyEvent::Text("completion".to_owned()))
             .expect("describe-variable input should update");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
@@ -9532,8 +9572,8 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert!(help.contains("completion_matching is a configuration variable."));
         assert!(help.contains("Current value: substring"));
-        assert!(help.contains("Default value: basic-substring"));
-        assert!(help.contains("Valid values: basic-substring, prefix, or substring"));
+        assert!(help.contains("Default value: orderless"));
+        assert!(help.contains("Valid values: orderless, basic-substring, prefix, or substring"));
     }
 
     #[test]

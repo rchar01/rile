@@ -67,6 +67,47 @@ fn vertical_mx_completion_tab_inserts_selected_command() -> Result<()> {
 }
 
 #[test]
+fn vertical_mx_completion_matches_orderless_components() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("find file", b"find file")?;
+
+    rile.assert_screen_contains("find-file")?;
+    rile.assert_screen_contains("find-file-read-only")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("file find", b"file find")?;
+
+    rile.assert_screen_contains("find-file")?;
+    rile.assert_screen_contains("find-file-read-only")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_mx_completion_matches_regex_anchor() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("^find", b"^find")?;
+
+    rile.assert_screen_contains("find-file")?;
+    rile.assert_screen_contains("find-file-read-only")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_mx_completion_enter_accepts_explicit_exact_selection() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;
@@ -130,7 +171,7 @@ fn vertical_describe_variable_completion_tab_inserts_selected_option() -> Result
     rile.wait_for_screen_contains("alpha")?;
     rile.send("C-h", keys::control('h'))?;
     rile.send("v", b"v")?;
-    rile.send("completion_m", b"completion_m")?;
+    rile.send("completion", b"completion")?;
     rile.send("Down", keys::DOWN)?;
     rile.send("Tab", keys::TAB)?;
 
@@ -152,7 +193,7 @@ fn vertical_describe_variable_completion_accepts_explicit_selection() -> Result<
     rile.wait_for_screen_contains("alpha")?;
     rile.send("C-h", keys::control('h'))?;
     rile.send("v", b"v")?;
-    rile.send("completion_m", b"completion_m")?;
+    rile.send("completion", b"completion")?;
     rile.send("Down", keys::DOWN)?;
     rile.send("Enter", keys::ENTER)?;
 
@@ -274,7 +315,28 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
 }
 
 #[test]
-fn vertical_find_file_completion_enter_accepts_substring_match() -> Result<()> {
+fn vertical_find_file_completion_tab_inserts_partial_file_match() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("alpha-note.txt"), "alpha note\n")?;
+    fs::write(directory.path().join("alphabet.txt"), "alphabet\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("a-n", b"a-n")?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Find file: alpha-note.txt")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_enter_accepts_word_component_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
@@ -294,8 +356,26 @@ fn vertical_find_file_completion_enter_accepts_substring_match() -> Result<()> {
 }
 
 #[test]
-fn vertical_find_file_completion_keeps_raw_input_when_substring_directory_is_selected() -> Result<()>
-{
+fn vertical_find_file_completion_keeps_raw_arbitrary_substring_input() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("project-note.txt"), "project note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("ote", b"ote")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_status_contains("ACTIVE ote")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_keeps_raw_input_with_non_prefix_directory_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
@@ -435,7 +515,7 @@ fn vertical_find_file_read_only_completion_accepts_explicit_selection() -> Resul
 }
 
 #[test]
-fn vertical_find_file_read_only_completion_enter_accepts_substring_match() -> Result<()> {
+fn vertical_find_file_read_only_completion_enter_accepts_prefix_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
@@ -444,7 +524,7 @@ fn vertical_find_file_read_only_completion_enter_accepts_substring_match() -> Re
 
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-r", keys::control_sequence("xr"))?;
-    rile.send("note", b"note")?;
+    rile.send("project", b"project")?;
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("project note")?;
@@ -508,7 +588,7 @@ fn vertical_insert_file_completion_accepts_explicit_selection() -> Result<()> {
 }
 
 #[test]
-fn vertical_insert_file_completion_enter_accepts_substring_match() -> Result<()> {
+fn vertical_insert_file_completion_enter_accepts_prefix_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
@@ -518,7 +598,7 @@ fn vertical_insert_file_completion_enter_accepts_substring_match() -> Result<()>
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x", keys::control('x'))?;
     rile.send("i", b"i")?;
-    rile.send("note", b"note")?;
+    rile.send("project", b"project")?;
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("project note")?;
@@ -788,11 +868,11 @@ fn vertical_kill_buffer_completion_tab_accepts_selected_default() -> Result<()> 
     rile.send("alpha", b"alpha")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Kill buffer (default alphabet-buffer.txt): alphabet-buffer.txt")?;
+    rile.assert_screen_contains("Kill buffer (default alphabet-buffer.txt): alpha-buffer.txt")?;
 
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("Killed buffer alphabet-buffer.txt")?;
+    rile.assert_screen_contains("Killed buffer alpha-buffer.txt")?;
 
     rile.quit()?;
     Ok(())
@@ -827,7 +907,7 @@ fn vertical_kill_buffer_completion_enter_accepts_selected_default() -> Result<()
     rile.send("alpha", b"alpha")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("Killed buffer alphabet-buffer.txt")?;
+    rile.assert_screen_contains("Killed buffer alpha-buffer.txt")?;
 
     rile.quit()?;
     Ok(())

@@ -49,11 +49,11 @@ Ctrl+F
 Sleep 500ms
 Type "note"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/05-after-substring-input.png
+Screenshot {{FRAME_DIR}}/05-after-word-component-input.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/06-after-substring-enter.png
+Screenshot {{FRAME_DIR}}/06-after-word-component-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+F
@@ -108,6 +108,19 @@ Sleep 500ms
 Enter
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/15-after-missing-file-enter.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "../a-n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/16-after-partial-file-input.png
+Sleep 500ms
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/17-after-partial-file-tab.png
+Sleep 500ms
+Ctrl+G
 Sleep 500ms
 Ctrl+X
 Ctrl+C
