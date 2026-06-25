@@ -47,13 +47,24 @@ Sleep 500ms
 Ctrl+X
 Ctrl+F
 Sleep 500ms
-Type "alpha-note.txt"
+Type "note"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/05-after-exact-file.png
+Screenshot {{FRAME_DIR}}/05-after-substring-input.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/06-after-exact-enter.png
+Screenshot {{FRAME_DIR}}/06-after-substring-enter.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "alpha-note.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-exact-file.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-exact-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+F
@@ -62,41 +73,41 @@ Type "alpha-note.txt"
 Sleep 500ms
 Down
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/07-after-exact-file-down.png
+Screenshot {{FRAME_DIR}}/09-after-exact-file-down.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/08-after-explicit-selected-enter.png
+Screenshot {{FRAME_DIR}}/10-after-explicit-selected-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+F
 Sleep 500ms
 Type "nested"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/09-after-directory-prefix.png
+Screenshot {{FRAME_DIR}}/11-after-directory-prefix.png
 Sleep 500ms
 Type "-dir"
 Sleep 500ms
 Tab
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/10-after-directory-tab.png
+Screenshot {{FRAME_DIR}}/12-after-directory-tab.png
 Sleep 500ms
 Type "inside.txt"
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/11-after-directory-file-enter.png
+Screenshot {{FRAME_DIR}}/13-after-directory-file-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+F
 Sleep 500ms
 Type "missing-note.txt"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/12-after-missing-file-input.png
+Screenshot {{FRAME_DIR}}/14-after-missing-file-input.png
 Sleep 500ms
 Enter
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/13-after-missing-file-enter.png
+Screenshot {{FRAME_DIR}}/15-after-missing-file-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+C

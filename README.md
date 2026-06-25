@@ -105,10 +105,13 @@ Basic editor keys:
 - `C-x C-s` saves the current file.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
 - `C-x C-f` prompts for a file path with completion and opens it; Tab inserts
-  the selected path, Enter accepts an explicitly selected path, and raw
-  missing-file input opens a new buffer.
-- `C-x i` prompts for a file path with completion and inserts its contents.
-- `C-x C-r` prompts for a file path with completion and opens it read-only.
+  the selected path, Enter accepts the selected existing path, and no-match
+  missing-file input opens a new buffer. Directory candidates descend after Tab,
+  exact input, or explicit selection.
+- `C-x i` prompts for a file path with completion and inserts its contents;
+  Enter accepts the selected existing path.
+- `C-x C-r` prompts for a file path with completion and opens it read-only;
+  Enter accepts the selected existing path.
 - `C-x C-q` toggles whether the current normal buffer is read-only.
 - `C-x b` prompts for a buffer name with completion and switches to it,
   preserving each buffer's point; empty input switches to the default buffer,
@@ -169,14 +172,15 @@ theme = "default" # or "mono"
 completion_style = "vertical" # "completions-buffer" or "ido"
 completion_max_candidates = 8
 completion_show_annotations = true
-completion_matching = "prefix" # or "substring"
+completion_matching = "basic-substring" # "prefix" or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
 `C-x b`/`C-x k` buffer names. Completion prompts use Vertico-style selected
-candidate insertion on Tab; file prompts also preserve raw missing-file input
-and directory descent.
+candidate insertion on Tab. The default `basic-substring` matching uses prefix
+matches when available and falls back to substring matches. File prompts preserve
+no-match missing-file input and directory descent.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 

@@ -168,7 +168,7 @@ impl Default for OptionRegistry {
 
 const THEME_VALUES: &[&str] = &["default", "mono"];
 const COMPLETION_STYLE_VALUES: &[&str] = &["vertical", "completions-buffer", "ido"];
-const COMPLETION_MATCHING_VALUES: &[&str] = &["prefix", "substring"];
+const COMPLETION_MATCHING_VALUES: &[&str] = &["basic-substring", "prefix", "substring"];
 
 fn default_options() -> Vec<OptionSpec> {
     vec![
@@ -286,11 +286,11 @@ fn default_options() -> Vec<OptionSpec> {
             summary: "Completion matching",
             doc: "Matching strategy used for command, buffer, and file completion candidates.",
             value_type: OptionType::Choice(COMPLETION_MATCHING_VALUES),
-            default: OptionValue::Choice("prefix"),
-            valid_values: "prefix or substring",
+            default: OptionValue::Choice("basic-substring"),
+            valid_values: "basic-substring, prefix, or substring",
             validator: valid_completion_matching,
-            parse_error: "completion_matching must be `prefix` or `substring`",
-            validation_error: "completion_matching must be `prefix` or `substring`",
+            parse_error: "completion_matching must be `basic-substring`, `prefix`, or `substring`",
+            validation_error: "completion_matching must be `basic-substring`, `prefix`, or `substring`",
         }),
     ]
 }
@@ -348,7 +348,10 @@ fn valid_completion_max_candidates(value: &OptionValue) -> bool {
 }
 
 fn valid_completion_matching(value: &OptionValue) -> bool {
-    matches!(value, OptionValue::Choice("prefix" | "substring"))
+    matches!(
+        value,
+        OptionValue::Choice("basic-substring" | "prefix" | "substring")
+    )
 }
 
 fn unquote(value: &str) -> &str {
@@ -449,7 +452,7 @@ mod tests {
             (
                 "completion_matching",
                 "\"fuzzy\"",
-                "completion_matching must be `prefix` or `substring`",
+                "completion_matching must be `basic-substring`, `prefix`, or `substring`",
             ),
         ];
 

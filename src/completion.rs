@@ -28,6 +28,7 @@ impl CompletionStyle {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionMatching {
     Prefix,
+    BasicSubstring,
     Substring,
 }
 
@@ -35,6 +36,7 @@ impl CompletionMatching {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Prefix => "prefix",
+            Self::BasicSubstring => "basic-substring",
             Self::Substring => "substring",
         }
     }
@@ -54,7 +56,7 @@ impl Default for CompletionConfig {
             style: CompletionStyle::Vertical,
             max_candidates: 8,
             show_annotations: true,
-            matching: CompletionMatching::Prefix,
+            matching: CompletionMatching::BasicSubstring,
         }
     }
 }
@@ -250,11 +252,18 @@ impl CompletionSession {
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
             CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
+                let matching = item_matching_for(
+                    self.config.matching,
+                    self.candidates
+                        .iter()
+                        .map(|candidate| candidate.value.as_str()),
+                    input,
+                );
                 self.candidates
                     .iter()
                     .enumerate()
                     .filter_map(|(index, candidate)| {
-                        self.matches_input(candidate, input).then_some(index)
+                        item_matches(matching, &candidate.value, input).then_some(index)
                     })
                     .collect()
             }
@@ -343,13 +352,6 @@ impl CompletionSession {
         !self.matches.is_empty()
     }
 
-    fn matches_input(&self, candidate: &CompletionCandidate, input: &str) -> bool {
-        match self.config.matching {
-            CompletionMatching::Prefix => candidate.value.starts_with(input),
-            CompletionMatching::Substring => candidate.value.contains(input),
-        }
-    }
-
     fn refresh_file_candidates(&mut self, input: &str) {
         let Some(base_dir) = self.base_dir.as_deref() else {
             self.candidates.clear();
@@ -364,16 +366,28 @@ impl CompletionSession {
             return;
         };
 
-        let mut candidates = entries
+        let entries = entries
             .filter_map(Result::ok)
             .filter_map(|entry| {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                if !file_name_matches(self.config.matching, &name, &parts.name_prefix) {
-                    return None;
-                }
                 let Ok(file_type) = entry.file_type() else {
                     return None;
                 };
+                Some((name, file_type))
+            })
+            .collect::<Vec<_>>();
+        let matching = item_matching_for(
+            self.config.matching,
+            entries.iter().map(|(name, _)| name.as_str()),
+            &parts.name_prefix,
+        );
+
+        let mut candidates = entries
+            .into_iter()
+            .filter_map(|(name, file_type)| {
+                if !item_matches(matching, &name, &parts.name_prefix) {
+                    return None;
+                }
                 let value = format!("{}{}", parts.display_prefix, name);
                 if file_type.is_dir() {
                     Some(CompletionCandidate::directory(format!("{value}/")))
@@ -389,6 +403,21 @@ impl CompletionSession {
                 .then_with(|| left.value.cmp(&right.value))
         });
         self.candidates = candidates;
+    }
+}
+
+fn item_matching_for<'a>(
+    matching: CompletionMatching,
+    values: impl IntoIterator<Item = &'a str>,
+    input: &str,
+) -> CompletionMatching {
+    if matching != CompletionMatching::BasicSubstring {
+        return matching;
+    }
+    if values.into_iter().any(|value| value.starts_with(input)) {
+        CompletionMatching::Prefix
+    } else {
+        CompletionMatching::Substring
     }
 }
 
@@ -418,10 +447,10 @@ fn file_completion_parts(base_dir: &Path, input: &str) -> Option<FileCompletionP
     })
 }
 
-fn file_name_matches(matching: CompletionMatching, name: &str, input: &str) -> bool {
+fn item_matches(matching: CompletionMatching, value: &str, input: &str) -> bool {
     match matching {
-        CompletionMatching::Prefix => name.starts_with(input),
-        CompletionMatching::Substring => name.contains(input),
+        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => value.starts_with(input),
+        CompletionMatching::Substring => value.contains(input),
     }
 }
 
@@ -439,7 +468,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{CompletionCandidate, CompletionConfig, CompletionSession};
+    use super::{CompletionCandidate, CompletionConfig, CompletionMatching, CompletionSession};
     use crate::command::CommandRegistry;
     use crate::keymap::KeyMap;
     use crate::option::OptionRegistry;
@@ -575,6 +604,72 @@ mod tests {
                 .is_directory()
         );
         assert_eq!(session.common_prefix("alpha"), None);
+    }
+
+    #[test]
+    fn file_completion_uses_substring_when_prefix_has_no_matches() {
+        let directory = TestDir::new();
+        fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
+        fs::write(directory.path().join("beta-note.txt"), "beta").expect("fixture should write");
+        fs::write(directory.path().join("plain.txt"), "plain").expect("fixture should write");
+        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+
+        session.update("note");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["alpha-note.txt", "beta-note.txt"]);
+    }
+
+    #[test]
+    fn basic_substring_matching_prefers_prefix_matches() {
+        let mut session = CompletionSession::buffers(
+            [
+                "alpha-buffer.txt".to_owned(),
+                "notes-alpha.txt".to_owned(),
+                "alphabet-buffer.txt".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("alpha");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["alpha-buffer.txt", "alphabet-buffer.txt"]);
+    }
+
+    #[test]
+    fn substring_matching_can_include_non_prefix_matches() {
+        let mut session = CompletionSession::buffers(
+            [
+                "alpha-buffer.txt".to_owned(),
+                "notes-alpha.txt".to_owned(),
+                "alphabet-buffer.txt".to_owned(),
+            ],
+            CompletionConfig {
+                matching: CompletionMatching::Substring,
+                ..CompletionConfig::default()
+            },
+        );
+
+        session.update("alpha");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec!["alpha-buffer.txt", "notes-alpha.txt", "alphabet-buffer.txt"]
+        );
     }
 
     #[test]

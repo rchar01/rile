@@ -274,6 +274,47 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
 }
 
 #[test]
+fn vertical_find_file_completion_enter_accepts_substring_match() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("project-note.txt"), "project note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("note", b"note")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("project note")?;
+    rile.assert_status_contains("ACTIVE project-note.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_keeps_raw_input_when_substring_directory_is_selected() -> Result<()>
+{
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::create_dir(directory.path().join("alpha-note-dir"))?;
+    fs::write(directory.path().join("beta-note.txt"), "beta note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("note", b"note")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_status_contains("ACTIVE note")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_find_file_completion_enter_accepts_explicit_exact_selection() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
@@ -394,6 +435,27 @@ fn vertical_find_file_read_only_completion_accepts_explicit_selection() -> Resul
 }
 
 #[test]
+fn vertical_find_file_read_only_completion_enter_accepts_substring_match() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("project-note.txt"), "project note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-r", keys::control_sequence("xr"))?;
+    rile.send("note", b"note")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("project note")?;
+    rile.assert_status_contains("ACTIVE project-note.txt")?;
+    rile.assert_status_contains("ro:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_insert_file_completion_tab_inserts_selected_file() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
@@ -438,6 +500,28 @@ fn vertical_insert_file_completion_accepts_explicit_selection() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("alpha note extra")?;
+    rile.assert_screen_contains("start")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_insert_file_completion_enter_accepts_substring_match() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("project-note.txt"), "project note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("i", b"i")?;
+    rile.send("note", b"note")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("project note")?;
     rile.assert_screen_contains("start")?;
     rile.assert_status_contains("modified:true")?;
 

@@ -272,18 +272,21 @@ selected candidate list.
 Current Rile alignment shares selected-candidate mechanics across completion
 prompts:
 
-- `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x b`, and `C-x k` move the selected
-  candidate with Down/Up or `C-n`/`C-p`;
+- `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and
+  `C-x k` move the selected candidate with Down/Up or `C-n`/`C-p`;
 - Tab inserts the selected candidate into the minibuffer;
 - Enter accepts the selected candidate, and an explicitly moved selection wins
   over exact minibuffer text;
-- `C-x C-f` still preserves raw missing-file input and directory descent;
+- file prompts use basic-substring matching, still preserve no-match raw
+  missing-file input, and descend into directories after Tab insertion, exact
+  input, or explicit selection;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
 The `find-file-completion-modern` capture covers file prompt prefix filtering,
-selected-candidate Tab insertion, selected Enter over exact input, directory
-descent, exact files, and raw missing-file input.
+substring filtering, selected-candidate Tab insertion, selected Enter over
+substring and exact input, directory descent, exact files, and no-match raw
+missing-file input.
 
 ## Kill Buffer Completion Review Notes
 

@@ -1234,13 +1234,20 @@ impl Editor {
         let Some(completion) = self.completion.as_ref() else {
             return input.to_owned();
         };
-        if completion.selection_explicit() {
-            return completion
-                .selected()
-                .map(|candidate| candidate.value.clone())
-                .unwrap_or_else(|| input.to_owned());
+        if !completion.has_matches() {
+            return input.to_owned();
         }
-        input.to_owned()
+        if let Some(candidate) = completion.selected()
+            && candidate.is_directory()
+            && !completion.selection_explicit()
+            && candidate.value.trim_end_matches('/') != trimmed.trim_end_matches('/')
+        {
+            return input.to_owned();
+        }
+        completion
+            .selected()
+            .map(|candidate| candidate.value.clone())
+            .unwrap_or_else(|| input.to_owned())
     }
 
     fn buffer_completion_accept_input(&self, input: &str) -> String {
@@ -1279,8 +1286,9 @@ impl Editor {
         else {
             return false;
         };
-        completion.selection_explicit()
-            || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/')
+        completion.has_matches()
+            && (completion.selection_explicit()
+                || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/'))
     }
 
     fn record_prompt_history(&mut self, kind: PromptKind, input: &str) {
@@ -7130,14 +7138,12 @@ mod tests {
     }
 
     #[test]
-    fn find_file_completion_keeps_raw_ambiguous_missing_file_input() {
+    fn find_file_completion_accepts_selected_substring_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
-        let missing = directory.path().join("alpha");
+        let alpha = directory.path().join("alpha-note.txt");
         fs::write(&start, "start").expect("start fixture should write");
-        fs::write(directory.path().join("alpha-note.txt"), "alpha")
-            .expect("alpha fixture should write");
-        fs::create_dir(directory.path().join("alpha-dir")).expect("directory should create");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
         let mut editor = Editor::new(document);
 
@@ -7148,11 +7154,40 @@ mod tests {
             .handle_key(KeyEvent::Ctrl('f'))
             .expect("find-file should start prompt");
         editor
-            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .handle_key(KeyEvent::Text("note".to_owned()))
             .expect("prompt input should update completion");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("enter should open raw missing file");
+            .expect("enter should open selected substring file");
+
+        assert_eq!(editor.document().path(), Some(alpha.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+    }
+
+    #[test]
+    fn find_file_completion_keeps_raw_input_when_substring_directory_is_selected() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let missing = directory.path().join("note");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::create_dir(directory.path().join("alpha-note-dir")).expect("directory should create");
+        fs::write(directory.path().join("beta-note.txt"), "beta")
+            .expect("beta fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("note".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should keep raw directory-ambiguous input");
 
         assert_eq!(editor.document().path(), Some(missing.as_path()));
         assert_eq!(editor.document().buffer().serialize(), "");
@@ -9497,8 +9532,8 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert!(help.contains("completion_matching is a configuration variable."));
         assert!(help.contains("Current value: substring"));
-        assert!(help.contains("Default value: prefix"));
-        assert!(help.contains("Valid values: prefix or substring"));
+        assert!(help.contains("Default value: basic-substring"));
+        assert!(help.contains("Valid values: basic-substring, prefix, or substring"));
     }
 
     #[test]

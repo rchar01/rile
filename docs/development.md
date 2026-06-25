@@ -222,18 +222,24 @@ path the visited file. Empty input reports `Error: missing file name`.
 Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
 completion for `C-x C-f`, and buffer-name completion for `C-x b` and `C-x k`.
 The completion core is separate from the UI style and supports command-name,
-file-name, and buffer-name sources, prefix or substring matching,
-selected candidate movement with `C-n`/Down and `C-p`/Up, and Enter acceptance.
-For completion prompts, including `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x b`,
-and `C-x k`, Tab inserts the selected candidate and an explicitly moved
-selection wins over exact minibuffer text on Enter.
+file-name, and buffer-name sources, prefix, substring, or basic-substring
+matching, selected candidate movement with `C-n`/Down and `C-p`/Up, and Enter
+acceptance. For completion prompts, including `M-x`, `C-h f`, `C-h v`,
+`C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab inserts the selected
+candidate and an explicitly moved selection wins over exact minibuffer text on
+Enter.
 File completion resolves relative candidates against the current buffer's
-directory when available, keeps raw missing-file input working, descends into
-selected directories, and opens existing files by exact input when the selected
-candidate has not been moved explicitly. C-x b empty input switches to the
-default previous buffer, while C-x k empty input kills the default current
-buffer. The default `completion_style = "vertical"` reserves rows above the
-minibuffer and shows candidate annotations. Command completion rows
+directory when available, accepts selected existing candidates on Enter, keeps
+no-match raw missing-file input working, descends into selected directories, and
+opens existing files by exact input when the selected candidate has not been
+moved explicitly. Directory candidates descend after Tab insertion, exact input,
+or explicit selection so directory-first substring matches do not hijack raw
+missing-file input. The default `completion_matching = "basic-substring"` uses
+prefix matches when available and otherwise falls back to substring matches.
+C-x b empty input switches to the default previous buffer, while C-x k empty
+input kills the default current buffer. The default `completion_style =
+"vertical"` reserves rows above the minibuffer and shows candidate annotations.
+Command completion rows
 include the first known key binding in the candidate label, such as
 `save-buffer (C-x C-s)`, and keep annotations aligned after the visible label
 column. The `completions-buffer` style opens a temporary read-only

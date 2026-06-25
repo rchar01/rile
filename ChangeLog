@@ -1,5 +1,19 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/completion.rs: Add basic-substring completion matching and make it the
+	default.
+	* src/editor.rs: Let file prompts accept selected existing substring matches
+	on Enter while preserving no-match missing-file input.
+	* src/config.rs, src/option.rs: Register the basic-substring matching option.
+	* tests/pty_completion.rs: Cover substring file completion for find-file,
+	find-file-read-only, and insert-file.
+	* tools/reference/emacs/scenarios/find-file-completion-modern.scenario: Capture
+	modern Emacs substring file completion and no-match missing-file behavior.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md: Document
+	basic-substring completion and selected file prompt acceptance.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* tests/pty_completion.rs: Cover selected-candidate file completion for
 	find-file-read-only and insert-file prompts.
 

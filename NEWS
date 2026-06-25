@@ -43,10 +43,13 @@ Editing features:
   insert stdout with C-u M-!.  Use M-| to send the active region to stdin and
   C-u M-| to replace the region with successful stdout.
 * Open files through C-x C-f with file-name completion, selected-candidate
-  insertion on Tab, selected-candidate acceptance on Enter, directory descent,
-  and raw missing-file input.
-* Insert file contents at point with C-x i and file-name completion.
-* Open files read-only through C-x C-r with file-name completion.
+  insertion on Tab, selected existing-path acceptance on Enter, directory
+  descent after Tab, exact input, or explicit selection, and no-match raw
+  missing-file input.
+* Insert file contents at point with C-x i and file-name completion, including
+  selected existing-path acceptance on Enter.
+* Open files read-only through C-x C-r with file-name completion, including
+  selected existing-path acceptance on Enter.
 * Toggle normal buffers read-only and writable with C-x C-q.
 * Switch buffers through C-x b with buffer-name completion, selected-candidate
   insertion on Tab, selected-candidate acceptance on Enter, default-buffer
@@ -83,8 +86,9 @@ Interface features:
   C-x C-f/C-x C-r/C-x i file names, and C-x b/C-x k buffer names with the
   default vertical candidate list, optional *Completions* buffer fallback, or
   experimental ido-style inline display.  Tab inserts the selected candidate in
-  completion prompts.  Command completions show the first known key binding when
-  available.
+  completion prompts.  Matching defaults to modern basic-substring behavior:
+  prefix matches are used when available, otherwise substring matches are shown.
+  Command completions show the first known key binding when available.
 * Complete C-h f command names with the shared command-completion source and
   C-h v option names with the option registry.
 * Navigate command, file, buffer, write-file, goto-line, rectangle,
