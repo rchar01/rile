@@ -1,5 +1,10 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* tests/pty_completion.rs: Cover selected-candidate file completion for
+	find-file-read-only and insert-file prompts.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Make file completion insert the selected candidate on Tab
 	and let explicit selection override exact file input on Enter.
 	* tests/pty_completion.rs: Cover file prompt selected-candidate Tab and
