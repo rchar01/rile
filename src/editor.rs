@@ -2741,13 +2741,8 @@ impl Editor {
         self.sync_current_window();
         let text_rows = self.windows.current().viewport().text_rows.max(1);
         let line_count = self.document().buffer().line_count();
-        let max_first_visible_line = line_count.saturating_sub(text_rows);
         let first_visible_line = match self.recenter_cycle_index % 3 {
-            0 => self
-                .cursor
-                .line
-                .saturating_sub(text_rows / 2)
-                .min(max_first_visible_line),
+            0 => self.cursor.line.saturating_sub(text_rows / 2),
             1 => self.cursor.line,
             _ => self.cursor.line.saturating_add(1).saturating_sub(text_rows),
         };
@@ -9111,6 +9106,58 @@ mod tests {
                 .expect("current window should exist")
                 .first_visible_line,
             10
+        );
+    }
+
+    #[test]
+    fn recenter_center_cycle_can_leave_blank_space_at_end_of_buffer() {
+        let text = (0..40)
+            .map(|line| format!("line {line:03}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &format!("{text}\n"))
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.ensure_current_window_contains_cursor(10, 80, 0);
+        editor
+            .handle_key(KeyEvent::Meta('>'))
+            .expect("M-> should move to end of buffer");
+        assert_eq!(editor.cursor(), Position::new(40, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("first C-l at EOF should center with blank space below");
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            35
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("second C-l at EOF should put point at top");
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            40
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("third C-l at EOF should put point at bottom");
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("current window should exist")
+                .first_visible_line,
+            31
         );
     }
 

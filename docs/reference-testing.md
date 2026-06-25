@@ -165,8 +165,8 @@ make reference-capture REF_EDITOR=rile REF_SCENARIO=open-line
 The paired Emacs/Rile `recenter-core` and `recenter` captures compare repeated
 `C-l` behavior in short and long buffers. They record the stable state before
 recenter, after the first center placement, after the second top placement, and
-after the third bottom placement so reviewers can inspect the viewport and final
-cursor row.
+after the third bottom placement, including an end-of-buffer case where centering
+can leave blank rows below point.
 
 Capture outputs are written under:
 

@@ -1,5 +1,15 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Let C-l center placement leave blank rows below point near
+	end of buffer. Add an end-of-buffer recenter cycle test.
+	* tests/pty_scrolling.rs: Cover repeated C-l at end of a long file.
+	* tools/reference/emacs/scenarios/recenter-core.scenario,
+	tools/reference/rile/scenarios/recenter.scenario: Add end-of-buffer recenter
+	frames.
+	* docs/reference-testing.md: Document EOF recenter capture coverage.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Make repeated C-l cycle point between window center, top, and
 	bottom. Add short-buffer and repeated-cycle tests.
 	* src/command.rs, README.md, docs/development.md, NEWS: Document the C-l

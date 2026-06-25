@@ -97,6 +97,39 @@ fn recenter_keeps_point_and_moves_viewport() -> Result<()> {
 }
 
 #[test]
+fn recenter_at_end_of_buffer_can_leave_blank_space_below_point() -> Result<()> {
+    let file = fixtures::fixture_path("numbered.txt");
+    let mut rile = RilePty::spawn(&file, 8, 60)?;
+
+    rile.wait_for_screen_contains("000 | 0123456789")?;
+    rile.send("M->", keys::meta('>'))?;
+    rile.assert_status_contains("Ln 021 Col 000")?;
+
+    rile.send("C-l", keys::control('l'))?;
+    rile.assert_status_contains("Ln 021 Col 000")?;
+    rile.assert_screen_contains("017 | 0123456789")?;
+    rile.assert_cursor(3, 0)?;
+    let rows = rile.screen_rows();
+    assert!(
+        rows[4].is_empty() && rows[5].is_empty(),
+        "centered EOF should leave blank rows below point\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-l", keys::control('l'))?;
+    rile.assert_status_contains("Ln 021 Col 000")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.send("C-l", keys::control('l'))?;
+    rile.assert_status_contains("Ln 021 Col 000")?;
+    rile.assert_screen_contains("015 | 0123456789")?;
+    rile.assert_cursor(5, 0)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn page_scroll_and_recenter_use_selected_split_height() -> Result<()> {
     let file = fixtures::fixture_path("numbered.txt");
     let mut rile = RilePty::spawn(&file, 12, 60)?;

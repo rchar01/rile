@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=recenter
-SCENARIO_DESCRIPTION='Observe Rile C-l recenter behavior in short and long buffers.'
+SCENARIO_DESCRIPTION='Observe Rile C-l recenter behavior in short, long, and EOF buffers.'
 WIDTH=80
 HEIGHT=12
 FIXTURE_NAME=recenter/short.txt
@@ -74,6 +74,23 @@ Sleep 500ms
 Ctrl+L
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/08-long-after-third-c-l.png
+Sleep 500ms
+Escape
+Type ">"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-long-end-before-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-long-end-after-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-long-end-after-second-c-l.png
+Sleep 500ms
+Ctrl+L
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/12-long-end-after-third-c-l.png
 Sleep 500ms
 Ctrl+X
 Ctrl+C
