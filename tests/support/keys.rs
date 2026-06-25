@@ -29,3 +29,7 @@ pub fn meta(letter: char) -> Vec<u8> {
 pub fn meta_backspace() -> Vec<u8> {
     vec![b'\x1b', b'\x7f']
 }
+
+pub fn meta_enter() -> Vec<u8> {
+    vec![b'\x1b', b'\r']
+}

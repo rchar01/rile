@@ -275,13 +275,16 @@ prompts:
 - `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and
   `C-x k` move the selected candidate with Down/Up or `C-n`/`C-p`;
 - Tab inserts the selected candidate into the minibuffer;
-- Enter accepts the selected candidate, and an explicitly moved selection wins
-  over exact minibuffer text;
+- Enter accepts the selected candidate except where exact typed text is
+  deliberately preserved, `M-RET` submits raw minibuffer input, and an explicitly
+  moved selection wins over exact minibuffer text;
 - command, option, and buffer prompts use orderless component matching by
-  default;
+  default, including smart case, regexp, `!foo` negation, and `=foo` literal
+  components;
 - file prompts use Emacs file-category prefix/basic partial-completion matching
-  by default, still preserve no-match raw missing-file input, and descend into
-  directories after Tab insertion, exact input, or explicit selection;
+  by default, add Rile smart-case literal matching, still preserve no-match raw
+  missing-file input, and descend into directories after Tab insertion, exact
+  input, or explicit selection;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 

@@ -88,13 +88,16 @@ Interface features:
   C-x C-f/C-x C-r/C-x i file names, and C-x b/C-x k buffer names with the
   default vertical candidate list, optional *Completions* buffer fallback, or
   experimental ido-style inline display.  Tab inserts the selected candidate in
-  completion prompts.  Command, option, and buffer matching defaults to modern
-  orderless-style behavior: space-separated components must all match in any
-  order, lowercase components match case-insensitively, valid regular
-  expressions are accepted, and invalid regular expressions fall back to literal
-  matching.  File completion uses Emacs-style file-category prefix/basic
-  partial-completion matching by default instead of orderless.  Command
-  completions show the first known key binding when available.
+  completion prompts, Enter accepts it unless exact typed input is preserved,
+  and M-RET submits raw minibuffer input.
+  Command, option, and buffer matching defaults to modern orderless-style
+  behavior: space-separated components must all match in any order, lowercase
+  components match case-insensitively, valid regular expressions are accepted,
+  invalid regular expressions fall back to literal matching, `!foo` negates a
+  component, and `=foo` forces literal matching.  File completion uses
+  Emacs-style file-category prefix/basic partial-completion matching by default
+  instead of orderless, with smart-case literal matching.
+  Command completions show the first known key binding when available.
 * Complete C-h f command names with the shared command-completion source and
   C-h v option names with the option registry.
 * Navigate command, file, buffer, write-file, goto-line, rectangle,

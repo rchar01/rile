@@ -1,5 +1,19 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/input.rs: Parse M-RET escape and CSI-u sequences as a meta special
+	Enter key.
+	* src/editor.rs: Let M-RET submit raw minibuffer input from completion
+	prompts and test raw extended-command submission.
+	* src/completion.rs: Use smart-case literal matching for prefix,
+	substring, and file-category completion. Add orderless negation and
+	force-literal components.
+	* tests/pty_completion.rs, tests/support/keys.rs: Cover smart-case file
+	completion and raw M-RET file input.
+	* README.md, docs/development.md, docs/reference-testing.md, NEWS: Document
+	completion matching and RET/M-RET file prompt behavior.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/terminal/mod.rs: Move the final render cursor to active minibuffer
 	prompts and keep Ido cursors before appended candidates.
 	* tests/pty_completion.rs: Assert M-x completion leaves the cursor on the

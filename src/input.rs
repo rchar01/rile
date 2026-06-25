@@ -128,7 +128,7 @@ fn parse_escape_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
 
     if second.is_ascii() {
         let key = match second {
-            b'\r' | b'\n' => KeyEvent::Special(SpecialKey::Enter),
+            b'\r' | b'\n' => KeyEvent::MetaSpecial(SpecialKey::Enter),
             b'\t' => KeyEvent::Special(SpecialKey::Tab),
             0x7f | 0x08 => KeyEvent::MetaSpecial(SpecialKey::Backspace),
             0x01..=0x1a => KeyEvent::Ctrl((b'a' + second - 1) as char),
@@ -167,6 +167,9 @@ fn parse_csi_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     if bytes.len() < 3 {
         return Ok(None);
     }
+    if let Some(parsed) = parse_csi_u_sequence(bytes) {
+        return Ok(Some(parsed));
+    }
 
     let event = match bytes[2] {
         b'A' => Some((KeyEvent::Special(SpecialKey::ArrowUp), 3)),
@@ -184,6 +187,74 @@ fn parse_csi_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     };
 
     Ok(event.map(|(event, consumed)| ParsedKey { event, consumed }))
+}
+
+fn parse_csi_u_sequence(bytes: &[u8]) -> Option<ParsedKey> {
+    let end = bytes.iter().position(|byte| *byte == b'u')?;
+    if end < 3 {
+        return Some(csi_u_fallback(end));
+    }
+    let Ok(sequence) = std::str::from_utf8(&bytes[2..end]) else {
+        return Some(csi_u_fallback(end));
+    };
+    let mut parts = sequence.split(';');
+    let Some(key_code) = parts.next().and_then(|part| part.parse::<u32>().ok()) else {
+        return Some(csi_u_fallback(end));
+    };
+    let modifier = parts.next().and_then(|part| part.parse::<u32>().ok());
+    let has_alt = modifier.is_some_and(|modifier| modifier > 1 && (modifier - 1) & 2 != 0);
+    let has_ctrl = modifier.is_some_and(|modifier| modifier > 1 && (modifier - 1) & 4 != 0);
+    csi_u_key_event(key_code, has_alt, has_ctrl)
+        .map(|event| ParsedKey {
+            event,
+            consumed: end + 1,
+        })
+        .or_else(|| Some(csi_u_fallback(end)))
+}
+
+fn csi_u_key_event(key_code: u32, has_alt: bool, has_ctrl: bool) -> Option<KeyEvent> {
+    if let Some(special) = csi_u_special_key(key_code) {
+        return Some(if has_alt {
+            KeyEvent::MetaSpecial(special)
+        } else {
+            KeyEvent::Special(special)
+        });
+    }
+    if has_ctrl {
+        return csi_u_ctrl_key(key_code).map(KeyEvent::Ctrl);
+    }
+    let character = char::from_u32(key_code)?;
+    Some(if has_alt {
+        KeyEvent::Meta(character)
+    } else {
+        KeyEvent::Text(character.to_string())
+    })
+}
+
+fn csi_u_special_key(key_code: u32) -> Option<SpecialKey> {
+    match key_code {
+        8 | 127 => Some(SpecialKey::Backspace),
+        9 => Some(SpecialKey::Tab),
+        10 | 13 => Some(SpecialKey::Enter),
+        27 => Some(SpecialKey::Escape),
+        _ => None,
+    }
+}
+
+fn csi_u_ctrl_key(key_code: u32) -> Option<char> {
+    match char::from_u32(key_code)? {
+        '@' | ' ' => Some('@'),
+        '_' => Some('_'),
+        character if character.is_ascii_alphabetic() => Some(character.to_ascii_lowercase()),
+        _ => None,
+    }
+}
+
+fn csi_u_fallback(end: usize) -> ParsedKey {
+    ParsedKey {
+        event: KeyEvent::Special(SpecialKey::Escape),
+        consumed: end + 1,
+    }
 }
 
 fn parse_ss3_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
@@ -296,6 +367,31 @@ mod tests {
             parse(b"\x1b\x08").event,
             KeyEvent::MetaSpecial(SpecialKey::Backspace)
         );
+        assert_eq!(
+            parse(b"\x1b\r").event,
+            KeyEvent::MetaSpecial(SpecialKey::Enter)
+        );
+    }
+
+    #[test]
+    fn parses_csi_u_keys() {
+        assert_eq!(
+            parse(b"\x1b[13u").event,
+            KeyEvent::Special(SpecialKey::Enter)
+        );
+        assert_eq!(
+            parse(b"\x1b[10u").event,
+            KeyEvent::Special(SpecialKey::Enter)
+        );
+        assert_eq!(
+            parse(b"\x1b[13;3u").event,
+            KeyEvent::MetaSpecial(SpecialKey::Enter)
+        );
+        assert_eq!(parse(b"\x1b[102;3u").event, KeyEvent::Meta('f'));
+        assert_eq!(parse(b"\x1b[65;5u").event, KeyEvent::Ctrl('a'));
+        let fallback = parse(b"\x1b[x;5u");
+        assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
+        assert_eq!(fallback.consumed, b"\x1b[x;5u".len());
     }
 
     #[test]

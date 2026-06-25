@@ -1133,6 +1133,16 @@ impl Editor {
                 self.completion = None;
                 self.submit_prompt(kind, &input)
             }
+            KeyEvent::MetaSpecial(SpecialKey::Enter) => {
+                let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
+                    return Ok(EditorOutcome::Continue);
+                };
+                self.record_prompt_history(kind, &input);
+                self.minibuffer.clear();
+                self.finish_completion_buffer();
+                self.completion = None;
+                self.submit_prompt(kind, &input)
+            }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
                 self.reset_current_prompt_history_navigation();
                 self.keyboard_macro_prompt_start = None;
@@ -7002,6 +7012,33 @@ mod tests {
     }
 
     #[test]
+    fn extended_command_completion_meta_ret_submits_raw_input() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("file find".to_owned()))
+            .expect("orderless input should update completion");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("find-file")
+        );
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
+            .expect("M-RET should submit raw input");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No such command: file find")
+        );
+    }
+
+    #[test]
     fn extended_command_tab_inserts_selected_command() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -7109,6 +7146,61 @@ mod tests {
 
         assert_eq!(editor.document().buffer().serialize(), "alpha");
         assert_eq!(editor.document().path(), Some(alpha.as_path()));
+    }
+
+    #[test]
+    fn find_file_completion_ret_accepts_smart_case_selected_file() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let readme = directory.path().join("README.md");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&readme, "upper").expect("readme fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("readme.md".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should accept selected file");
+
+        assert_eq!(editor.document().path(), Some(readme.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "upper");
+    }
+
+    #[test]
+    fn find_file_completion_meta_ret_keeps_raw_input() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let readme = directory.path().join("README.md");
+        let raw = directory.path().join("readme.md");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&readme, "upper").expect("readme fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("readme.md".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
+            .expect("M-RET should submit raw input");
+
+        assert_eq!(editor.document().path(), Some(raw.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "");
     }
 
     #[test]

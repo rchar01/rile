@@ -278,17 +278,19 @@ impl CompletionSession {
                                 .map(|score| (index, score))
                         })
                         .collect::<Vec<_>>();
-                    matches.sort_by(|(left_index, left_score), (right_index, right_score)| {
-                        left_score
-                            .cmp(right_score)
-                            .then_with(|| {
-                                self.candidates[*left_index]
-                                    .value
-                                    .len()
-                                    .cmp(&self.candidates[*right_index].value.len())
-                            })
-                            .then_with(|| left_index.cmp(right_index))
-                    });
+                    if components.iter().any(|component| !component.negated) {
+                        matches.sort_by(|(left_index, left_score), (right_index, right_score)| {
+                            left_score
+                                .cmp(right_score)
+                                .then_with(|| {
+                                    self.candidates[*left_index]
+                                        .value
+                                        .len()
+                                        .cmp(&self.candidates[*right_index].value.len())
+                                })
+                                .then_with(|| left_index.cmp(right_index))
+                        });
+                    }
                     matches.into_iter().map(|(index, _)| index).collect()
                 } else {
                     self.candidates
@@ -456,7 +458,10 @@ fn item_matching_for<'a>(
     if matching != CompletionMatching::BasicSubstring {
         return matching;
     }
-    if values.into_iter().any(|value| value.starts_with(input)) {
+    if values
+        .into_iter()
+        .any(|value| smart_case_starts_with(value, input))
+    {
         CompletionMatching::Prefix
     } else {
         CompletionMatching::Substring
@@ -494,7 +499,7 @@ fn item_matches(matching: CompletionMatching, value: &str, input: &str) -> bool 
 }
 
 fn file_category_matches(name: &str, input: &str) -> bool {
-    name.starts_with(input) || partial_completion_matches(name, input)
+    smart_case_starts_with(name, input) || partial_completion_matches(name, input)
 }
 
 fn partial_completion_matches(name: &str, input: &str) -> bool {
@@ -503,11 +508,11 @@ fn partial_completion_matches(name: &str, input: &str) -> bool {
         return true;
     };
     let mut words = name.split(['-', '_', '.', ' ']);
-    if !words.any(|word| word.starts_with(first)) {
+    if !words.any(|word| smart_case_starts_with(word, first)) {
         return false;
     }
     for component in components {
-        if !words.any(|word| word.starts_with(component)) {
+        if !words.any(|word| smart_case_starts_with(word, component)) {
             return false;
         }
     }
@@ -517,12 +522,12 @@ fn partial_completion_matches(name: &str, input: &str) -> bool {
 fn item_match_score(matching: CompletionMatching, value: &str, input: &str) -> Option<MatchScore> {
     match matching {
         CompletionMatching::Orderless => orderless_match_score(value, input),
-        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => value
-            .starts_with(input)
-            .then_some(prefix_match_score(value, input)),
-        CompletionMatching::Substring => value
-            .contains(input)
-            .then_some(substring_match_score(value, input)),
+        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => {
+            smart_case_starts_with(value, input).then_some(prefix_match_score(value, input))
+        }
+        CompletionMatching::Substring => {
+            smart_case_contains(value, input).then_some(substring_match_score(value, input))
+        }
     }
 }
 
@@ -543,18 +548,16 @@ enum MatchQuality {
 
 fn prefix_match_score(value: &str, input: &str) -> MatchScore {
     MatchScore {
-        quality: if value == input {
-            MatchQuality::Exact
-        } else {
-            MatchQuality::Prefix
-        },
+        quality: literal_match_quality(value, input, is_smart_case_sensitive(input))
+            .unwrap_or(MatchQuality::Prefix),
         component_count: 1,
     }
 }
 
 fn substring_match_score(value: &str, input: &str) -> MatchScore {
     MatchScore {
-        quality: literal_match_quality(value, input, true).unwrap_or(MatchQuality::Substring),
+        quality: literal_match_quality(value, input, is_smart_case_sensitive(input))
+            .unwrap_or(MatchQuality::Substring),
         component_count: 1,
     }
 }
@@ -575,13 +578,25 @@ fn orderless_match_score_for_components(
         });
     }
     let mut quality = MatchQuality::Exact;
+    let mut positive_count = 0;
     for component in components {
-        let component_quality = component.match_quality(value)?;
-        quality = quality.max(component_quality);
+        let component_quality = component.match_quality(value);
+        if component.negated {
+            if component_quality.is_some() {
+                return None;
+            }
+        } else {
+            quality = quality.max(component_quality?);
+            positive_count += 1;
+        }
     }
     Some(MatchScore {
-        quality,
-        component_count: components.len(),
+        quality: if positive_count == 0 {
+            MatchQuality::Prefix
+        } else {
+            quality
+        },
+        component_count: positive_count,
     })
 }
 
@@ -589,6 +604,7 @@ fn orderless_match_score_for_components(
 struct OrderlessComponent {
     text: String,
     case_sensitive: bool,
+    negated: bool,
     matcher: OrderlessMatcher,
 }
 
@@ -599,16 +615,30 @@ enum OrderlessMatcher {
 }
 
 impl OrderlessComponent {
-    fn new(text: String) -> Self {
+    fn new(component: String) -> Self {
+        let (negated, text) = match component.strip_prefix('!') {
+            Some(text) => (true, text),
+            None => (false, component.as_str()),
+        };
+        let (force_literal, text) = match text.strip_prefix('=') {
+            Some(text) => (true, text),
+            None => (false, text),
+        };
+        let text = text.to_owned();
         let case_sensitive = text.chars().any(char::is_uppercase);
-        let matcher = RegexBuilder::new(&text)
-            .case_insensitive(!case_sensitive)
-            .build()
-            .map(OrderlessMatcher::Regex)
-            .unwrap_or(OrderlessMatcher::Literal);
+        let matcher = if force_literal {
+            OrderlessMatcher::Literal
+        } else {
+            RegexBuilder::new(&text)
+                .case_insensitive(!case_sensitive)
+                .build()
+                .map(OrderlessMatcher::Regex)
+                .unwrap_or(OrderlessMatcher::Literal)
+        };
         Self {
             text,
             case_sensitive,
+            negated,
             matcher,
         }
     }
@@ -690,6 +720,26 @@ fn literal_match_quality(
     value
         .contains(&component)
         .then_some(MatchQuality::Substring)
+}
+
+fn smart_case_starts_with(value: &str, component: &str) -> bool {
+    if is_smart_case_sensitive(component) {
+        value.starts_with(component)
+    } else {
+        value.to_lowercase().starts_with(&component.to_lowercase())
+    }
+}
+
+fn smart_case_contains(value: &str, component: &str) -> bool {
+    if is_smart_case_sensitive(component) {
+        value.contains(component)
+    } else {
+        value.to_lowercase().contains(&component.to_lowercase())
+    }
+}
+
+fn is_smart_case_sensitive(component: &str) -> bool {
+    component.chars().any(char::is_uppercase)
 }
 
 fn word_boundary_contains(value: &str, component: &str) -> bool {
@@ -915,6 +965,125 @@ mod tests {
     }
 
     #[test]
+    fn orderless_completion_supports_negation() {
+        let mut session = CompletionSession::buffers(
+            [
+                "find-file".to_owned(),
+                "find-file-read-only".to_owned(),
+                "project-find-file".to_owned(),
+                "read-file-name".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("find !read");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file", "project-find-file"]);
+    }
+
+    #[test]
+    fn orderless_completion_filters_negation_only_without_reordering() {
+        let mut session = CompletionSession::buffers(
+            [
+                "toggle-syntax-highlighting".to_owned(),
+                "toggle-search-highlighting".to_owned(),
+                "toggle-line-numbers".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("!syntax");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec!["toggle-search-highlighting", "toggle-line-numbers"]
+        );
+    }
+
+    #[test]
+    fn orderless_completion_supports_force_literal() {
+        let mut session = CompletionSession::buffers(
+            ["foo.txt".to_owned(), "fooxtxt".to_owned()],
+            CompletionConfig::default(),
+        );
+
+        session.update("foo.txt");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["foo.txt", "fooxtxt"]);
+
+        session.update("=foo.txt");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["foo.txt"]);
+    }
+
+    #[test]
+    fn orderless_completion_composes_negation_and_force_literal() {
+        let mut session = CompletionSession::buffers(
+            ["foo.txt".to_owned(), "fooxtxt".to_owned()],
+            CompletionConfig::default(),
+        );
+
+        session.update("!=foo.txt");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["fooxtxt"]);
+
+        session.update("=!foo");
+        assert_eq!(session.match_count(), 0);
+    }
+
+    #[test]
+    fn orderless_completion_uses_smart_case_for_operators() {
+        let mut session = CompletionSession::buffers(
+            ["find-file".to_owned(), "Find-Function".to_owned()],
+            CompletionConfig::default(),
+        );
+
+        session.update("=find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file", "Find-Function"]);
+
+        session.update("=Find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["Find-Function"]);
+
+        session.update("!Find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file"]);
+    }
+
+    #[test]
     fn orderless_completion_ranks_exact_prefix_before_substring() {
         let mut session = CompletionSession::buffers(
             [
@@ -1017,6 +1186,86 @@ mod tests {
         assert_eq!(
             session.selected().map(|candidate| candidate.value.as_str()),
             Some("alpha-note.txt")
+        );
+    }
+
+    #[test]
+    fn default_file_completion_uses_smart_case() {
+        let directory = TestDir::new();
+        fs::write(directory.path().join("README.md"), "upper").expect("fixture should write");
+        fs::write(directory.path().join("ReadMe.txt"), "mixed").expect("fixture should write");
+        fs::write(directory.path().join("readme.org"), "lower").expect("fixture should write");
+        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+
+        session.update("read");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["README.md", "ReadMe.txt", "readme.org"]);
+
+        session.update("Read");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["ReadMe.txt"]);
+    }
+
+    #[test]
+    fn prefix_and_substring_matching_use_smart_case() {
+        let mut prefix_session = CompletionSession::buffers(
+            [
+                "README.md".to_owned(),
+                "ReadMe.txt".to_owned(),
+                "readme.org".to_owned(),
+            ],
+            CompletionConfig {
+                matching: CompletionMatching::Prefix,
+                ..CompletionConfig::default()
+            },
+        );
+
+        prefix_session.update("read");
+        let values = prefix_session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["README.md", "ReadMe.txt", "readme.org"]);
+
+        prefix_session.update("Read");
+        let values = prefix_session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["ReadMe.txt"]);
+
+        let mut substring_session = CompletionSession::buffers(
+            ["notes-README.md".to_owned(), "notes-ReadMe.txt".to_owned()],
+            CompletionConfig {
+                matching: CompletionMatching::Substring,
+                ..CompletionConfig::default()
+            },
+        );
+
+        substring_session.update("read");
+        let values = substring_session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["notes-README.md", "notes-ReadMe.txt"]);
+
+        substring_session.update("Read");
+        assert_eq!(
+            substring_session
+                .selected()
+                .map(|candidate| candidate.value.as_str()),
+            Some("notes-ReadMe.txt")
         );
     }
 

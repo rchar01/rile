@@ -178,14 +178,33 @@ completion_matching = "orderless" # "orderless", "basic-substring", "prefix", or
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
 `C-x b`/`C-x k` buffer names. Completion prompts use Vertico-style selected
-candidate insertion on Tab. The default `orderless` matching for command,
-option, and buffer prompts splits input on spaces and requires every component
-to match in any order, with lowercase components matched case-insensitively.
-File prompts follow Emacs file-category behavior instead: they use prefix/basic
-partial-completion matching by default, preserve no-match missing-file input,
-and keep directory descent separate from orderless command matching.
+candidate insertion on Tab. Enter accepts the selected candidate unless exact
+typed command, option, buffer, or file text is deliberately preserved; an
+explicitly moved selection wins over exact text. Use `M-RET` to submit the raw
+minibuffer text instead; for `C-x C-f`, this opens or creates the typed path even
+when a completion candidate is selected. The default `orderless` matching for
+command, option, and buffer prompts splits input on spaces and requires every
+component to match in any order. File prompts follow Emacs file-category behavior
+instead: they use prefix/basic partial-completion matching by default, preserve
+no-match missing-file input, and keep directory descent separate from orderless
+command matching. Lowercase completion input is matched case-insensitively, while
+uppercase input is case-sensitive, including file-name completion.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
+
+Current completion matching supports these forms:
+
+| Query component | Status | Meaning |
+| --- | --- | --- |
+| `foo` | supported | Literal substring for `orderless`; prefix/basic file matching for files. Lowercase is case-insensitive, uppercase is case-sensitive. |
+| `foo bar` | supported | All `orderless` components must match in any order. |
+| `^foo` | supported | Regular expression component; matches the beginning of a candidate. |
+| `foo$` | supported | Regular expression component; matches the end of a candidate. |
+| `f-f` | supported for files | File partial-completion word-prefix matching, such as `find-file`-style components in file names. |
+| `!foo` | supported | Negated `orderless` component; rejects candidates matching `foo`. |
+| `=foo` | supported | Force-literal `orderless` component; treats regex syntax as literal text. Combine as `!=foo` for negated literal matching. |
+| `ff` | not yet supported | Initialism matching is not implemented. |
+| `f~` | not yet supported | Fuzzy/flex matching is not implemented. |
 
 ## License
 

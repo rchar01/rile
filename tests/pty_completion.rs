@@ -369,6 +369,33 @@ fn vertical_find_file_completion_enter_accepts_word_component_match() -> Result<
 }
 
 #[test]
+fn vertical_find_file_completion_uses_smart_case_and_meta_enter_raw_input() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("README.md"), "upper readme\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("readme.md", b"readme.md")?;
+    rile.assert_screen_contains("README.md")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("upper readme")?;
+    rile.assert_status_contains("ACTIVE README.md")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("readme.md", b"readme.md")?;
+    rile.send("M-RET", keys::meta_enter())?;
+
+    rile.assert_status_contains("ACTIVE readme.md")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_find_file_completion_keeps_raw_arbitrary_substring_input() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");

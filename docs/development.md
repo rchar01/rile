@@ -227,7 +227,9 @@ basic-substring matching, selected candidate movement with `C-n`/Down and
 `C-p`/Up, and Enter acceptance. For completion prompts, including `M-x`,
 `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab
 inserts the selected candidate and an explicitly moved selection wins over exact
-minibuffer text on Enter.
+minibuffer text on Enter. Completion prompts use Vertico-style raw exit:
+`M-RET` submits the raw minibuffer input even when a completion candidate is
+selected.
 File completion resolves relative candidates against the current buffer's
 directory when available, accepts selected existing candidates on Enter, keeps
 no-match raw missing-file input working, descends into selected directories, and
@@ -238,8 +240,12 @@ missing-file input. The default `completion_matching = "orderless"` uses
 component-based matching for non-file prompts: every space-separated component
 must match in any order, lowercase components match case-insensitively, valid
 regular expressions are honored, and invalid regular expressions fall back to
-literal substring matching. File prompts override the global orderless default
-with Emacs-style file-category prefix/basic partial-completion matching.
+literal substring matching. `!foo` negates an orderless component, `=foo` forces
+literal matching, and `!=foo` combines both forms for negated literal matching.
+File prompts override the global orderless default with Emacs-style
+file-category prefix/basic partial-completion matching. Rile's literal prefix,
+substring, and file-category matching also use smart case: lowercase input
+matches case-insensitively, while uppercase input is case-sensitive.
 C-x b empty input switches to the default previous buffer, while C-x k empty
 input kills the default current buffer. The default `completion_style =
 "vertical"` reserves rows above the minibuffer and shows candidate annotations.
