@@ -12,9 +12,13 @@ FIXTURE_CONTENT=$'file completion fixture\n'
 setup_reference_files() {
   local capture_dir=$1
   mkdir -p "$capture_dir/find-file-completion-modern"
+  mkdir -p "$capture_dir/find-file-completion-modern/nested-dir"
   printf '%s\n' 'alpha note' > "$capture_dir/find-file-completion-modern/alpha-note.txt"
+  printf '%s\n' 'alpha note extra' > "$capture_dir/find-file-completion-modern/alpha-note.txt-extra"
   printf '%s\n' 'alphabet note' > "$capture_dir/find-file-completion-modern/alphabet-note.txt"
   printf '%s\n' 'beta note' > "$capture_dir/find-file-completion-modern/beta-note.txt"
+  printf '%s\n' 'nested file note' > "$capture_dir/find-file-completion-modern/nested-file.txt"
+  printf '%s\n' 'inside nested directory' > "$capture_dir/find-file-completion-modern/nested-dir/inside.txt"
 }
 
 vhs_steps() {
@@ -39,6 +43,60 @@ Sleep 500ms
 Ctrl+G
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/04-after-cancel.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "alpha-note.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-exact-file.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-exact-enter.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "alpha-note.txt"
+Sleep 500ms
+Down
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-exact-file-down.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-explicit-selected-enter.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "nested"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-after-directory-prefix.png
+Sleep 500ms
+Type "-dir"
+Sleep 500ms
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-after-directory-tab.png
+Sleep 500ms
+Type "inside.txt"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-after-directory-file-enter.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Type "missing-note.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/12-after-missing-file-input.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/13-after-missing-file-enter.png
 Sleep 500ms
 Ctrl+X
 Ctrl+C

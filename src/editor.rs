@@ -1228,7 +1228,7 @@ impl Editor {
 
     fn file_completion_accept_input(&self, input: &str) -> String {
         let trimmed = input.trim();
-        if self.find_file_input_is_exact_file(trimmed) {
+        if !self.completion_selection_explicit() && self.find_file_input_is_exact_file(trimmed) {
             return trimmed.to_owned();
         }
         let Some(completion) = self.completion.as_ref() else {
@@ -1377,12 +1377,12 @@ impl Editor {
             return;
         };
         let next_input = match completion.source() {
-            CompletionSource::Files => completion.common_prefix(&input),
-            CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
-                completion
-                    .selected()
-                    .map(|candidate| candidate.value.clone())
-            }
+            CompletionSource::Files
+            | CompletionSource::Commands
+            | CompletionSource::Buffers
+            | CompletionSource::Options => completion
+                .selected()
+                .map(|candidate| candidate.value.clone()),
         };
         if let Some(next_input) = next_input.filter(|next_input| next_input != &input) {
             self.minibuffer.set_prompt_input(next_input);
@@ -7014,7 +7014,7 @@ mod tests {
     }
 
     #[test]
-    fn find_file_completion_extends_common_prefix() {
+    fn find_file_completion_tab_inserts_selected_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
         fs::write(&start, "start").expect("start fixture should write");
@@ -7036,9 +7036,41 @@ mod tests {
             .expect("prompt input should update completion");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Tab))
-            .expect("tab should complete common prefix");
+            .expect("tab should insert selected file");
 
-        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha"));
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-note.txt"));
+    }
+
+    #[test]
+    fn find_file_completion_explicit_selection_overrides_exact_file() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-note.txt");
+        let extra = directory.path().join("alpha-note.txt-extra");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        fs::write(&extra, "extra").expect("extra fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha-note.txt".to_owned()))
+            .expect("exact file input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select prefixed file");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should open explicitly selected file");
+
+        assert_eq!(editor.document().path(), Some(extra.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "extra");
     }
 
     #[test]

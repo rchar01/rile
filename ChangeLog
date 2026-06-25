@@ -1,5 +1,16 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Make file completion insert the selected candidate on Tab
+	and let explicit selection override exact file input on Enter.
+	* tests/pty_completion.rs: Cover file prompt selected-candidate Tab and
+	Enter behavior through the terminal UI.
+	* tools/reference/emacs/scenarios/find-file-completion-modern.scenario:
+	Expand the modern Emacs file completion capture.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md: Document
+	selected-candidate file completion semantics.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Make non-file completion prompts insert the selected
 	candidate on Tab and let explicit selection override exact input on Enter.
 	* tests/pty_completion.rs: Cover selected-candidate completion for M-x,

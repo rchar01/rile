@@ -104,7 +104,9 @@ Basic editor keys:
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
-- `C-x C-f` prompts for a file path with completion and opens it.
+- `C-x C-f` prompts for a file path with completion and opens it; Tab inserts
+  the selected path, Enter accepts an explicitly selected path, and raw
+  missing-file input opens a new buffer.
 - `C-x i` prompts for a file path with completion and inserts its contents.
 - `C-x C-r` prompts for a file path with completion and opens it read-only.
 - `C-x C-q` toggles whether the current normal buffer is read-only.
@@ -172,9 +174,9 @@ completion_matching = "prefix" # or "substring"
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
-`C-x b`/`C-x k` buffer names. Non-file prompts use Vertico-style selected
-candidate insertion on Tab; file prompts keep path-oriented common-prefix
-completion.
+`C-x b`/`C-x k` buffer names. Completion prompts use Vertico-style selected
+candidate insertion on Tab; file prompts also preserve raw missing-file input
+and directory descent.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 

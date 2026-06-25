@@ -269,20 +269,21 @@ The modern Emacs reference profile enables Vertico and Marginalia. Use its
 captures as UX evidence for minibuffer completion prompts where Rile exposes a
 selected candidate list.
 
-Current Rile alignment shares selected-candidate mechanics across non-file
-completion prompts:
+Current Rile alignment shares selected-candidate mechanics across completion
+prompts:
 
-- `M-x`, `C-h f`, `C-h v`, `C-x b`, and `C-x k` move the selected candidate with
-  Down/Up or `C-n`/`C-p`;
+- `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x b`, and `C-x k` move the selected
+  candidate with Down/Up or `C-n`/`C-p`;
 - Tab inserts the selected candidate into the minibuffer;
 - Enter accepts the selected candidate, and an explicitly moved selection wins
   over exact minibuffer text;
+- `C-x C-f` still preserves raw missing-file input and directory descent;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
-`C-x C-f` is deliberately separate because file completion has path, directory,
-existing-file, and missing-file semantics. Capture and review file behavior
-before changing Rile's file prompt mechanics.
+The `find-file-completion-modern` capture covers file prompt prefix filtering,
+selected-candidate Tab insertion, selected Enter over exact input, directory
+descent, exact files, and raw missing-file input.
 
 ## Kill Buffer Completion Review Notes
 

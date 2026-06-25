@@ -250,7 +250,7 @@ fn vertical_find_file_completion_filters_and_opens_sibling() -> Result<()> {
 }
 
 #[test]
-fn vertical_find_file_completion_tab_extends_common_prefix() -> Result<()> {
+fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
@@ -266,9 +266,79 @@ fn vertical_find_file_completion_tab_extends_common_prefix() -> Result<()> {
     rile.send("alp", b"alp")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Find file: alpha")?;
+    rile.assert_screen_contains("Find file: alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_enter_accepts_explicit_exact_selection() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("alpha-note.txt"), "alpha note\n")?;
+    fs::write(
+        directory.path().join("alpha-note.txt-extra"),
+        "alpha note extra\n",
+    )?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("alpha-note.txt", b"alpha-note.txt")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("alpha note extra")?;
+    rile.assert_status_contains("ACTIVE alpha-note.txt-extra")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_tab_enters_directory() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let nested = directory.path().join("nested-dir");
+    fs::create_dir(&nested)?;
+    fs::write(&start, "start\n")?;
+    fs::write(nested.join("note.txt"), "nested note\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("nested-dir", b"nested-dir")?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Find file: nested-dir/")?;
+
+    rile.send("note.txt", b"note.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("nested note")?;
+    rile.assert_status_contains("ACTIVE note.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_keeps_raw_missing_file_input() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("new-note.txt", b"new-note.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_status_contains("ACTIVE new-note.txt")?;
+
     rile.quit()?;
     Ok(())
 }
