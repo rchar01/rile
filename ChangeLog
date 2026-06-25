@@ -1,5 +1,13 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* tools/reference/rile/scenarios/m-x-completion-modern.scenario: New file.
+	* tools/reference/rile/scenarios/find-file-completion-modern.scenario: New
+	file.
+	* tools/reference/rile/README.md, docs/reference-testing.md: Document Rile
+	completion scenarios and the Emacs-modern comparison conclusion.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* Cargo.toml: Add regex dependency for orderless completion components.
 	* src/completion.rs: Add orderless completion matching and make it the
 	default for non-file sources. Keep basic-substring as an explicit matching

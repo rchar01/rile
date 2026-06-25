@@ -32,3 +32,13 @@ binary under `artifacts/reference/rile/build/target/` and launches it as:
 ```sh
 artifacts/reference/rile/build/target/debug/rile --visual-test --test-size WIDTHxHEIGHT <fixture>
 ```
+
+Completion comparison scenarios:
+
+- `m-x-completion-modern`: Rile command completion frames aligned with the
+  Emacs modern `M-x` scenario, plus Rile Orderless component and regexp frames.
+- `find-file-completion-modern`: Rile file completion frames aligned with the
+  Emacs modern file scenario, plus a Rile arbitrary-substring rejection frame.
+- `buffer-completion`: Rile switch-buffer completion behavior.
+- `kill-buffer-completion`: Rile kill-buffer completion and dirty-buffer
+  confirmation behavior.

@@ -285,15 +285,30 @@ prompts:
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
-The `m-x-completion-modern` capture covers modern Vertico/Marginalia command
-completion review with selected-candidate Tab insertion and selected Enter over
-exact input. Orderless component and regexp behavior is covered by Rile's PTY
-tests, because interactive VHS space input can be misleading for `M-x`.
+The Emacs and Rile `m-x-completion-modern` captures cover command completion
+review with selected-candidate Tab insertion and selected Enter over exact
+input. Rile's matching capture also records Orderless component and regexp
+frames for visual inspection, but Orderless component and regexp correctness is
+covered by Rile's PTY tests because interactive VHS space input can be
+misleading for `M-x`.
 
-The `find-file-completion-modern` capture covers file prompt prefix filtering,
-file-category word-component partial-completion matching, selected-candidate Tab
-insertion, selected Enter over exact input, directory descent, exact files, and
-no-match raw missing-file input.
+The Emacs and Rile `find-file-completion-modern` captures cover file prompt
+prefix filtering, file-category word-component partial-completion matching,
+selected-candidate Tab insertion, selected Enter over exact input, directory
+descent, exact files, and no-match raw missing-file input. Rile's matching
+capture also records arbitrary-substring input so reviewers can see that file
+prompts do not inherit global Orderless matching.
+
+Scenario conclusion: Rile now aligns with the modern Emacs completion model for
+the user-visible mechanics it intentionally implements: selected-candidate
+movement, Tab insertion, selected Enter behavior, Orderless-style command
+matching, and file-category partial completion instead of global Orderless file
+matching. The captures also show intentional display differences. Emacs modern
+has a much larger command universe, richer Marginalia file metadata, and longer
+absolute file prompts; Rile shows its smaller command registry, simpler
+annotations, and compact file prompts. Treat those as acceptable product-scope
+differences unless a future feature explicitly targets richer annotations or a
+larger command surface.
 
 ## Kill Buffer Completion Review Notes
 
