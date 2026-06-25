@@ -39,6 +39,8 @@ Completion comparison scenarios:
   Emacs modern `M-x` scenario, plus Rile Orderless component and regexp frames.
 - `find-file-completion-modern`: Rile file completion frames aligned with the
   Emacs modern file scenario, plus a Rile arbitrary-substring rejection frame.
+- `minibuffer-navigation-modern`: Rile minibuffer history, candidate movement,
+  and paging frames aligned with the Emacs modern scenario.
 - `buffer-completion`: Rile switch-buffer completion behavior.
 - `kill-buffer-completion`: Rile kill-buffer completion and dirty-buffer
   confirmation behavior.

@@ -82,6 +82,8 @@ Initial inspection scenarios:
 - `kill-buffer-completion-modern`: Vertico/Marginalia `C-x k` completion,
   default-buffer, and y-or-n-p dirty-buffer confirmation behavior.
 - `prompt-history-modern`: Vertico/Marginalia minibuffer history behavior.
+- `minibuffer-navigation-modern`: Vertico/Marginalia minibuffer history,
+  candidate movement, and paging behavior.
 - `help-describe-core`: base Emacs `C-h k` and `C-h f` help behavior.
 - `read-only-open-core`: base Emacs `C-x C-r` read-only file open behavior.
 - `toggle-read-only-core`: base Emacs `C-x C-q` toggle-read-only behavior.

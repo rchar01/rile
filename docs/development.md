@@ -223,11 +223,12 @@ Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
 completion for `C-x C-f`, and buffer-name completion for `C-x b` and `C-x k`.
 The completion core is separate from the UI style and supports command-name,
 file-name, and buffer-name sources, orderless, prefix, or substring matching,
-selected candidate movement with `C-n`/Down and
-`C-p`/Up, and Enter acceptance. For completion prompts, including `M-x`,
-`C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab
-inserts the selected candidate and an explicitly moved selection wins over exact
-minibuffer text on Enter. Completion prompts use Vertico-style raw exit:
+selected candidate movement with `C-n`/Down and `C-p`/Up, selected candidate
+paging with `C-v`/PageDown and `M-v`/PageUp, and Enter acceptance. For
+completion prompts, including `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`,
+`C-x i`, `C-x b`, and `C-x k`, Tab inserts the selected candidate and an
+explicitly moved selection wins over exact minibuffer text on Enter. Completion
+prompts use Vertico-style raw exit:
 `M-RET` submits the raw minibuffer input even when a completion candidate is
 selected.
 File completion resolves relative candidates against the current buffer's

@@ -62,6 +62,49 @@ fn vertical_mx_completion_selection_moves_with_down() -> Result<()> {
 }
 
 #[test]
+fn vertical_mx_completion_selection_moves_with_control_keys() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("toggle-s", b"toggle-s")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.assert_screen_contains("2/2  M-x toggle-s")?;
+    rile.send("C-p", keys::control('p'))?;
+    rile.assert_screen_contains("1/2  M-x toggle-s")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_mx_completion_pages_with_page_keys() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("toggle-s", b"toggle-s")?;
+    rile.send("C-v", keys::control('v'))?;
+    rile.assert_screen_contains("2/2  M-x toggle-s")?;
+    rile.send("M-v", keys::meta('v'))?;
+    rile.assert_screen_contains("1/2  M-x toggle-s")?;
+
+    rile.send("PageDown", keys::PAGE_DOWN)?;
+    rile.assert_screen_contains("2/2  M-x toggle-s")?;
+    rile.send("PageUp", keys::PAGE_UP)?;
+    rile.assert_screen_contains("1/2  M-x toggle-s")?;
+    rile.send("PageDown", keys::PAGE_DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Syntax highlighting disabled")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_mx_completion_tab_inserts_selected_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;

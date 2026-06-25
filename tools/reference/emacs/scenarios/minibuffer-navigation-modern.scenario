@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=minibuffer-navigation-modern
+SCENARIO_DESCRIPTION='Observe Vertico/Marginalia minibuffer history, candidate movement, and paging keys.'
+EMACS_PROFILE=modern
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=minibuffer-navigation-modern.txt
+FIXTURE_CONTENT=$'minibuffer navigation fixture\nsecond line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /minibuffer navigation fixture/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Type "end-of-line"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-history-command.png
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Escape
+Type "p"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-m-p.png
+Sleep 500ms
+Escape
+Type "n"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-m-n.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Type "find-file"
+Sleep 500ms
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-c-n.png
+Sleep 500ms
+Ctrl+P
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-c-p.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Type "find"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-before-page.png
+Sleep 500ms
+Ctrl+V
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-c-v.png
+Sleep 500ms
+Escape
+Type "v"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-m-v.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

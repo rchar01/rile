@@ -313,6 +313,21 @@ impl CompletionSession {
         self.selection_explicit = true;
     }
 
+    pub fn move_selection_page(&mut self, direction: isize) {
+        if self.matches.is_empty() || direction == 0 {
+            self.selected = 0;
+            return;
+        }
+        let step = self.max_candidates();
+        let last = self.matches.len() - 1;
+        self.selected = if direction.is_positive() {
+            self.selected.saturating_add(step).min(last)
+        } else {
+            self.selected.saturating_sub(step)
+        };
+        self.selection_explicit = true;
+    }
+
     pub fn selected(&self) -> Option<&CompletionCandidate> {
         self.matches
             .get(self.selected)
@@ -799,6 +814,52 @@ mod tests {
         session.update("toggle");
 
         assert_eq!(session.common_prefix("toggle").as_deref(), Some("toggle-"));
+    }
+
+    #[test]
+    fn completion_page_selection_moves_by_visible_page_and_clamps() {
+        let mut session = CompletionSession::buffers(
+            ["one", "two", "three", "four", "five"].map(str::to_owned),
+            CompletionConfig {
+                max_candidates: 2,
+                ..CompletionConfig::default()
+            },
+        );
+
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("one")
+        );
+
+        session.move_selection_page(1);
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("three")
+        );
+
+        session.move_selection_page(1);
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("five")
+        );
+
+        session.move_selection_page(1);
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("five")
+        );
+
+        session.move_selection_page(-1);
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("three")
+        );
+
+        session.move_selection_page(-1);
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("one")
+        );
     }
 
     #[test]

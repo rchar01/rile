@@ -67,7 +67,8 @@ Editing features:
   about-rile.
 * Review transient status and error history with C-h e in a read-only
   *Messages* buffer that updates while it is visible.
-* Recall minibuffer prompt history with M-p and M-n.
+* Recall minibuffer prompt history with M-p and M-n, and page completion
+  candidates with C-v/PageDown and M-v/PageUp.
 * Keep the terminal cursor on active minibuffer prompts, including completion
   prompts, instead of leaving it at the editing buffer point.
 

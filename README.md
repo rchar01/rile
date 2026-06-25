@@ -136,9 +136,10 @@ Basic editor keys:
 - `C-x C-c` quits, prompting for `yes` before exiting when normal buffers have
   unsaved changes.
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
-  through candidates, Tab inserts the selected candidate, and Enter accepts the
-  selected candidate. An explicitly moved selection wins over exact minibuffer
-  text. Command candidates show the first known key binding when available.
+  through candidates, `C-v`/PageDown and `M-v`/PageUp page through candidates,
+  Tab inserts the selected candidate, and Enter accepts the selected candidate.
+  An explicitly moved selection wins over exact minibuffer text. Command
+  candidates show the first known key binding when available.
 - `C-h k` describes a key binding, `C-h f` (`describe-function`) prompts for
   an interactive command with command-name completion, `C-h v`
   (`describe-variable`) describes a configuration option with option-name

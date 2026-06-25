@@ -1186,6 +1186,20 @@ impl Editor {
                 self.update_completion_buffer();
                 Ok(EditorOutcome::Continue)
             }
+            KeyEvent::Ctrl('v') | KeyEvent::Special(SpecialKey::PageDown) => {
+                if let Some(completion) = &mut self.completion {
+                    completion.move_selection_page(1);
+                }
+                self.update_completion_buffer();
+                Ok(EditorOutcome::Continue)
+            }
+            KeyEvent::Meta('v') | KeyEvent::Special(SpecialKey::PageUp) => {
+                if let Some(completion) = &mut self.completion {
+                    completion.move_selection_page(-1);
+                }
+                self.update_completion_buffer();
+                Ok(EditorOutcome::Continue)
+            }
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
                 self.reset_current_prompt_history_navigation();
@@ -8566,6 +8580,70 @@ mod tests {
                 .and_then(|completion| completion.selected())
                 .map(|candidate| candidate.value.as_str()),
             Some("toggle-line-numbers")
+        );
+    }
+
+    #[test]
+    fn completion_prompt_navigation_uses_control_and_page_keys() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    max_candidates: 2,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("C-n should select next candidate");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("toggle-syntax-highlighting")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('p'))
+            .expect("C-p should select previous candidate");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("toggle-search-highlighting")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('v'))
+            .expect("C-v should page forward");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("toggle-syntax-highlighting")
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('v'))
+            .expect("M-v should page backward");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("toggle-search-highlighting")
         );
     }
 

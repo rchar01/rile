@@ -1,5 +1,20 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/completion.rs: Add page-sized completion selection movement.
+	* src/editor.rs: Handle C-v, M-v, PageDown, and PageUp in completion
+	prompts.
+	* tests/pty_completion.rs: Cover literal C-n, C-p, C-v, M-v, PageDown, and
+	PageUp in M-x completion.
+	* tools/reference/emacs/scenarios/minibuffer-navigation-modern.scenario: New
+	file.
+	* tools/reference/rile/scenarios/minibuffer-navigation-modern.scenario: New
+	file.
+	* README.md, docs/development.md, docs/reference-testing.md,
+	tools/reference/emacs/README.md, tools/reference/rile/README.md, NEWS: Document
+	completion paging and the minibuffer-navigation reference scenario.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/completion.rs: Remove the basic-substring matching strategy and its
 	fallback helper.
 	* src/config.rs, src/option.rs: Remove the basic-substring config value and

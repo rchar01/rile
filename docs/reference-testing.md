@@ -273,7 +273,8 @@ Current Rile alignment shares selected-candidate mechanics across completion
 prompts:
 
 - `M-x`, `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and
-  `C-x k` move the selected candidate with Down/Up or `C-n`/`C-p`;
+  `C-x k` move the selected candidate with Down/Up or `C-n`/`C-p`, and page the
+  selected candidate with PageDown/PageUp or `C-v`/`M-v`;
 - Tab inserts the selected candidate into the minibuffer;
 - Enter accepts the selected candidate except where exact typed text is
   deliberately preserved, `M-RET` submits raw minibuffer input, and an explicitly
@@ -301,6 +302,10 @@ selected-candidate Tab insertion, selected Enter over exact input, directory
 descent, exact files, and no-match raw missing-file input. Rile's matching
 capture also records arbitrary-substring input so reviewers can see that file
 prompts do not inherit global Orderless matching.
+
+The Emacs and Rile `minibuffer-navigation-modern` captures cover minibuffer
+history with `M-p`/`M-n`, literal control-key candidate movement with
+`C-n`/`C-p`, and candidate-list paging with `C-v`/`M-v`.
 
 Scenario conclusion: Rile now aligns with the modern Emacs completion model for
 the user-visible mechanics it intentionally implements: selected-candidate
