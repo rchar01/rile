@@ -1,5 +1,16 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/completion.rs: Remove the basic-substring matching strategy and its
+	fallback helper.
+	* src/config.rs, src/option.rs: Remove the basic-substring config value and
+	update completion-matching validation/help text.
+	* src/editor.rs: Retarget substring file-completion coverage to the explicit
+	substring strategy.
+	* README.md, docs/development.md, NEWS: Document the remaining completion
+	matching strategies.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* src/input.rs: Parse M-RET escape and CSI-u sequences as a meta special
 	Enter key.
 	* src/editor.rs: Let M-RET submit raw minibuffer input from completion

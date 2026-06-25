@@ -164,9 +164,6 @@ impl Config {
             (OptionId::CompletionMatching, OptionValue::Choice("orderless")) => {
                 self.completion.matching = CompletionMatching::Orderless;
             }
-            (OptionId::CompletionMatching, OptionValue::Choice("basic-substring")) => {
-                self.completion.matching = CompletionMatching::BasicSubstring;
-            }
             (OptionId::CompletionMatching, OptionValue::Choice("substring")) => {
                 self.completion.matching = CompletionMatching::Substring;
             }
@@ -249,6 +246,7 @@ mod tests {
         assert!(Config::parse("theme = \"solarized\"").is_err());
         assert!(Config::parse("completion_style = \"popup\"").is_err());
         assert!(Config::parse("completion_max_candidates = 0").is_err());
+        assert!(Config::parse("completion_matching = \"basic-substring\"").is_err());
         assert!(Config::parse("completion_matching = \"fuzzy\"").is_err());
         assert!(Config::parse("unknown = true").is_err());
     }

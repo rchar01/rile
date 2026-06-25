@@ -222,8 +222,8 @@ path the visited file. Empty input reports `Error: missing file name`.
 Post-Milestone 14 minibuffer polish adds command completion for `M-x`, file
 completion for `C-x C-f`, and buffer-name completion for `C-x b` and `C-x k`.
 The completion core is separate from the UI style and supports command-name,
-file-name, and buffer-name sources, orderless, prefix, substring, or
-basic-substring matching, selected candidate movement with `C-n`/Down and
+file-name, and buffer-name sources, orderless, prefix, or substring matching,
+selected candidate movement with `C-n`/Down and
 `C-p`/Up, and Enter acceptance. For completion prompts, including `M-x`,
 `C-h f`, `C-h v`, `C-x C-f`, `C-x C-r`, `C-x i`, `C-x b`, and `C-x k`, Tab
 inserts the selected candidate and an explicitly moved selection wins over exact

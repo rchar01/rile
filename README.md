@@ -172,7 +172,7 @@ theme = "default" # or "mono"
 completion_style = "vertical" # "completions-buffer" or "ido"
 completion_max_candidates = 8
 completion_show_annotations = true
-completion_matching = "orderless" # "orderless", "basic-substring", "prefix", or "substring"
+completion_matching = "orderless" # "orderless", "prefix", or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,

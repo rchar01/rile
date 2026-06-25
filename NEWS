@@ -96,7 +96,10 @@ Interface features:
   invalid regular expressions fall back to literal matching, `!foo` negates a
   component, and `=foo` forces literal matching.  File completion uses
   Emacs-style file-category prefix/basic partial-completion matching by default
-  instead of orderless, with smart-case literal matching.
+  instead of orderless, with smart-case literal matching.  The configurable
+  completion matching strategies are `orderless`, `prefix`, and `substring`;
+  the earlier experimental `basic-substring` value has been removed before the
+  first release.
   Command completions show the first known key binding when available.
 * Complete C-h f command names with the shared command-completion source and
   C-h v option names with the option registry.

@@ -7258,7 +7258,7 @@ mod tests {
     }
 
     #[test]
-    fn basic_substring_file_completion_accepts_selected_substring_file() {
+    fn substring_file_completion_accepts_selected_substring_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
         let alpha = directory.path().join("alpha-note.txt");
@@ -7269,7 +7269,7 @@ mod tests {
             document,
             Config {
                 completion: CompletionConfig {
-                    matching: CompletionMatching::BasicSubstring,
+                    matching: CompletionMatching::Substring,
                     ..CompletionConfig::default()
                 },
                 ..Config::default()
@@ -7307,7 +7307,7 @@ mod tests {
             document,
             Config {
                 completion: CompletionConfig {
-                    matching: CompletionMatching::BasicSubstring,
+                    matching: CompletionMatching::Substring,
                     ..CompletionConfig::default()
                 },
                 ..Config::default()
@@ -9665,7 +9665,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert!(help.contains("completion_matching is a configuration variable."));
         assert!(help.contains("Current value: substring"));
         assert!(help.contains("Default value: orderless"));
-        assert!(help.contains("Valid values: orderless, basic-substring, prefix, or substring"));
+        assert!(help.contains("Valid values: orderless, prefix, or substring"));
     }
 
     #[test]

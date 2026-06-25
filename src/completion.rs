@@ -31,7 +31,6 @@ impl CompletionStyle {
 pub enum CompletionMatching {
     Orderless,
     Prefix,
-    BasicSubstring,
     Substring,
 }
 
@@ -40,7 +39,6 @@ impl CompletionMatching {
         match self {
             Self::Orderless => "orderless",
             Self::Prefix => "prefix",
-            Self::BasicSubstring => "basic-substring",
             Self::Substring => "substring",
         }
     }
@@ -256,17 +254,7 @@ impl CompletionSession {
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
             CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
-                let matching = if self.config.matching == CompletionMatching::BasicSubstring {
-                    item_matching_for(
-                        self.config.matching,
-                        self.candidates
-                            .iter()
-                            .map(|candidate| candidate.value.as_str()),
-                        input,
-                    )
-                } else {
-                    self.config.matching
-                };
+                let matching = self.config.matching;
                 if matching == CompletionMatching::Orderless && !input.is_empty() {
                     let components = parse_orderless_components(input);
                     let mut matches = self
@@ -411,11 +399,6 @@ impl CompletionSession {
                 Some((name, file_type))
             })
             .collect::<Vec<_>>();
-        let matching = item_matching_for(
-            self.config.matching,
-            entries.iter().map(|(name, _)| name.as_str()),
-            &parts.name_prefix,
-        );
         let use_file_category_matching = self.config.matching == CompletionMatching::Orderless;
 
         let mut candidates = entries
@@ -424,7 +407,7 @@ impl CompletionSession {
                 let matches = if use_file_category_matching {
                     file_category_matches(&name, &parts.name_prefix)
                 } else {
-                    item_matches(matching, &name, &parts.name_prefix)
+                    item_matches(self.config.matching, &name, &parts.name_prefix)
                 };
                 if !matches {
                     return None;
@@ -444,27 +427,6 @@ impl CompletionSession {
                 .then_with(|| left.value.cmp(&right.value))
         });
         self.candidates = candidates;
-    }
-}
-
-fn item_matching_for<'a>(
-    matching: CompletionMatching,
-    values: impl IntoIterator<Item = &'a str>,
-    input: &str,
-) -> CompletionMatching {
-    if matching == CompletionMatching::Orderless {
-        return CompletionMatching::Prefix;
-    }
-    if matching != CompletionMatching::BasicSubstring {
-        return matching;
-    }
-    if values
-        .into_iter()
-        .any(|value| smart_case_starts_with(value, input))
-    {
-        CompletionMatching::Prefix
-    } else {
-        CompletionMatching::Substring
     }
 }
 
@@ -522,7 +484,7 @@ fn partial_completion_matches(name: &str, input: &str) -> bool {
 fn item_match_score(matching: CompletionMatching, value: &str, input: &str) -> Option<MatchScore> {
     match matching {
         CompletionMatching::Orderless => orderless_match_score(value, input),
-        CompletionMatching::Prefix | CompletionMatching::BasicSubstring => {
+        CompletionMatching::Prefix => {
             smart_case_starts_with(value, input).then_some(prefix_match_score(value, input))
         }
         CompletionMatching::Substring => {
@@ -1267,54 +1229,6 @@ mod tests {
                 .map(|candidate| candidate.value.as_str()),
             Some("notes-ReadMe.txt")
         );
-    }
-
-    #[test]
-    fn basic_substring_file_completion_uses_substring_when_prefix_has_no_matches() {
-        let directory = TestDir::new();
-        fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
-        fs::write(directory.path().join("beta-note.txt"), "beta").expect("fixture should write");
-        fs::write(directory.path().join("plain.txt"), "plain").expect("fixture should write");
-        let mut session = CompletionSession::files(
-            directory.path(),
-            CompletionConfig {
-                matching: CompletionMatching::BasicSubstring,
-                ..CompletionConfig::default()
-            },
-        );
-
-        session.update("note");
-
-        let values = session
-            .view_items()
-            .into_iter()
-            .map(|item| item.candidate.value.as_str().to_owned())
-            .collect::<Vec<_>>();
-        assert_eq!(values, vec!["alpha-note.txt", "beta-note.txt"]);
-    }
-
-    #[test]
-    fn basic_substring_matching_prefers_prefix_matches() {
-        let mut session = CompletionSession::buffers(
-            [
-                "alpha-buffer.txt".to_owned(),
-                "notes-alpha.txt".to_owned(),
-                "alphabet-buffer.txt".to_owned(),
-            ],
-            CompletionConfig {
-                matching: CompletionMatching::BasicSubstring,
-                ..CompletionConfig::default()
-            },
-        );
-
-        session.update("alpha");
-
-        let values = session
-            .view_items()
-            .into_iter()
-            .map(|item| item.candidate.value.as_str().to_owned())
-            .collect::<Vec<_>>();
-        assert_eq!(values, vec!["alpha-buffer.txt", "alphabet-buffer.txt"]);
     }
 
     #[test]
