@@ -32,6 +32,32 @@ Ctrl+G
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/04-after-cancel.png
 Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Type "find-file"
+Sleep 500ms
+Down
+Sleep 500ms
+Tab
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-selected-tab.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Type "find-file"
+Sleep 500ms
+Down
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-selected-enter.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
 Ctrl+X
 Ctrl+C
 EOF

@@ -49,6 +49,121 @@ fn vertical_mx_completion_selection_moves_with_down() -> Result<()> {
 }
 
 #[test]
+fn vertical_mx_completion_tab_inserts_selected_command() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("M-x find-file-read-only")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_mx_completion_enter_accepts_explicit_exact_selection() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Find file read-only:")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_describe_function_completion_accepts_explicit_selection() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("find-file-read-only is an interactive command.")?;
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_describe_function_completion_tab_inserts_selected_command() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("find-file", b"find-file")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Describe function: find-file-read-only")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_describe_variable_completion_tab_inserts_selected_option() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.send("completion_m", b"completion_m")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Tab", keys::TAB)?;
+
+    rile.assert_screen_contains("Describe variable: completion_matching")?;
+
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("completion_matching is a configuration variable.")?;
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_describe_variable_completion_accepts_explicit_selection() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.send("completion_m", b"completion_m")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("completion_matching is a configuration variable.")?;
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_mx_completion_clips_long_visible_rows() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 10, 42)?;

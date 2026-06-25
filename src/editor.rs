@@ -1198,10 +1198,15 @@ impl Editor {
             return input.to_owned();
         }
         match self.completion.as_ref().map(CompletionSession::source) {
-            Some(CompletionSource::Commands) if self.commands.contains(trimmed) => {
+            Some(CompletionSource::Commands)
+                if !self.completion_selection_explicit() && self.commands.contains(trimmed) =>
+            {
                 return trimmed.to_owned();
             }
-            Some(CompletionSource::Options) if OptionRegistry::default().contains(trimmed) => {
+            Some(CompletionSource::Options)
+                if !self.completion_selection_explicit()
+                    && OptionRegistry::default().contains(trimmed) =>
+            {
                 return trimmed.to_owned();
             }
             Some(CompletionSource::Files) => return self.file_completion_accept_input(input),
@@ -1239,7 +1244,7 @@ impl Editor {
     }
 
     fn buffer_completion_accept_input(&self, input: &str) -> String {
-        if self.buffers.find_by_name(input).is_some() {
+        if !self.completion_selection_explicit() && self.buffers.find_by_name(input).is_some() {
             return input.to_owned();
         }
         let Some(completion) = self.completion.as_ref() else {
@@ -1249,6 +1254,12 @@ impl Editor {
             .selected()
             .map(|candidate| candidate.value.clone())
             .unwrap_or_else(|| input.to_owned())
+    }
+
+    fn completion_selection_explicit(&self) -> bool {
+        self.completion
+            .as_ref()
+            .is_some_and(CompletionSession::selection_explicit)
     }
 
     fn completion_should_enter_selected_directory(&self, input: &str) -> bool {
@@ -1362,32 +1373,19 @@ impl Editor {
             .prompt_input()
             .unwrap_or_default()
             .to_owned();
-        if let Some(prefix) = self
-            .completion
-            .as_ref()
-            .and_then(|completion| completion.common_prefix(&input))
-        {
-            self.minibuffer.set_prompt_input(prefix);
-            self.update_completion_from_prompt();
-            return;
-        }
-
-        if !matches!(
-            self.minibuffer.prompt_kind(),
-            Some(PromptKind::KillBuffer | PromptKind::SwitchToBuffer)
-        ) {
-            return;
-        }
-        let Some(selected) = self
-            .completion
-            .as_ref()
-            .and_then(CompletionSession::selected)
-            .map(|candidate| candidate.value.clone())
-        else {
+        let Some(completion) = self.completion.as_ref() else {
             return;
         };
-        if selected != input {
-            self.minibuffer.set_prompt_input(selected);
+        let next_input = match completion.source() {
+            CompletionSource::Files => completion.common_prefix(&input),
+            CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
+                completion
+                    .selected()
+                    .map(|candidate| candidate.value.clone())
+            }
+        };
+        if let Some(next_input) = next_input.filter(|next_input| next_input != &input) {
+            self.minibuffer.set_prompt_input(next_input);
             self.update_completion_from_prompt();
         }
     }
@@ -6949,6 +6947,33 @@ mod tests {
     }
 
     #[test]
+    fn extended_command_completion_explicit_selection_overrides_exact_name() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("find-file".to_owned()))
+            .expect("exact command name should update prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next command");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should execute explicitly selected command");
+
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::FindFileReadOnly)
+        );
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Find file read-only: ")
+        );
+    }
+
+    #[test]
     fn extended_command_completion_reports_no_match_as_raw_command() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -6969,20 +6994,23 @@ mod tests {
     }
 
     #[test]
-    fn extended_command_tab_extends_common_prefix() {
+    fn extended_command_tab_inserts_selected_command() {
         let mut editor = Editor::new(Document::scratch());
 
         editor
             .handle_key(KeyEvent::Meta('x'))
             .expect("M-x should start prompt");
         editor
-            .handle_key(KeyEvent::Text("toggle".to_owned()))
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
             .expect("prompt input should update completion");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Tab))
-            .expect("tab should complete common prefix");
+            .expect("tab should insert selected command");
 
-        assert_eq!(editor.minibuffer().prompt_input(), Some("toggle-"));
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("toggle-search-highlighting")
+        );
     }
 
     #[test]
@@ -7536,6 +7564,50 @@ mod tests {
 
         assert_eq!(editor.current_buffer_name(), " alpha-buffer.txt");
         assert_eq!(editor.document().buffer().serialize(), "spaced alpha");
+    }
+
+    #[test]
+    fn buffer_completion_explicit_selection_overrides_exact_name() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-buffer.txt");
+        let alphabet = directory.path().join("alpha-buffer.txt-extra");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        fs::write(&alphabet, "alphabet").expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(alpha.to_str().unwrap())
+            .expect("alpha should open");
+        editor
+            .find_file(alphabet.to_str().unwrap())
+            .expect("alphabet should open");
+        editor
+            .switch_to_buffer("start.txt")
+            .expect("start buffer should switch");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("switch-buffer should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha-buffer.txt".to_owned()))
+            .expect("exact buffer name should update prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select exact buffer");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("second down should select prefixed buffer");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should switch to explicitly selected buffer");
+
+        assert_eq!(editor.current_buffer_name(), "alpha-buffer.txt-extra");
+        assert_eq!(editor.document().buffer().serialize(), "alphabet");
     }
 
     #[test]
@@ -9118,6 +9190,57 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_function_completion_explicit_selection_overrides_exact_name() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("f".to_owned()))
+            .expect("describe-function should start");
+        editor
+            .handle_key(KeyEvent::Text("find-file".to_owned()))
+            .expect("exact command name should update input");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next command");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-function should accept explicit selection");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("find-file-read-only is an interactive command."));
+        assert!(help.contains("Name: find-file-read-only"));
+    }
+
+    #[test]
+    fn describe_function_tab_inserts_selected_command() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("f".to_owned()))
+            .expect("describe-function should start");
+        editor
+            .handle_key(KeyEvent::Text("find-file".to_owned()))
+            .expect("command input should update completion");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next command");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should insert selected command");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("find-file-read-only")
+        );
+    }
+
+    #[test]
     fn describe_mode_opens_help_for_active_modes() {
         let config = Config {
             line_numbers: true,
@@ -9277,6 +9400,57 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .buffer()
                 .serialize()
                 .contains("completion_matching is a configuration variable.")
+        );
+    }
+
+    #[test]
+    fn describe_variable_completion_accepts_explicit_selection() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("v".to_owned()))
+            .expect("describe-variable should start");
+        editor
+            .handle_key(KeyEvent::Text("completion_m".to_owned()))
+            .expect("describe-variable input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next option");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-variable should accept explicit selection");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains("completion_matching is a configuration variable."));
+        assert!(help.contains("Name: completion_matching"));
+    }
+
+    #[test]
+    fn describe_variable_tab_inserts_selected_option() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("v".to_owned()))
+            .expect("describe-variable should start");
+        editor
+            .handle_key(KeyEvent::Text("completion_m".to_owned()))
+            .expect("describe-variable input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next option");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Tab))
+            .expect("tab should insert selected option");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("completion_matching")
         );
     }
 

@@ -110,12 +110,11 @@ Basic editor keys:
 - `C-x C-q` toggles whether the current normal buffer is read-only.
 - `C-x b` prompts for a buffer name with completion and switches to it,
   preserving each buffer's point; empty input switches to the default buffer,
-  and Tab or Enter accepts the selected candidate when the input is not exact.
+  and Tab or Enter accepts the selected candidate.
 - `C-x C-b` shows a read-only `*Buffer List*` in another window.
 - `C-x k` prompts for a buffer name with completion and kills it; empty input
-  kills the current buffer, Tab or Enter accepts the selected candidate when the
-  input is not exact, and buffers with unsaved changes use an Emacs-style
-  `y-or-n-p` confirmation.
+  kills the current buffer, Tab or Enter accepts the selected candidate, and
+  buffers with unsaved changes use an Emacs-style `y-or-n-p` confirmation.
 - `C-x 2` splits the current window below.
 - `C-x 3` splits the current window right.
 - `C-x 0` deletes the current window.
@@ -132,9 +131,9 @@ Basic editor keys:
 - `C-x C-c` quits, prompting for `yes` before exiting when normal buffers have
   unsaved changes.
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move
-  through candidates, Tab completes a common prefix, and Enter accepts the
-  selected candidate. Command candidates show the first known key binding when
-  available.
+  through candidates, Tab inserts the selected candidate, and Enter accepts the
+  selected candidate. An explicitly moved selection wins over exact minibuffer
+  text. Command candidates show the first known key binding when available.
 - `C-h k` describes a key binding, `C-h f` (`describe-function`) prompts for
   an interactive command with command-name completion, `C-h v`
   (`describe-variable`) describes a configuration option with option-name
@@ -172,8 +171,10 @@ completion_matching = "prefix" # or "substring"
 ```
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
-`C-x C-f`, `C-x C-r`, and `C-x i` file names, and `C-x b`/`C-x k` buffer
-names.
+`C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
+`C-x b`/`C-x k` buffer names. Non-file prompts use Vertico-style selected
+candidate insertion on Tab; file prompts keep path-oriented common-prefix
+completion.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 

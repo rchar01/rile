@@ -263,6 +263,27 @@ The same controls can be overridden from the environment with
 `REFERENCE_INPUT_PAUSE`, `REFERENCE_SCREENSHOT_PAUSE`, and
 `REFERENCE_AUTO_PAUSES`.
 
+## Modern Completion Review Notes
+
+The modern Emacs reference profile enables Vertico and Marginalia. Use its
+captures as UX evidence for minibuffer completion prompts where Rile exposes a
+selected candidate list.
+
+Current Rile alignment shares selected-candidate mechanics across non-file
+completion prompts:
+
+- `M-x`, `C-h f`, `C-h v`, `C-x b`, and `C-x k` move the selected candidate with
+  Down/Up or `C-n`/`C-p`;
+- Tab inserts the selected candidate into the minibuffer;
+- Enter accepts the selected candidate, and an explicitly moved selection wins
+  over exact minibuffer text;
+- empty input remains prompt-specific: `C-x b` switches to the default previous
+  buffer, while `C-x k` kills the default current buffer.
+
+`C-x C-f` is deliberately separate because file completion has path, directory,
+existing-file, and missing-file semantics. Capture and review file behavior
+before changing Rile's file prompt mechanics.
+
 ## Kill Buffer Completion Review Notes
 
 The C-x k comparison is scoped to editors that prompt for a named buffer:
@@ -274,9 +295,9 @@ C-x b and C-x k:
 
 - C-x k keeps the current/default buffer first in kill-buffer completion
   candidates;
-- Tab accepts the selected candidate when no longer common prefix is available;
-- Enter accepts the selected candidate when input is not an exact buffer name;
-- exact buffer names still take priority over the selected candidate;
+- Tab inserts the selected candidate;
+- Enter accepts the selected candidate, and an explicitly moved selection wins
+  over exact minibuffer text;
 - empty input remains prompt-specific: C-x b switches to the default previous
   buffer, while C-x k kills the default current buffer;
 - dirty buffers ask for Emacs-style y-or-n-p confirmation before they are killed.
@@ -286,13 +307,10 @@ switch or kill. Direct Enter on ambiguous input has the same selected-candidate
 rule, but is covered by automated unit and PTY tests because there is no
 intermediate visual completion state before Enter executes.
 
-Review next before changing other buffer prompts:
-
-- whether switch-buffer candidates should prioritize the current, previous, or
-  most recently used buffer like a fuller Emacs setup;
-- whether file prompts should keep their current raw missing-file behavior or
-  adopt selected-candidate acceptance in more cases;
-- whether ido and *Completions* styles need the same prompt-specific semantics.
+Review next whether switch-buffer candidates should prioritize the current,
+previous, or most recently used buffer like a fuller Emacs setup, and whether
+ido and *Completions* styles need style-specific documentation beyond the shared
+prompt semantics.
 
 ## How To Use Evidence
 

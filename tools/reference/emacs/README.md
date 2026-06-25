@@ -71,6 +71,10 @@ Initial inspection scenarios:
 - `yank-pop-core`: base Emacs `M-y` yank-pop behavior.
 - `m-x-completion-core`: base Emacs `M-x` completion behavior.
 - `m-x-completion-modern`: Vertico/Marginalia `M-x` completion behavior.
+- `describe-function-completion-modern`: Vertico/Marginalia `C-h f` command
+  completion behavior.
+- `describe-variable-completion-modern`: Vertico/Marginalia `C-h v` variable
+  completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.
 - `incremental-search-wrap-core`: base Emacs incremental search wrapping behavior.
 - `insert-file-core`: base Emacs `C-x i` insert-file behavior.

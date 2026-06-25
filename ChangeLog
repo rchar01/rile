@@ -1,3 +1,19 @@
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
+	* src/editor.rs: Make non-file completion prompts insert the selected
+	candidate on Tab and let explicit selection override exact input on Enter.
+	* tests/pty_completion.rs: Cover selected-candidate completion for M-x,
+	describe-function, and describe-variable through the terminal UI.
+	* tools/reference/emacs/scenarios/m-x-completion-modern.scenario: Capture
+	selected-candidate Tab and Enter behavior.
+	* tools/reference/emacs/scenarios/describe-function-completion-modern.scenario,
+	tools/reference/emacs/scenarios/describe-variable-completion-modern.scenario:
+	Add modern Emacs completion reference scenarios.
+	* tools/reference/emacs/README.md, docs/reference-testing.md: Document the new
+	modern completion captures and non-file prompt alignment.
+	* README.md, NEWS, docs/development.md: Document selected-candidate completion
+	semantics.
+
 2026-06-24  Robert Charusta  <rch-public@posteo.net>
 
 	* docs/self-documentation.md: Add implemented self-documentation architecture
