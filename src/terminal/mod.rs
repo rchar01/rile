@@ -336,7 +336,11 @@ fn draw_editor_frame_with_options<W: Write>(
     draw_minibuffer(terminal, editor, size, minibuffer_row)?;
     draw_completion_popup(terminal, editor, size, minibuffer_row + 1, completion_rows)?;
 
-    move_cursor_to_current_window(terminal, editor, &layouts)?;
+    if let Some(cursor_column) = minibuffer_cursor_column(editor) {
+        move_cursor_to_minibuffer(terminal, size, minibuffer_row, cursor_column)?;
+    } else {
+        move_cursor_to_current_window(terminal, editor, &layouts)?;
+    }
     terminal.show_cursor()
 }
 
@@ -428,6 +432,36 @@ fn draw_completion_popup<W: Write>(
         write_fixed_width_text_with_face(terminal, &line, columns, face, editor.theme())?;
     }
     Ok(())
+}
+
+fn minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
+    let prompt = editor.minibuffer().prompt()?;
+    let prompt_column = text_display_width(&prompt.label) + text_display_width(&prompt.input);
+    let Some(completion) = editor.completion() else {
+        return Some(prompt_column);
+    };
+    if completion.style() == CompletionStyle::Vertical {
+        let selected = completion.selected_match_number().unwrap_or(0);
+        let prefix = format!("{selected}/{}  ", completion.match_count());
+        return Some(text_display_width(&prefix) + prompt_column);
+    }
+    Some(prompt_column)
+}
+
+fn move_cursor_to_minibuffer<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    size: TerminalSize,
+    row: usize,
+    column: usize,
+) -> Result<()> {
+    let columns = usize::from(size.columns.max(1));
+    terminal.move_cursor(row as u16, (column.min(columns - 1) + 1) as u16)
+}
+
+fn text_display_width(text: &str) -> usize {
+    text.chars()
+        .map(|character| character.width().unwrap_or(0))
+        .sum()
 }
 
 fn completion_candidate_column_width(
@@ -1250,7 +1284,8 @@ mod tests {
         write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
-    use crate::config::ThemeName;
+    use crate::completion::{CompletionConfig, CompletionStyle};
+    use crate::config::{Config, ThemeName};
     use crate::editor::Editor;
     use crate::file::Document;
     use crate::input::KeyEvent;
@@ -1411,6 +1446,62 @@ mod tests {
         }
 
         assert_eq!(rendered_cursor_position(&mut editor, size), Some((2, 3)));
+    }
+
+    #[test]
+    fn prompt_cursor_uses_minibuffer_row_for_vertical_completion() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+
+        let completion = editor.completion().expect("completion should start");
+        let prefix = format!(
+            "{}/{}  ",
+            completion.selected_match_number().unwrap_or(0),
+            completion.match_count()
+        );
+        let expected_column = prefix.chars().count() + "M-x ".chars().count() + 1;
+
+        assert_eq!(
+            rendered_cursor_position(&mut editor, size),
+            Some((2, expected_column))
+        );
+    }
+
+    #[test]
+    fn prompt_cursor_stays_before_ido_candidates() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::Ido,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+
+        assert_eq!(
+            rendered_cursor_position(&mut editor, size),
+            Some((8, "M-x toggle-s".chars().count() + 1))
+        );
     }
 
     #[test]

@@ -1,5 +1,13 @@
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
+	* src/terminal/mod.rs: Move the final render cursor to active minibuffer
+	prompts and keep Ido cursors before appended candidates.
+	* tests/pty_completion.rs: Assert M-x completion leaves the cursor on the
+	minibuffer prompt.
+	* NEWS: Mention active minibuffer cursor placement.
+
+2026-06-25  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/rile/scenarios/m-x-completion-modern.scenario: New file.
 	* tools/reference/rile/scenarios/find-file-completion-modern.scenario: New
 	file.

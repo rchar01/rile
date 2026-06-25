@@ -18,6 +18,19 @@ fn vertical_mx_completion_filters_and_accepts_command() -> Result<()> {
     rile.send("toggle-s", b"toggle-s")?;
 
     rile.assert_screen_contains("1/2  M-x toggle-s")?;
+    let rows = rile.screen_rows();
+    let prompt_row = rows
+        .iter()
+        .position(|row| row.contains("M-x toggle-s"))
+        .expect("prompt row should be visible");
+    let prompt_column = rows[prompt_row]
+        .find("M-x toggle-s")
+        .expect("prompt input should be visible")
+        + "M-x toggle-s".chars().count();
+    assert_eq!(
+        rile.cursor_position(),
+        (prompt_row as u16, prompt_column as u16)
+    );
     rile.assert_screen_contains("toggle-search-highlighting")?;
     rile.assert_screen_contains("Toggle search highlighting")?;
     rile.assert_screen_contains("toggle-syntax-highlighting")?;
