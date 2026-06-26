@@ -17,4 +17,7 @@ This directory contains maintainer and contributor documentation for Rile.
 
 ## Planning Documents
 
+- [Architecture Roadmap To Rile 1.0](architecture-improvement-plan.md): phased
+  plan for reducing editor complexity without rewriting behavior.
+
 Completed implementation plans should not remain here as permanent docs. When a plan finishes, move durable guidance into a guide and rely on Git history for the original checklist.

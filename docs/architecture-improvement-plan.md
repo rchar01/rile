@@ -1,0 +1,405 @@
+<!--
+SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
+# Plan: Architecture Roadmap To Rile 1.0
+
+## Goal
+
+Improve Rile's maintainability and testability on the road to the first stable
+release without rewriting working editor behavior. The plan deliberately
+separates low-risk Phase 1 cleanup from deeper Phase 2 architecture work so the
+editor stays working throughout the refactor.
+
+## Scope
+
+- Document the safe Phase 1 cleanup work that should happen before larger design
+  changes.
+- Document Phase 2 candidates that may become worthwhile after Phase 1 tests and
+  cleanup expose clearer seams.
+- Preserve current user-visible behavior unless a later change explicitly says
+  otherwise.
+- Prefer concrete Rust modules and data types over new trait hierarchies.
+
+## Non-Goals
+
+- Do not split the project into multiple crates yet.
+- Do not replace the direct termios and ANSI terminal backend yet.
+- Do not introduce async, a plugin system, or broad filesystem/shell traits.
+- Do not replace the current `Vec<String>` buffer storage without benchmark
+  evidence and a concrete large-file goal.
+- Do not change command names, key bindings, config keys, or documented editor
+  behavior as part of cleanup-only work.
+
+## Current Context
+
+- Rile is a single Rust crate for a terminal-native Emacs-style editor.
+- `src/editor.rs` is the main architectural hotspot. It owns editor state,
+  command dispatch, prompts, completion policy, help formatting, special-buffer
+  workflows, search, query replace, registers, rectangles, keyboard macros,
+  undo coordination, and viewport synchronization.
+- Lower-level modules such as `src/buffer/`, `src/file.rs`, `src/window.rs`,
+  `src/render/`, `src/input.rs`, `src/syntax.rs`, `src/config.rs`, and metadata
+  registries are already comparatively concrete and testable.
+- `src/command.rs` combines command metadata with concrete `Editor` handler
+  function pointers. This coupling is not ideal, but it is simple and should not
+  be changed before lower-risk cleanup.
+- `src/terminal/mod.rs` draws frames and currently mutates editor viewport state
+  to keep point visible. That is a design smell, but it is also tied to subtle
+  cursor and scrolling behavior.
+- The canonical verification gate is `make verify`. Focused tests should use the
+  existing unit tests and PTY tests before the full gate.
+
+## Assumptions
+
+- The Rile 1.0 goal remains a dependable lightweight terminal editor for source
+  files, config files, Markdown, and UTF-8 text.
+- Terminal UI remains the only concrete frontend target for now.
+- Keeping current behavior stable is more important than reducing line count
+  quickly.
+- Additional abstractions should be introduced only when they simplify real code
+  already under change.
+
+## Open Questions
+
+- [ ] Which feature area is most likely after cleanup: redo, larger-file
+  performance, more Emacs compatibility, syntax/mode expansion, shell/process
+  behavior, or configuration growth?
+- [ ] Are command names and key bindings considered stable enough to treat as a
+  user-facing compatibility surface?
+- [ ] Is alternate frontend support a real future goal, or should terminal-only
+  design stay explicit through Phase 2?
+
+## Phase 1: Stabilize And Make Refactors Safe
+
+Phase 1 should reduce risk and improve local reasoning while keeping `Editor` as
+the application coordinator. It should avoid major ownership changes, command
+system redesign, and new traits.
+
+### Step 1.1 Add Characterization Coverage
+
+Goal: protect behavior before moving code.
+
+Tasks:
+
+- [ ] Add or confirm tests for switching buffers in split windows while
+  preserving point and selected-window state.
+- [ ] Add or confirm tests for help, messages, shell-output, and completion
+  buffer return behavior.
+- [ ] Add or confirm tests for horizontal scroll state across window and buffer
+  switches.
+- [ ] Add or confirm tests for killing a buffer that is shown in one or more
+  windows.
+
+Likely files:
+
+- `src/editor.rs`
+- `tests/pty_split_pane.rs`
+- `tests/pty_completion.rs`
+- `tests/pty_scrolling.rs`
+- `tests/pty_movement.rs`
+
+Risk: low.
+
+Validation gate:
+
+- [ ] Run focused editor tests with `./scripts/in-container cargo test --locked editor`.
+- [ ] Run relevant PTY tests with `./scripts/in-container cargo test --locked --test <target>`.
+
+### Step 1.2 Extract Pure Help Formatting
+
+Goal: reduce `src/editor.rs` size without changing mutable editor behavior.
+
+Tasks:
+
+- [ ] Move help/about/describe formatting helpers into a small helper module only
+  if the move does not require broad visibility changes.
+- [ ] Keep `Editor` responsible for opening help buffers and collecting current
+  editor state.
+- [ ] Preserve command, key, option, mode, buffer, messages, and about output.
+
+Likely files:
+
+- `src/editor.rs`
+- Possible new `src/editor/help.rs` or equivalent helper module
+- `docs/self-documentation.md` only if the source-of-truth description changes
+
+Risk: low.
+
+Validation gate:
+
+- [ ] Run focused help and describe tests.
+- [ ] Run representative PTY help tests.
+
+### Step 1.3 Extract Pure Search Helpers
+
+Goal: isolate exact line-local search logic from editor workflow state.
+
+Tasks:
+
+- [ ] Move pure search match helpers out of the main editor body.
+- [ ] Keep incremental-search prompt state and wrap/failure behavior in `Editor`
+  until tests prove a cleaner state-machine seam.
+- [ ] Preserve exact UTF-8 substring matching and current wrapping semantics.
+
+Likely files:
+
+- `src/editor.rs`
+- Possible new `src/editor/search.rs`
+- `tests/pty_search.rs`
+
+Risk: low to medium.
+
+Validation gate:
+
+- [ ] Run search unit tests.
+- [ ] Run `./scripts/in-container cargo test --locked --test pty_search`.
+
+### Step 1.4 Extract Prompt History If Clean
+
+Goal: isolate prompt history behavior without moving prompt submission logic.
+
+Tasks:
+
+- [ ] Move prompt history storage/navigation into a small concrete helper if it
+  can be tested without exposing large editor internals.
+- [ ] Preserve draft restoration, duplicate suppression, per-prompt-kind history,
+  and completion refresh after history recall.
+- [ ] Leave prompt submission and command-specific prompt behavior in `Editor`.
+
+Likely files:
+
+- `src/editor.rs`
+- Possible new `src/editor/prompt_history.rs`
+- `tests/pty_completion.rs`
+
+Risk: medium.
+
+Validation gate:
+
+- [ ] Run prompt-history and completion unit tests.
+- [ ] Run relevant completion PTY tests.
+
+### Step 1.5 Reassess Before Larger Refactors
+
+Goal: avoid continuing into architecture churn after small wins.
+
+Tasks:
+
+- [ ] Review whether Phase 1 extractions reduced review pain without widening
+  visibility too much.
+- [ ] Record any remaining repeated patterns with file references.
+- [ ] Decide whether Phase 2 work is justified by concrete pain or upcoming
+  features.
+
+Risk: low.
+
+Validation gate:
+
+- [ ] Run `make verify` before treating Phase 1 cleanup as complete.
+- [ ] Update this plan's Progress Log with completed changes and evidence.
+
+## Phase 2: Architecture Readiness For Rile 1.0
+
+Phase 2 work should start only after Phase 1 cleanup and tests are in place.
+Each item is a candidate, not a commitment. Prefer the smallest candidate that
+solves a real maintenance or release-readiness problem.
+
+### Step 2.1 Simplify Special-Buffer Helpers
+
+Goal: reduce repeated help/messages/completions/buffer-list/shell-output buffer
+opening logic.
+
+Tasks:
+
+- [ ] Introduce one small helper for named special buffers if repeated code is
+  still visible after Phase 1.
+- [ ] Keep `DocumentKind` concrete.
+- [ ] Avoid a dynamic special-buffer registry unless new special-buffer types
+  become frequent.
+
+Risk: low to medium.
+
+Validation gate:
+
+- [ ] Run help, messages, completion-buffer, buffer-list, and shell-output tests.
+
+### Step 2.2 Extract Completion Prompt Policy
+
+Goal: make completion prompt behavior easier to test without moving matching
+logic.
+
+Tasks:
+
+- [ ] Keep matching and candidate ranking in `src/completion.rs`.
+- [ ] Move Enter, `M-RET`, Tab, directory descent, exact-file acceptance, and
+  default-buffer acceptance policy into a concrete editor-side helper.
+- [ ] Avoid traits or generic prompt sources unless the helper remains too
+  coupled after extraction.
+
+Risk: medium.
+
+Validation gate:
+
+- [ ] Run completion unit tests.
+- [ ] Run `./scripts/in-container cargo test --locked --test pty_completion`.
+
+### Step 2.3 Separate Command Metadata From Dispatch
+
+Goal: make `src/command.rs` a cleaner source of command metadata only if command
+growth makes the current concrete handler table painful.
+
+Tasks:
+
+- [ ] Keep `Command`, `CommandSpec`, command docs, categories, and completion
+  metadata in `src/command.rs`.
+- [ ] Move the concrete command-to-handler mapping into an editor dispatch module
+  only if this reduces coupling without adding trait objects or dynamic dispatch.
+- [ ] Preserve registry validation that every interactive command has metadata
+  and a handler.
+
+Risk: medium.
+
+Validation gate:
+
+- [ ] Run command registry tests.
+- [ ] Run keymap tests.
+- [ ] Run representative `M-x`, key binding, and help PTY tests.
+
+### Step 2.4 Clean Up View-State Ownership
+
+Goal: reduce duplicated selected buffer, cursor, and viewport state after tests
+cover the current behavior.
+
+Tasks:
+
+- [ ] Identify the canonical source of truth for selected window buffer and
+  cursor state.
+- [ ] Preserve per-buffer point restoration and per-window viewport behavior.
+- [ ] Remove synchronization helpers only after replacement invariants are
+  tested.
+
+Likely risk areas:
+
+- Split panes
+- Buffer switching
+- Help and completion return
+- Horizontal scrolling
+- Killing buffers shown in windows
+
+Risk: medium to high.
+
+Validation gate:
+
+- [ ] Run movement, scrolling, split-pane, completion, and buffer-related PTY tests.
+- [ ] Run parsed-screen snapshots with `make snapshot-test`.
+
+### Step 2.5 Introduce A Render Snapshot Boundary If Needed
+
+Goal: make terminal rendering consume a prepared view model instead of mutating
+editor state while drawing.
+
+Tasks:
+
+- [ ] Move cursor-visibility adjustment before frame rendering.
+- [ ] Introduce a small `RenderSnapshot` or equivalent only if it simplifies
+  tests or supports a concrete future UI boundary.
+- [ ] Keep ANSI output in the terminal adapter.
+
+Risk: medium.
+
+Validation gate:
+
+- [ ] Run terminal unit tests.
+- [ ] Run PTY rendering tests.
+- [ ] Run `make snapshot-test`.
+
+### Step 2.6 Improve Error Modeling Only Where Callers Branch
+
+Goal: avoid stringly error handling in areas that need distinct recovery paths.
+
+Tasks:
+
+- [ ] Add specific error variants only when callers need to branch on the error.
+- [ ] Preserve user-facing messages unless intentionally changed.
+- [ ] Avoid converting every string error into an enum variant by default.
+
+Risk: low.
+
+Validation gate:
+
+- [ ] Run unit tests for affected modules.
+- [ ] Run focused PTY tests for user-visible error messages if output changes.
+
+### Step 2.7 Evaluate Buffer Storage With Benchmarks Before Changing It
+
+Goal: avoid a premature rope or gap-buffer rewrite.
+
+Tasks:
+
+- [ ] Add simple benchmarks or measurement scripts for representative editing,
+  movement, search, and rendering workloads.
+- [ ] Record concrete thresholds for acceptable Rile 1.0 file sizes.
+- [ ] Consider alternate storage only if measurements show current storage blocks
+  the product goal.
+
+Risk: high if implemented without evidence.
+
+Validation gate:
+
+- [ ] Benchmark results are recorded before proposing a storage migration.
+- [ ] Existing buffer, editor, PTY, and snapshot tests pass after any storage
+  change.
+
+## Deferred Until After Rile 1.0 Unless Goals Change
+
+- Plugin system.
+- Async runtime.
+- Multi-crate workspace.
+- Terminal backend replacement.
+- Broad filesystem or shell trait abstraction.
+- Buffer storage rewrite without benchmark evidence.
+
+## Rust Design Rules For This Plan
+
+- Prefer concrete structs and modules over traits.
+- Add a trait only when there are at least two real implementations or a clear
+  testing seam that cannot be handled with pure helper functions.
+- Avoid `Arc`, `Mutex`, `RwLock`, channels, and async unless a feature requires
+  concurrency.
+- Keep ownership local and explicit; do not introduce shared mutable state to
+  reduce borrow-checker friction.
+- Move code before changing behavior. Do not combine mechanical extraction with
+  semantic changes.
+
+## Risks And Mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| Splitting `Editor` widens visibility too much | Extract pure helpers first; stop if many fields need `pub(crate)` access. |
+| View-state cleanup breaks terminal behavior | Add characterization tests before changing ownership. |
+| Command dispatch refactor adds indirection | Keep concrete handlers unless command growth proves painful. |
+| Render snapshot becomes speculative | Do it only for a concrete testing or UI-boundary need. |
+| Tests become slower or flaky | Keep pure behavior in unit tests and reserve PTY tests for terminal-visible behavior. |
+| Documentation drifts from implementation | Update this plan's Progress Log and move durable conclusions into guides when work completes. |
+
+## Validation Strategy
+
+- Use focused unit tests for helper extraction and pure logic.
+- Use PTY tests for terminal-visible behavior, cursor placement, prompts,
+  splits, scrolling, and special-buffer restoration.
+- Use `make snapshot-test` for rendering or viewport changes.
+- Use `make verify` before treating a phase as complete.
+
+## Progress Log
+
+| Date | Update | Evidence |
+| --- | --- | --- |
+| 2026-06-26 | Plan created from architecture review and self-critique. | User requested a written phased improvement plan. |
+
+## Decision Log
+
+| Date | Decision | Reason |
+| --- | --- | --- |
+| 2026-06-26 | Prefer Phase 1 safety-first cleanup before Phase 2 architecture work. | The current risk is editor centralization, but aggressive refactors could break subtle terminal behavior. |
