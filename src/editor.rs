@@ -10,7 +10,7 @@ use crate::buffers::BufferManager;
 use crate::command::{
     Command, CommandContext, CommandOutcome, CommandRegistry, CommandSpec, Invocation,
 };
-use crate::completion::{CompletionConfig, CompletionSession, CompletionSource, CompletionStyle};
+use crate::completion::{CompletionConfig, CompletionSession, CompletionStyle};
 use crate::config::{Config, ThemeName, default_config_path};
 use crate::file::{Document, DocumentKind};
 use crate::input::{KeyEvent, SpecialKey};
@@ -27,10 +27,15 @@ use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
+mod completion_policy;
 mod help;
 mod prompt_history;
 mod search;
 
+use completion_policy::{
+    CompletionAcceptContext, accepted_completion_input, directory_completion_to_enter,
+    raw_completion_input, tab_completion_input,
+};
 use help::{
     format_about_rile_help, format_describe_bindings_help, format_describe_buffer_help,
     format_describe_function_help, format_describe_key_brief_message, format_describe_key_help,
@@ -1140,15 +1145,11 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
-                if self.completion_should_enter_selected_directory(&input) {
+                if let Some(directory) =
+                    directory_completion_to_enter(self.completion.as_ref(), &input)
+                {
                     self.prompt_history.reset(kind);
                     self.minibuffer.start_prompt(kind, prompt_label(kind));
-                    let directory = self
-                        .completion
-                        .as_ref()
-                        .and_then(CompletionSession::selected)
-                        .map(|candidate| candidate.value.clone())
-                        .unwrap_or(input);
                     self.minibuffer.set_prompt_input(directory);
                     self.update_completion_from_prompt();
                     return Ok(EditorOutcome::Continue);
@@ -1164,6 +1165,7 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
+                let input = raw_completion_input(&input);
                 self.prompt_history.record(kind, &input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
@@ -1239,107 +1241,16 @@ impl Editor {
 
     fn completion_accept_input(&self, kind: PromptKind, input: &str) -> String {
         let trimmed = input.trim();
-        if trimmed.is_empty() {
-            if kind == PromptKind::SwitchToBuffer {
-                return self
-                    .switch_buffer_default_name()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| input.to_owned());
-            }
-            return input.to_owned();
-        }
-        match self.completion.as_ref().map(CompletionSession::source) {
-            Some(CompletionSource::Commands)
-                if !self.completion_selection_explicit() && self.commands.contains(trimmed) =>
-            {
-                return trimmed.to_owned();
-            }
-            Some(CompletionSource::Options)
-                if !self.completion_selection_explicit()
-                    && OptionRegistry::default().contains(trimmed) =>
-            {
-                return trimmed.to_owned();
-            }
-            Some(CompletionSource::Files) => return self.file_completion_accept_input(input),
-            Some(CompletionSource::Buffers)
-                if matches!(kind, PromptKind::KillBuffer | PromptKind::SwitchToBuffer) =>
-            {
-                return self.buffer_completion_accept_input(input);
-            }
-            Some(CompletionSource::Buffers) => {}
-            Some(_) => {}
-            None => {}
-        }
-        self.completion
-            .as_ref()
-            .and_then(CompletionSession::selected)
-            .map(|candidate| candidate.value.clone())
-            .unwrap_or_else(|| input.to_owned())
-    }
-
-    fn file_completion_accept_input(&self, input: &str) -> String {
-        let trimmed = input.trim();
-        if !self.completion_selection_explicit() && self.find_file_input_is_exact_file(trimmed) {
-            return trimmed.to_owned();
-        }
-        let Some(completion) = self.completion.as_ref() else {
-            return input.to_owned();
-        };
-        if !completion.has_matches() {
-            return input.to_owned();
-        }
-        if let Some(candidate) = completion.selected()
-            && candidate.is_directory()
-            && !completion.selection_explicit()
-            && candidate.value.trim_end_matches('/') != trimmed.trim_end_matches('/')
-        {
-            return input.to_owned();
-        }
-        completion
-            .selected()
-            .map(|candidate| candidate.value.clone())
-            .unwrap_or_else(|| input.to_owned())
-    }
-
-    fn buffer_completion_accept_input(&self, input: &str) -> String {
-        if !self.completion_selection_explicit() && self.buffers.find_by_name(input).is_some() {
-            return input.to_owned();
-        }
-        let Some(completion) = self.completion.as_ref() else {
-            return input.to_owned();
-        };
-        completion
-            .selected()
-            .map(|candidate| candidate.value.clone())
-            .unwrap_or_else(|| input.to_owned())
-    }
-
-    fn completion_selection_explicit(&self) -> bool {
-        self.completion
-            .as_ref()
-            .is_some_and(CompletionSession::selection_explicit)
-    }
-
-    fn completion_should_enter_selected_directory(&self, input: &str) -> bool {
-        if input.trim().is_empty() {
-            return false;
-        }
-        let Some(completion) = self
-            .completion
-            .as_ref()
-            .filter(|completion| completion.source() == CompletionSource::Files)
-        else {
-            return false;
-        };
-        let Some(candidate) = completion
-            .selected()
-            .filter(|candidate| candidate.is_directory())
-        else {
-            return false;
-        };
-        completion.has_matches()
-            && (completion.selection_explicit()
-                || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/'))
+        accepted_completion_input(CompletionAcceptContext {
+            kind,
+            input,
+            completion: self.completion.as_ref(),
+            command_exists: self.commands.contains(trimmed),
+            option_exists: OptionRegistry::default().contains(trimmed),
+            exact_file_exists: self.find_file_input_is_exact_file(trimmed),
+            buffer_exists: self.buffers.find_by_name(input).is_some(),
+            switch_buffer_default: self.switch_buffer_default_name(),
+        })
     }
 
     fn recall_prompt_history(&mut self, direction: isize) {
@@ -1371,15 +1282,7 @@ impl Editor {
         let Some(completion) = self.completion.as_ref() else {
             return;
         };
-        let next_input = match completion.source() {
-            CompletionSource::Files
-            | CompletionSource::Commands
-            | CompletionSource::Buffers
-            | CompletionSource::Options => completion
-                .selected()
-                .map(|candidate| candidate.value.clone()),
-        };
-        if let Some(next_input) = next_input.filter(|next_input| next_input != &input) {
+        if let Some(next_input) = tab_completion_input(completion, &input) {
             self.minibuffer.set_prompt_input(next_input);
             self.update_completion_from_prompt();
         }

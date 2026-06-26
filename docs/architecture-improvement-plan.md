@@ -262,18 +262,18 @@ logic.
 
 Tasks:
 
-- [ ] Keep matching and candidate ranking in `src/completion.rs`.
-- [ ] Move Enter, `M-RET`, Tab, directory descent, exact-file acceptance, and
+- [x] Keep matching and candidate ranking in `src/completion.rs`.
+- [x] Move Enter, `M-RET`, Tab, directory descent, exact-file acceptance, and
   default-buffer acceptance policy into a concrete editor-side helper.
-- [ ] Avoid traits or generic prompt sources unless the helper remains too
+- [x] Avoid traits or generic prompt sources unless the helper remains too
   coupled after extraction.
 
 Risk: medium.
 
 Validation gate:
 
-- [ ] Run completion unit tests.
-- [ ] Run `./scripts/in-container cargo test --locked --test pty_completion`.
+- [x] Run completion unit tests.
+- [x] Run `./scripts/in-container cargo test --locked --test pty_completion`.
 
 ### Step 2.3 Separate Command Metadata From Dispatch
 
@@ -426,6 +426,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 2.2 completion prompt policy extraction. | `src/editor/completion_policy.rs` now owns Enter acceptance, raw `M-RET` bypass support, Tab candidate insertion, directory descent, exact file/command/option/buffer acceptance, and default switch-buffer acceptance decisions while matching/ranking remains in `src/completion.rs`; `./scripts/in-container cargo test --locked completion_policy -- --nocapture`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `./scripts/in-container cargo test --locked --test pty_completion -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 2.1 returnable special-buffer helper cleanup. | `src/editor.rs` now uses shared helpers for returnable special-buffer return-slot preservation, special-buffer display, transient state clearing, and viewport restore; repeated-open unit tests cover help, messages, shell-output, and completions-buffer return slots; buffer-list behavior was left untouched; focused help, messages, completion, shell-command, and PTY movement/completion/shell-command tests passed. |
 | 2026-06-26 | Completed Step 1.5 Phase 1 reassessment. | `make verify` passed after Step 1.5; review found extracted helper modules remain `pub(super)`, returnable special-buffer open/restore handling is the clearest repeated pattern, and buffer-list refresh should stay distinct unless a helper remains obvious. |
 | 2026-06-26 | Completed Step 1.4 prompt history extraction. | `src/editor/prompt_history.rs` now owns per-prompt-kind history storage, duplicate suppression, navigation, and draft restoration while `Editor` still submits prompts and refreshes completion; `./scripts/in-container cargo test --locked prompt_history -- --nocapture`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `./scripts/in-container cargo test --locked --test pty_completion vertical_mx_prompt_history_recalls_previous_command -- --nocapture` passed. |
