@@ -35,6 +35,8 @@ artifacts/reference/rile/build/target/debug/rile --visual-test --test-size WIDTH
 
 Navigation comparison scenarios:
 
+- `long-line`: Rile long-line markers, region faces, help continuation, and
+  horizontal movement frames aligned with the Emacs core and Zile scenarios.
 - `recenter`: Rile repeated `C-l` recenter behavior in short and long buffers,
   aligned with the Emacs core `recenter-core` scenario.
 

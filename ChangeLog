@@ -1,3 +1,13 @@
+2026-06-26  Robert Charusta  <rch-public@posteo.net>
+
+	* tools/reference/emacs/scenarios/long-line-core.scenario: New file.
+	* tools/reference/zile/scenarios/long-line.scenario: Expand the capture to
+	cover horizontal movement, region display, and help-buffer clipping.
+	* tools/reference/rile/scenarios/long-line.scenario: New file.
+	* docs/reference-testing.md, tools/reference/emacs/README.md,
+	tools/reference/zile/README.md, tools/reference/rile/README.md: Document
+	long-line reference captures.
+
 2026-06-25  Robert Charusta  <rch-public@posteo.net>
 
 	* src/editor.rs: Let C-l center placement leave blank rows below point near

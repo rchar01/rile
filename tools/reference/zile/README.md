@@ -38,7 +38,8 @@ Baseline inspection scenarios:
 - `list-buffers`: `C-x C-b` list-buffers behavior.
 - `mark-whole-buffer`: `C-x h` mark-whole-buffer behavior.
 - `newline-and-indent`: `C-j` newline-and-indent behavior.
-- `long-line`: horizontal clipping behavior.
+- `long-line`: horizontal clipping, region faces, help clipping, and movement
+  behavior on long lines.
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.
 - `find-file-completion`: file prompt completion after Tab.

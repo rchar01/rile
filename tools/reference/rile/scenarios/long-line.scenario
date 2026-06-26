@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 SCENARIO_NAME=long-line
-SCENARIO_DESCRIPTION='Observe Zile long-line markers, region faces, and horizontal scrolling.'
+SCENARIO_DESCRIPTION='Observe Rile long-line markers, region faces, and horizontal scrolling.'
 WIDTH=32
 HEIGHT=12
 FIXTURE_NAME=long-line.txt

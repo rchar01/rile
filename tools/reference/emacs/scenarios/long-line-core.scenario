@@ -1,11 +1,12 @@
 # SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-SCENARIO_NAME=long-line
-SCENARIO_DESCRIPTION='Observe Zile long-line markers, region faces, and horizontal scrolling.'
+SCENARIO_NAME=long-line-core
+SCENARIO_DESCRIPTION='Observe base Emacs long-line markers, region faces, and horizontal scrolling.'
+EMACS_PROFILE=core
 WIDTH=32
 HEIGHT=12
-FIXTURE_NAME=long-line.txt
+FIXTURE_NAME=long-line-core.txt
 FIXTURE_CONTENT=$'0123456789 abcdefghij 0123456789 abcdefghij 0123456789 abcdefghij 0123456789 abcdefghij END
 short
 tail

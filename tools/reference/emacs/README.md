@@ -52,6 +52,8 @@ Initial inspection scenarios:
 - `join-line-core`: base Emacs `M-^` join-line behavior.
 - `keyboard-macro-core`: base Emacs keyboard macro and repeat behavior.
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
+- `long-line-core`: base Emacs long-line markers, region faces, and movement
+  behavior in narrow windows.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
 - `newline-and-indent-core`: base Emacs `C-j` newline-and-indent behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.

@@ -168,6 +168,12 @@ recenter, after the first center placement, after the second top placement, and
 after the third bottom placement, including an end-of-buffer case where centering
 can leave blank rows below point.
 
+The Emacs, Zile, and Rile `long-line-core`/`long-line` captures compare long
+logical-line display at a narrow terminal width. They record file-buffer edge
+markers, forward and backward point movement across horizontal display
+thresholds, region faces on clipped long lines, region display through a short
+line break, and help-buffer continuation or clipping markers.
+
 Capture outputs are written under:
 
 ```text
