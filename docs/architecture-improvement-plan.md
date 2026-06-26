@@ -238,21 +238,22 @@ distinct behavior.
 
 Tasks:
 
-- [ ] Introduce one small helper for returnable special buffers if repeated
+- [x] Introduce one small helper for returnable special buffers if repeated
   cursor, search, region, insert-group, viewport, and return-viewport handling
   is still visible after Phase 1.
-- [ ] Treat buffer-list opening and refresh as related but distinct unless the
+- [x] Treat buffer-list opening and refresh as related but distinct unless the
   helper remains obvious and behavior-preserving.
-- [ ] Keep `DocumentKind` concrete.
-- [ ] Avoid a dynamic special-buffer registry unless new special-buffer types
+- [x] Keep `DocumentKind` concrete.
+- [x] Avoid a dynamic special-buffer registry unless new special-buffer types
   become frequent.
 
 Risk: low to medium.
 
 Validation gate:
 
-- [ ] Run help, messages, completion-buffer, and shell-output tests.
-- [ ] Run buffer-list tests too if buffer-list behavior is touched.
+- [x] Run help, messages, completion-buffer, and shell-output tests.
+- [x] Run buffer-list tests too if buffer-list behavior is touched; not required
+  for this cleanup because buffer-list behavior was left unchanged.
 
 ### Step 2.2 Extract Completion Prompt Policy
 
@@ -425,6 +426,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 2.1 returnable special-buffer helper cleanup. | `src/editor.rs` now uses shared helpers for returnable special-buffer return-slot preservation, special-buffer display, transient state clearing, and viewport restore; repeated-open unit tests cover help, messages, shell-output, and completions-buffer return slots; buffer-list behavior was left untouched; focused help, messages, completion, shell-command, and PTY movement/completion/shell-command tests passed. |
 | 2026-06-26 | Completed Step 1.5 Phase 1 reassessment. | `make verify` passed after Step 1.5; review found extracted helper modules remain `pub(super)`, returnable special-buffer open/restore handling is the clearest repeated pattern, and buffer-list refresh should stay distinct unless a helper remains obvious. |
 | 2026-06-26 | Completed Step 1.4 prompt history extraction. | `src/editor/prompt_history.rs` now owns per-prompt-kind history storage, duplicate suppression, navigation, and draft restoration while `Editor` still submits prompts and refreshes completion; `./scripts/in-container cargo test --locked prompt_history -- --nocapture`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `./scripts/in-container cargo test --locked --test pty_completion vertical_mx_prompt_history_recalls_previous_command -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.3 pure search helper extraction. | `src/editor/search.rs` now owns exact forward/backward match helpers and UTF-8-aware repeat-start advancement while `Editor` keeps incremental-search prompt, wrap, and failure state; `./scripts/in-container cargo test --locked editor::search -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_search -- --nocapture` passed. |

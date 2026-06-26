@@ -871,22 +871,16 @@ impl Editor {
 
     fn open_help_buffer(&mut self, text: impl AsRef<str>) -> EditorOutcome {
         self.sync_current_window();
-        if !self.document().is_help() || self.help_return.is_none() {
-            self.help_return = Some(*self.windows.current().viewport());
-        }
+        let current_is_help = self.document().is_help();
+        let current_viewport = *self.windows.current().viewport();
+        remember_returnable_special_buffer_return(
+            &mut self.help_return,
+            current_viewport,
+            current_is_help,
+        );
         let help = self.buffers.open_help(text);
 
-        self.current_buffer = help;
-        self.cursor = Position::new(0, 0);
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        let viewport = self.windows.current_mut().viewport_mut();
-        viewport.first_visible_line = 0;
-        viewport.first_visible_column = 0;
-        self.sync_current_window();
+        self.show_returnable_special_buffer(help);
         self.minibuffer
             .set_message("Type q in help window to restore previous buffer.");
 
@@ -903,37 +897,23 @@ impl Editor {
             return EditorOutcome::Continue;
         }
 
-        self.current_buffer = viewport.buffer;
-        self.cursor = viewport.cursor;
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        *self.windows.current_mut().viewport_mut() = viewport;
-        self.minibuffer.clear();
+        self.restore_returnable_special_buffer(viewport, true);
 
         EditorOutcome::Continue
     }
 
     fn open_messages_buffer(&mut self) -> Result<()> {
         self.sync_current_window();
-        if !self.document().is_messages() || self.messages_return.is_none() {
-            self.messages_return = Some(*self.windows.current().viewport());
-        }
+        let current_is_messages = self.document().is_messages();
+        let current_viewport = *self.windows.current().viewport();
+        remember_returnable_special_buffer_return(
+            &mut self.messages_return,
+            current_viewport,
+            current_is_messages,
+        );
         let messages = self.buffers.open_messages(self.minibuffer.messages_text());
 
-        self.current_buffer = messages;
-        self.cursor = Position::new(0, 0);
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        let viewport = self.windows.current_mut().viewport_mut();
-        viewport.first_visible_line = 0;
-        viewport.first_visible_column = 0;
-        self.sync_current_window();
+        self.show_returnable_special_buffer(messages);
         self.minibuffer
             .set_message("Type q in messages window to restore previous buffer.");
         Ok(())
@@ -949,37 +929,23 @@ impl Editor {
             return EditorOutcome::Continue;
         }
 
-        self.current_buffer = viewport.buffer;
-        self.cursor = viewport.cursor;
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        *self.windows.current_mut().viewport_mut() = viewport;
-        self.minibuffer.clear();
+        self.restore_returnable_special_buffer(viewport, true);
 
         EditorOutcome::Continue
     }
 
     fn open_shell_output_buffer(&mut self, text: impl AsRef<str>) -> EditorOutcome {
         self.sync_current_window();
-        if !self.document().is_shell_output() || self.shell_output_return.is_none() {
-            self.shell_output_return = Some(*self.windows.current().viewport());
-        }
+        let current_is_shell_output = self.document().is_shell_output();
+        let current_viewport = *self.windows.current().viewport();
+        remember_returnable_special_buffer_return(
+            &mut self.shell_output_return,
+            current_viewport,
+            current_is_shell_output,
+        );
         let output = self.buffers.open_shell_output(text);
 
-        self.current_buffer = output;
-        self.cursor = Position::new(0, 0);
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        let viewport = self.windows.current_mut().viewport_mut();
-        viewport.first_visible_line = 0;
-        viewport.first_visible_column = 0;
-        self.sync_current_window();
+        self.show_returnable_special_buffer(output);
 
         EditorOutcome::Continue
     }
@@ -994,17 +960,37 @@ impl Editor {
             return EditorOutcome::Continue;
         }
 
+        self.restore_returnable_special_buffer(viewport, true);
+
+        EditorOutcome::Continue
+    }
+
+    fn show_returnable_special_buffer(&mut self, buffer: BufferId) {
+        self.current_buffer = buffer;
+        self.cursor = Position::new(0, 0);
+        self.clear_returnable_special_buffer_state();
+        let viewport = self.windows.current_mut().viewport_mut();
+        viewport.first_visible_line = 0;
+        viewport.first_visible_column = 0;
+        self.sync_current_window();
+    }
+
+    fn restore_returnable_special_buffer(&mut self, viewport: Viewport, clear_minibuffer: bool) {
         self.current_buffer = viewport.buffer;
         self.cursor = viewport.cursor;
+        self.clear_returnable_special_buffer_state();
+        *self.windows.current_mut().viewport_mut() = viewport;
+        if clear_minibuffer {
+            self.minibuffer.clear();
+        }
+    }
+
+    fn clear_returnable_special_buffer_state(&mut self) {
         self.goal_display_column = None;
         self.search = None;
         self.query_replace = None;
         self.deactivate_region();
         self.clear_insert_group();
-        *self.windows.current_mut().viewport_mut() = viewport;
-        self.minibuffer.clear();
-
-        EditorOutcome::Continue
     }
 
     fn close_buffer_list_window(&mut self) -> EditorOutcome {
@@ -1424,17 +1410,7 @@ impl Editor {
             self.completion_return = Some(*self.windows.current().viewport());
         }
         let completions = self.buffers.open_completions(text);
-        self.current_buffer = completions;
-        self.cursor = Position::new(0, 0);
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        let viewport = self.windows.current_mut().viewport_mut();
-        viewport.first_visible_line = 0;
-        viewport.first_visible_column = 0;
-        self.sync_current_window();
+        self.show_returnable_special_buffer(completions);
     }
 
     fn finish_completion_buffer(&mut self) {
@@ -1444,14 +1420,7 @@ impl Editor {
         if self.buffers.document(viewport.buffer).is_none() {
             return;
         }
-        self.current_buffer = viewport.buffer;
-        self.cursor = viewport.cursor;
-        self.goal_display_column = None;
-        self.search = None;
-        self.query_replace = None;
-        self.deactivate_region();
-        self.clear_insert_group();
-        *self.windows.current_mut().viewport_mut() = viewport;
+        self.restore_returnable_special_buffer(viewport, false);
     }
 
     fn submit_prompt(&mut self, kind: PromptKind, input: &str) -> Result<EditorOutcome> {
@@ -5659,6 +5628,16 @@ impl DecorationProvider for SearchDecorator<'_> {
     }
 }
 
+fn remember_returnable_special_buffer_return(
+    return_viewport: &mut Option<Viewport>,
+    current_viewport: Viewport,
+    current_is_special: bool,
+) {
+    if !current_is_special || return_viewport.is_none() {
+        *return_viewport = Some(current_viewport);
+    }
+}
+
 fn format_completion_buffer(completion: &CompletionSession) -> String {
     let title = format!("Possible Completions for {}:", completion.title());
     let mut text = format!("{title}\n\n");
@@ -8313,6 +8292,42 @@ mod tests {
     }
 
     #[test]
+    fn completions_buffer_refresh_keeps_original_return_buffer() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::CompletionsBuffer,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+        editor
+            .handle_key(KeyEvent::Text("buffer text".to_owned()))
+            .expect("fixture text should insert");
+        editor.cursor = Position::new(0, "buffer".len());
+        let original = editor.current_buffer_id();
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt and completions buffer");
+        assert_eq!(editor.current_buffer_name(), "*Completions*");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should refresh completions while inside completions buffer");
+        assert_eq!(editor.current_buffer_name(), "*Completions*");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+
+        assert_eq!(editor.current_buffer_id(), original);
+        assert_eq!(editor.cursor(), Position::new(0, "buffer".len()));
+        assert_eq!(editor.document().buffer().serialize(), "buffer text");
+    }
+
+    #[test]
     fn completions_buffer_completion_restores_previous_buffer_on_accept() {
         let mut editor = Editor::with_config(
             Document::scratch(),
@@ -8949,6 +8964,32 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.cursor(), Position::new(0, 2));
         assert_eq!(editor.document().buffer().serialize(), "alpha");
         assert_eq!(editor.minibuffer().display_text(), None);
+    }
+
+    #[test]
+    fn repeated_messages_open_keeps_original_return_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("text should insert");
+        editor.cursor = Position::new(0, 2);
+        let original = editor.current_buffer_id();
+        editor
+            .open_messages_buffer()
+            .expect("messages buffer should open");
+        assert_eq!(editor.current_buffer_name(), "*Messages*");
+        editor
+            .open_messages_buffer()
+            .expect("messages buffer should refresh while inside messages buffer");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+
+        assert_eq!(editor.current_buffer_id(), original);
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
     }
 
     #[test]
@@ -9654,6 +9695,40 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.current_buffer_id(), original);
         assert_eq!(editor.cursor(), Position::new(1, 0));
         assert_eq!(editor.minibuffer().display_text(), None);
+    }
+
+    #[test]
+    fn repeated_help_open_keeps_original_return_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move down");
+        {
+            let viewport = editor.windows.current_mut().viewport_mut();
+            viewport.first_visible_line = 1;
+            viewport.first_visible_column = 2;
+        }
+        let original = editor.current_buffer_id();
+        editor.open_help_buffer("first help");
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        editor.open_help_buffer("second help");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+
+        assert_eq!(editor.current_buffer_id(), original);
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+        let restored_viewport = editor.windows.current().viewport();
+        assert_eq!(restored_viewport.first_visible_line, 1);
+        assert_eq!(restored_viewport.first_visible_column, 2);
+        assert_eq!(editor.document().buffer().serialize(), "one\ntwo\nthree");
     }
 
     #[test]
@@ -12658,6 +12733,30 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("q".to_owned()))
             .expect("q should restore previous buffer");
         assert_eq!(editor.current_buffer_id(), original_buffer);
+    }
+
+    #[test]
+    fn repeated_shell_output_open_keeps_original_return_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 2);
+        let original = editor.current_buffer_id();
+
+        editor.open_shell_output_buffer("first output");
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        editor.open_shell_output_buffer("second output");
+
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+
+        assert_eq!(editor.current_buffer_id(), original);
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
     }
 
     #[test]
