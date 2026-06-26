@@ -3,6 +3,8 @@
 
 mod support;
 
+use std::fs;
+
 use anyhow::Result;
 
 use support::{fixtures, keys, pty::RilePty};
@@ -11,6 +13,23 @@ fn control_x_text(text: &str) -> Vec<u8> {
     let mut sequence = keys::control('x').to_vec();
     sequence.extend_from_slice(text.as_bytes());
     sequence
+}
+
+fn scrolled_row_count(rile: &RilePty, marker: &str) -> usize {
+    rile.screen_rows()
+        .iter()
+        .filter(|row| row.starts_with('$') && row.contains(marker))
+        .count()
+}
+
+fn assert_scrolled_row_contains(rile: &RilePty, marker: &str) -> Result<()> {
+    if scrolled_row_count(rile, marker) == 0 {
+        anyhow::bail!(
+            "screen did not show horizontally scrolled row containing `{marker}`\n{}",
+            rile.screen_dump()
+        );
+    }
+    Ok(())
 }
 
 #[test]
@@ -187,6 +206,60 @@ fn horizontal_scrolling_keeps_cursor_visible_on_long_lines() -> Result<()> {
         "horizontally scrolled line should mark hidden left edge\n{}",
         rile.screen_dump()
     );
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn horizontal_scroll_state_survives_window_and_buffer_switches() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let alpha = directory.path().join("alpha.txt");
+    let beta = directory.path().join("beta.txt");
+    fs::write(
+        &alpha,
+        format!("alpha viewport {} alpha-tail\n", "0123456789 ".repeat(8)),
+    )?;
+    fs::write(&beta, "beta viewport\n")?;
+    let mut rile = RilePty::spawn(&alpha, 12, 40)?;
+
+    rile.wait_for_screen_contains("alpha viewport")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let beta_path = beta.display().to_string();
+    rile.send("beta path", beta_path.as_bytes())?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("beta viewport")?;
+
+    rile.send("C-x b", control_x_text("b"))?;
+    rile.send("alpha buffer", b"alpha.txt")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("alpha viewport")?;
+    rile.send("C-e", keys::control('e'))?;
+    assert_scrolled_row_contains(&rile, "alpha-tail")?;
+
+    rile.send("C-x 2", control_x_text("2"))?;
+    let scrolled_rows = scrolled_row_count(&rile, "alpha-tail");
+    assert!(
+        scrolled_rows >= 2,
+        "split windows did not both retain alpha hscroll state\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_status_contains("window 1 ACTIVE alpha.txt")?;
+    assert_scrolled_row_contains(&rile, "alpha-tail")?;
+
+    rile.send("C-x b", control_x_text("b"))?;
+    rile.send("beta buffer", b"beta.txt")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.assert_status_contains("window 1 ACTIVE beta.txt")?;
+    rile.assert_screen_contains("beta viewport")?;
+
+    rile.send("C-x b", control_x_text("b"))?;
+    rile.send("alpha buffer", b"alpha.txt")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.assert_status_contains("window 1 ACTIVE alpha.txt")?;
+    assert_scrolled_row_contains(&rile, "alpha-tail")?;
 
     rile.quit()?;
     Ok(())
