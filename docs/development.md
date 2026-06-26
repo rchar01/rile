@@ -118,6 +118,8 @@ Milestone 9 adds windows and splits:
 - `C-x 1` and `delete-other-windows` collapse back to the selected window;
 - `C-x o` and `other-window` cycle through windows and restore each window's cursor;
 - terminal drawing lays out all windows, draws one mode line per window, and places point in the selected window;
+- horizontal auto-scrolling follows Emacs' default margin-and-recenter behavior
+  for clipped long lines;
 - layout tests cover horizontal and vertical splitting, deletion, cycling, and per-window viewport state.
 
 Milestone 10 adds region, kill/yank, and undo:

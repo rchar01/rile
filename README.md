@@ -156,7 +156,7 @@ Basic editor keys:
 Current search and query replace use exact UTF-8 substring matching within individual lines. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and neither command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
-Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including context-preserving horizontal scrolling on long lines. Empty rows are left blank rather than filled with marker characters.
+Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Empty rows are left blank rather than filled with marker characters.
 Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
 
 ## Configuration

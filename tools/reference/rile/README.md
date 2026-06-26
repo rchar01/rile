@@ -37,6 +37,8 @@ Navigation comparison scenarios:
 
 - `long-line`: Rile long-line markers, region faces, help continuation, and
   horizontal movement frames aligned with the Emacs core and Zile scenarios.
+- `long-line-hscroll`: Rile truncated long-line horizontal auto-scrolling frames
+  aligned with the Emacs core `long-line-hscroll-core` scenario.
 - `recenter`: Rile repeated `C-l` recenter behavior in short and long buffers,
   aligned with the Emacs core `recenter-core` scenario.
 

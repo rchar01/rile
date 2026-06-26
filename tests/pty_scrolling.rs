@@ -214,7 +214,7 @@ fn horizontal_scrolling_marks_both_hidden_edges() -> Result<()> {
 }
 
 #[test]
-fn horizontal_scrolling_keeps_context_around_long_line_cursor() -> Result<()> {
+fn horizontal_scrolling_recenters_around_long_line_cursor() -> Result<()> {
     let file = fixtures::fixture_path("long_lines.txt");
     let mut rile = RilePty::spawn(&file, 8, 32)?;
 
@@ -222,27 +222,74 @@ fn horizontal_scrolling_keeps_context_around_long_line_cursor() -> Result<()> {
     for _ in 0..36 {
         rile.send("C-f", keys::control('f'))?;
     }
+    rile.assert_cursor(0, 25)?;
     assert!(
-        rile.screen_rows()[0].starts_with("$123456789 0123456789 012345678"),
-        "right scroll should keep context before point\n{}",
+        rile.screen_rows()[0].starts_with("$6789 0123456789 0123456789 012$"),
+        "right scroll should recenter point\n{}",
         rile.screen_dump()
     );
 
     for _ in 0..20 {
         rile.send("C-f", keys::control('f'))?;
     }
+    rile.assert_cursor(0, 23)?;
     assert!(
-        rile.screen_rows()[0].starts_with("$3456789 0123456789 0123456789"),
-        "continued right scroll should advance in chunks\n{}",
+        rile.screen_rows()[0].starts_with("$6789 0123456789 0123456789 012$"),
+        "continued right scroll should recenter point\n{}",
         rile.screen_dump()
     );
 
     for _ in 0..25 {
         rile.send("C-b", keys::control('b'))?;
     }
+    rile.assert_cursor(0, 10)?;
     assert!(
-        rile.screen_rows()[0].starts_with("$56789 0123456789 0123456789"),
-        "backward movement should scroll left with context\n{}",
+        rile.screen_rows()[0].starts_with("$56789 0123456789 0123456789 01$"),
+        "backward movement should recenter point\n{}",
+        rile.screen_dump()
+    );
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn horizontal_scrolling_recenters_after_word_motion() -> Result<()> {
+    let file = fixtures::fixture_path("long_lines.txt");
+    let mut rile = RilePty::spawn(&file, 8, 32)?;
+
+    rile.wait_for_screen_contains("000 | 0123456789")?;
+    for _ in 0..3 {
+        rile.send("M-f", keys::meta('f'))?;
+    }
+    rile.assert_cursor(0, 16)?;
+    assert!(
+        rile.screen_rows()[0].starts_with("$6789 0123456789 0123456789 012$"),
+        "M-f should recenter point after crossing the right margin\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("M-f", keys::meta('f'))?;
+    rile.assert_cursor(0, 16)?;
+    assert!(
+        rile.screen_rows()[0].starts_with("$6789 0123456789 0123456789 012$"),
+        "continued M-f should recenter point\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("M-b", keys::meta('b'))?;
+    rile.assert_cursor(0, 6)?;
+    assert!(
+        rile.screen_rows()[0].starts_with("$6789 0123456789 0123456789 012$"),
+        "first M-b should keep point visible without scrolling\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("M-b", keys::meta('b'))?;
+    rile.assert_cursor(0, 16)?;
+    assert!(
+        rile.screen_rows()[0].starts_with("$0 | 0123456789 0123456789 0123$"),
+        "second M-b should recenter point near the left margin\n{}",
         rile.screen_dump()
     );
 

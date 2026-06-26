@@ -480,19 +480,20 @@ impl Editor {
         }
 
         if text_columns > 0 {
-            const HORIZONTAL_SCROLL_CONTEXT: usize = 5;
-            let context = HORIZONTAL_SCROLL_CONTEXT.min(text_columns.saturating_sub(1));
-            if cursor_display_column < viewport.first_visible_column {
-                viewport.first_visible_column = cursor_display_column;
-            } else if cursor_display_column >= viewport.first_visible_column + text_columns {
-                viewport.first_visible_column = cursor_display_column
-                    .saturating_add(1)
-                    .saturating_sub(text_columns)
-                    .saturating_add(context);
-            } else if cursor_display_column < viewport.first_visible_column.saturating_add(context)
-            {
-                let shift = text_columns.saturating_sub(context * 2 + 2).max(1);
-                viewport.first_visible_column = viewport.first_visible_column.saturating_sub(shift);
+            // Match Emacs' default hscroll-margin=5 and hscroll-step=0.
+            const HORIZONTAL_SCROLL_MARGIN: usize = 5;
+            let margin = HORIZONTAL_SCROLL_MARGIN.min(text_columns.saturating_sub(1));
+            let right_margin = viewport
+                .first_visible_column
+                .saturating_add(text_columns.saturating_sub(margin));
+            let should_scroll = cursor_display_column < viewport.first_visible_column
+                || cursor_display_column
+                    >= viewport.first_visible_column.saturating_add(text_columns)
+                || cursor_display_column < viewport.first_visible_column.saturating_add(margin)
+                || cursor_display_column >= right_margin;
+            if should_scroll {
+                viewport.first_visible_column =
+                    cursor_display_column.saturating_sub(text_columns / 2);
             }
         }
     }
@@ -13097,7 +13098,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .window_viewport(editor.current_window_id())
                 .expect("viewport should exist")
                 .first_visible_column,
-            6
+            5
         );
 
         editor
@@ -13114,7 +13115,7 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn viewport_scrolls_horizontally_with_context_columns() {
+    fn viewport_scrolls_horizontally_like_default_emacs_hscroll() {
         let mut editor = Editor::new(Document::scratch());
 
         editor.ensure_current_window_contains_cursor(10, 32, 36);
@@ -13123,7 +13124,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .window_viewport(editor.current_window_id())
                 .expect("viewport should exist")
                 .first_visible_column,
-            10
+            20
         );
 
         editor.ensure_current_window_contains_cursor(10, 32, 56);
@@ -13132,7 +13133,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .window_viewport(editor.current_window_id())
                 .expect("viewport should exist")
                 .first_visible_column,
-            30
+            40
         );
 
         editor.ensure_current_window_contains_cursor(10, 32, 31);
@@ -13141,7 +13142,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .window_viewport(editor.current_window_id())
                 .expect("viewport should exist")
                 .first_visible_column,
-            10
+            15
         );
     }
 

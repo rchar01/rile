@@ -82,8 +82,8 @@ Interface features:
 * Use blank unused rows instead of marker characters.
 * Manage multiple buffers with C-x b, C-x C-b, and C-x k.
 * Split, delete, and select windows with common Emacs key bindings.
-* Scroll viewports automatically to keep point visible, including context around
-  point on horizontally scrolled long lines.
+* Scroll viewports automatically to keep point visible, including Emacs-style
+  horizontal recentering on clipped long lines.
 * Keep active-region highlighting visible on clipped long lines and selected
   line-end space.
 * Use minibuffer prompts for commands, file names, buffers, search, and

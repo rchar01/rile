@@ -174,6 +174,11 @@ markers, forward and backward point movement across horizontal display
 thresholds, region faces on clipped long lines, region display through a short
 line break, and help-buffer continuation or clipping markers.
 
+The paired Emacs/Rile `long-line-hscroll-core` and `long-line-hscroll` captures
+focus on truncated long-line horizontal auto-scrolling. They record single-step
+`C-f`/`C-b` and `M-f`/`M-b` transitions around Emacs' default horizontal scroll
+margin and recenter behavior.
+
 Capture outputs are written under:
 
 ```text

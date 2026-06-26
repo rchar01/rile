@@ -1,5 +1,16 @@
 2026-06-26  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Recenter horizontally at the default Emacs scroll margin.
+	* tests/pty_scrolling.rs: Cover character and word motion around long-line
+	horizontal scroll thresholds.
+	* tools/reference/emacs/scenarios/long-line-hscroll-core.scenario,
+	tools/reference/rile/scenarios/long-line-hscroll.scenario: New files.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md,
+	tools/reference/emacs/README.md, tools/reference/rile/README.md: Document
+	Emacs-style long-line horizontal scrolling.
+
+2026-06-26  Robert Charusta  <rch-public@posteo.net>
+
 	* src/editor.rs: Scroll horizontal viewports with context columns and expose
 	active linear-region line-end-space state.
 	* src/terminal/mod.rs: Preserve region faces when drawing hidden-edge markers

@@ -54,6 +54,8 @@ Initial inspection scenarios:
 - `list-buffers-core`: base Emacs `C-x C-b` list-buffers behavior.
 - `long-line-core`: base Emacs long-line markers, region faces, and movement
   behavior in narrow windows.
+- `long-line-hscroll-core`: base Emacs truncated long-line horizontal
+  auto-scrolling with `C-f`/`C-b` and `M-f`/`M-b`.
 - `mark-whole-buffer-core`: base Emacs `C-x h` mark-whole-buffer behavior.
 - `newline-and-indent-core`: base Emacs `C-j` newline-and-indent behavior.
 - `quoted-insert-core`: base Emacs `C-q` quoted-insert behavior.
