@@ -143,10 +143,10 @@ Goal: isolate exact line-local search logic from editor workflow state.
 
 Tasks:
 
-- [ ] Move pure search match helpers out of the main editor body.
-- [ ] Keep incremental-search prompt state and wrap/failure behavior in `Editor`
+- [x] Move pure search match helpers out of the main editor body.
+- [x] Keep incremental-search prompt state and wrap/failure behavior in `Editor`
   until tests prove a cleaner state-machine seam.
-- [ ] Preserve exact UTF-8 substring matching and current wrapping semantics.
+- [x] Preserve exact UTF-8 substring matching and current wrapping semantics.
 
 Likely files:
 
@@ -158,8 +158,8 @@ Risk: low to medium.
 
 Validation gate:
 
-- [ ] Run search unit tests.
-- [ ] Run `./scripts/in-container cargo test --locked --test pty_search`.
+- [x] Run search unit tests.
+- [x] Run `./scripts/in-container cargo test --locked --test pty_search`.
 
 ### Step 1.4 Extract Prompt History If Clean
 
@@ -401,6 +401,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 1.3 pure search helper extraction. | `src/editor/search.rs` now owns exact forward/backward match helpers and UTF-8-aware repeat-start advancement while `Editor` keeps incremental-search prompt, wrap, and failure state; `./scripts/in-container cargo test --locked editor::search -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_search -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.2 pure help formatting extraction. | `src/editor/help.rs` now owns help/about/describe formatting helpers while `Editor` still collects state and opens help buffers; focused editor help tests and representative PTY movement help tests passed. |
 | 2026-06-26 | Completed the remaining Step 1.1 characterization checks. | `tests/pty_scrolling.rs` covers horizontal scroll state across split-window and buffer switches; existing help, messages, shell-output, and completions-buffer return tests were confirmed with `./scripts/in-container cargo test --locked --test pty_scrolling -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_movement -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_shell_command -- --nocapture`, and the `editor::tests::completions_buffer_completion_restores_previous_buffer_on_cancel` / `editor::tests::completions_buffer_completion_restores_previous_buffer_on_accept` unit tests. |
 | 2026-06-26 | Added Step 1.1 split-window switch-buffer coverage. | `tests/pty_split_pane.rs` covers switching buffers in the selected split while preserving per-buffer point and selected-window state; `./scripts/in-container cargo test --locked editor -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_split_pane -- --nocapture` passed. |

@@ -28,6 +28,7 @@ use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
 mod help;
+mod search;
 
 use help::{
     format_about_rile_help, format_describe_bindings_help, format_describe_buffer_help,
@@ -35,6 +36,7 @@ use help::{
     format_describe_mode_help, format_describe_variable_help, format_key_prefix_help,
     format_unbound_key_help, format_unbound_key_message,
 };
+use search::{find_match, search_start_after};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -5725,94 +5727,6 @@ impl DecorationProvider for SearchDecorator<'_> {
             })
             .collect()
     }
-}
-
-fn find_match(
-    buffer: &crate::buffer::Buffer,
-    query: &str,
-    start: Position,
-    direction: SearchDirection,
-) -> Result<Option<TextRange>> {
-    buffer.validate_position(start)?;
-    if query.is_empty() {
-        return Ok(None);
-    }
-
-    match direction {
-        SearchDirection::Forward => find_forward(buffer, query, start),
-        SearchDirection::Backward => find_backward(buffer, query, start),
-    }
-}
-
-fn find_forward(
-    buffer: &crate::buffer::Buffer,
-    query: &str,
-    start: Position,
-) -> Result<Option<TextRange>> {
-    for line_index in start.line..buffer.line_count() {
-        let line = buffer.line(line_index).expect("line index is in range");
-        let minimum_byte = if line_index == start.line {
-            start.byte
-        } else {
-            0
-        };
-        if let Some((match_start, match_text)) = line
-            .match_indices(query)
-            .find(|(match_start, _)| *match_start >= minimum_byte)
-        {
-            return Ok(Some(TextRange::new(
-                Position::new(line_index, match_start),
-                Position::new(line_index, match_start + match_text.len()),
-            )));
-        }
-    }
-    Ok(None)
-}
-
-fn find_backward(
-    buffer: &crate::buffer::Buffer,
-    query: &str,
-    start: Position,
-) -> Result<Option<TextRange>> {
-    for line_index in (0..=start.line).rev() {
-        let line = buffer.line(line_index).expect("line index is in range");
-        let maximum_byte = if line_index == start.line {
-            start.byte
-        } else {
-            line.len()
-        };
-        if let Some((match_start, match_text)) = line
-            .match_indices(query)
-            .filter(|(match_start, _)| *match_start < maximum_byte)
-            .last()
-        {
-            return Ok(Some(TextRange::new(
-                Position::new(line_index, match_start),
-                Position::new(line_index, match_start + match_text.len()),
-            )));
-        }
-    }
-    Ok(None)
-}
-
-fn search_start_after(buffer: &crate::buffer::Buffer, position: Position) -> Result<Position> {
-    buffer.validate_position(position)?;
-    let line = buffer.line(position.line).expect("line index is in range");
-    if position.byte < line.len() {
-        let character_width = line[position.byte..]
-            .chars()
-            .next()
-            .expect("position before line end has a character")
-            .len_utf8();
-        return Ok(Position::new(
-            position.line,
-            position.byte + character_width,
-        ));
-    }
-    if position.line + 1 < buffer.line_count() {
-        return Ok(Position::new(position.line + 1, 0));
-    }
-    Ok(buffer.end_position())
 }
 
 fn format_completion_buffer(completion: &CompletionSession) -> String {
