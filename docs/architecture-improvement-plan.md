@@ -167,11 +167,11 @@ Goal: isolate prompt history behavior without moving prompt submission logic.
 
 Tasks:
 
-- [ ] Move prompt history storage/navigation into a small concrete helper if it
+- [x] Move prompt history storage/navigation into a small concrete helper if it
   can be tested without exposing large editor internals.
-- [ ] Preserve draft restoration, duplicate suppression, per-prompt-kind history,
+- [x] Preserve draft restoration, duplicate suppression, per-prompt-kind history,
   and completion refresh after history recall.
-- [ ] Leave prompt submission and command-specific prompt behavior in `Editor`.
+- [x] Leave prompt submission and command-specific prompt behavior in `Editor`.
 
 Likely files:
 
@@ -183,8 +183,8 @@ Risk: medium.
 
 Validation gate:
 
-- [ ] Run prompt-history and completion unit tests.
-- [ ] Run relevant completion PTY tests.
+- [x] Run prompt-history and completion unit tests.
+- [x] Run relevant completion PTY tests.
 
 ### Step 1.5 Reassess Before Larger Refactors
 
@@ -401,6 +401,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 1.4 prompt history extraction. | `src/editor/prompt_history.rs` now owns per-prompt-kind history storage, duplicate suppression, navigation, and draft restoration while `Editor` still submits prompts and refreshes completion; `./scripts/in-container cargo test --locked prompt_history -- --nocapture`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `./scripts/in-container cargo test --locked --test pty_completion vertical_mx_prompt_history_recalls_previous_command -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.3 pure search helper extraction. | `src/editor/search.rs` now owns exact forward/backward match helpers and UTF-8-aware repeat-start advancement while `Editor` keeps incremental-search prompt, wrap, and failure state; `./scripts/in-container cargo test --locked editor::search -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_search -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.2 pure help formatting extraction. | `src/editor/help.rs` now owns help/about/describe formatting helpers while `Editor` still collects state and opens help buffers; focused editor help tests and representative PTY movement help tests passed. |
 | 2026-06-26 | Completed the remaining Step 1.1 characterization checks. | `tests/pty_scrolling.rs` covers horizontal scroll state across split-window and buffer switches; existing help, messages, shell-output, and completions-buffer return tests were confirmed with `./scripts/in-container cargo test --locked --test pty_scrolling -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_movement -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_shell_command -- --nocapture`, and the `editor::tests::completions_buffer_completion_restores_previous_buffer_on_cancel` / `editor::tests::completions_buffer_completion_restores_previous_buffer_on_accept` unit tests. |

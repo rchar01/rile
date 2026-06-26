@@ -28,6 +28,7 @@ use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
 mod help;
+mod prompt_history;
 mod search;
 
 use help::{
@@ -36,6 +37,7 @@ use help::{
     format_describe_mode_help, format_describe_variable_help, format_key_prefix_help,
     format_unbound_key_help, format_unbound_key_message,
 };
+use prompt_history::PromptHistoryStore;
 use search::{find_match, search_start_after};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,7 +73,7 @@ pub struct Editor {
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
-    prompt_histories: Vec<PromptHistory>,
+    prompt_history: PromptHistoryStore,
     recording_keyboard_macro: Option<Vec<KeyEvent>>,
     last_keyboard_macro: Option<Vec<KeyEvent>>,
     replaying_keyboard_macro: bool,
@@ -318,14 +320,6 @@ enum ShellCommandAction {
     ReplaceRegion { range: TextRange },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct PromptHistory {
-    kind: PromptKind,
-    entries: Vec<String>,
-    position: Option<usize>,
-    draft: String,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SearchDirection {
     Forward,
@@ -400,7 +394,7 @@ impl Editor {
             completion: None,
             completion_return: None,
             completion_config: config.completion,
-            prompt_histories: Vec::new(),
+            prompt_history: PromptHistoryStore::new(),
             recording_keyboard_macro: None,
             last_keyboard_macro: None,
             replaying_keyboard_macro: false,
@@ -1093,7 +1087,7 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
-                self.record_prompt_history(kind, &input);
+                self.prompt_history.record(kind, &input);
                 self.minibuffer.clear();
                 self.submit_prompt(kind, &input)
             }
@@ -1161,7 +1155,7 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 };
                 if self.completion_should_enter_selected_directory(&input) {
-                    self.reset_prompt_history_navigation(kind);
+                    self.prompt_history.reset(kind);
                     self.minibuffer.start_prompt(kind, prompt_label(kind));
                     let directory = self
                         .completion
@@ -1174,7 +1168,7 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 }
                 let input = self.completion_accept_input(kind, &input);
-                self.record_prompt_history(kind, &input);
+                self.prompt_history.record(kind, &input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
                 self.completion = None;
@@ -1184,7 +1178,7 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
-                self.record_prompt_history(kind, &input);
+                self.prompt_history.record(kind, &input);
                 self.minibuffer.clear();
                 self.finish_completion_buffer();
                 self.completion = None;
@@ -1362,88 +1356,24 @@ impl Editor {
                 || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/'))
     }
 
-    fn record_prompt_history(&mut self, kind: PromptKind, input: &str) {
-        if !prompt_kind_uses_history(kind) || input.trim().is_empty() {
-            self.reset_prompt_history_navigation(kind);
-            return;
-        }
-        let index = self.prompt_history_index(kind);
-        let history = &mut self.prompt_histories[index];
-        if history.entries.last().is_none_or(|entry| entry != input) {
-            history.entries.push(input.to_owned());
-        }
-        history.position = None;
-        history.draft.clear();
-    }
-
     fn recall_prompt_history(&mut self, direction: isize) {
         let Some(kind) = self.minibuffer.prompt_kind() else {
             return;
         };
-        if !prompt_kind_uses_history(kind) {
-            return;
-        }
         let current = self
             .minibuffer
             .prompt_input()
             .unwrap_or_default()
             .to_owned();
-        let index = self.prompt_history_index(kind);
-        let history = &mut self.prompt_histories[index];
-        if history.entries.is_empty() {
-            return;
+        if let Some(input) = self.prompt_history.recall(kind, &current, direction) {
+            self.minibuffer.set_prompt_input(input);
         }
-
-        let next_position = match (history.position, direction.signum()) {
-            (None, -1) => {
-                history.draft = current;
-                Some(history.entries.len() - 1)
-            }
-            (Some(position), -1) => Some(position.saturating_sub(1)),
-            (Some(position), 1) if position + 1 < history.entries.len() => Some(position + 1),
-            (Some(_), 1) => None,
-            _ => return,
-        };
-
-        history.position = next_position;
-        let input = next_position
-            .map(|position| history.entries[position].clone())
-            .unwrap_or_else(|| history.draft.clone());
-        self.minibuffer.set_prompt_input(input);
     }
 
     fn reset_current_prompt_history_navigation(&mut self) {
         if let Some(kind) = self.minibuffer.prompt_kind() {
-            self.reset_prompt_history_navigation(kind);
+            self.prompt_history.reset(kind);
         }
-    }
-
-    fn reset_prompt_history_navigation(&mut self, kind: PromptKind) {
-        if let Some(history) = self
-            .prompt_histories
-            .iter_mut()
-            .find(|history| history.kind == kind)
-        {
-            history.position = None;
-            history.draft.clear();
-        }
-    }
-
-    fn prompt_history_index(&mut self, kind: PromptKind) -> usize {
-        if let Some(index) = self
-            .prompt_histories
-            .iter()
-            .position(|history| history.kind == kind)
-        {
-            return index;
-        }
-        self.prompt_histories.push(PromptHistory {
-            kind,
-            entries: Vec::new(),
-            position: None,
-            draft: String::new(),
-        });
-        self.prompt_histories.len() - 1
     }
 
     fn complete_prompt_common_prefix(&mut self) {
@@ -5857,26 +5787,6 @@ fn dirty_kill_prompt(name: &str) -> String {
     format!("Buffer {name} modified; kill anyway? (y or n) ")
 }
 
-fn prompt_kind_uses_history(kind: PromptKind) -> bool {
-    matches!(
-        kind,
-        PromptKind::ExtendedCommand
-            | PromptKind::DescribeFunction
-            | PromptKind::DescribeVariable
-            | PromptKind::FindFile
-            | PromptKind::FindFileReadOnly
-            | PromptKind::GotoLine
-            | PromptKind::InsertFile
-            | PromptKind::KillBuffer
-            | PromptKind::RectangleNumberFormat
-            | PromptKind::RectangleNumberStart
-            | PromptKind::ShellCommand
-            | PromptKind::StringRectangle
-            | PromptKind::SwitchToBuffer
-            | PromptKind::WriteFile
-    )
-}
-
 fn format_shell_command_output(command: &str, output: &ShellCommandOutput) -> String {
     let mut text = String::new();
     if !command.is_empty() {
@@ -8051,9 +7961,9 @@ mod tests {
         ];
 
         for kind in history_kinds {
-            assert!(super::prompt_kind_uses_history(kind));
+            assert!(super::prompt_history::prompt_kind_uses_history(kind));
             let mut editor = Editor::new(Document::scratch());
-            editor.record_prompt_history(kind, "previous input");
+            editor.prompt_history.record(kind, "previous input");
             editor
                 .minibuffer
                 .start_prompt(kind, super::prompt_label(kind));
@@ -8299,7 +8209,9 @@ mod tests {
         fs::write(&start, "start").expect("start fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
         let mut editor = Editor::new(document);
-        editor.record_prompt_history(PromptKind::FindFile, "alpha-dir");
+        editor
+            .prompt_history
+            .record(PromptKind::FindFile, "alpha-dir");
 
         editor
             .handle_key(KeyEvent::Ctrl('x'))
