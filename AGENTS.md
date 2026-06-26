@@ -25,6 +25,18 @@ SPDX-License-Identifier: GPL-3.0-or-later
 - Summarize any specialist-tool or subagent findings you rely on.
 - Do not revert unrelated worktree changes.
 
+## Optional Private Workspace Context
+
+- When this repository is checked out inside a parent `rile-lab/` workspace, that
+  parent may contain private planning notes, reference captures, and upstream
+  research material.
+- Use parent-workspace context only when the user explicitly grants access or the
+  active workspace already includes it.
+- Treat `rile/` source, tests, scripts, and documentation as authoritative for
+  implementation decisions.
+- Do not copy, translate, or vendor code from private reference directories into
+  `rile/`; use them only as behavioral evidence.
+
 ## First Files To Read
 
 - Start with `README.md`, `docs/development.md`, `docs/testing.md`, `Makefile`, `scripts/verify`, `Cargo.toml`, `deny.toml`, and `.gitmessage`.

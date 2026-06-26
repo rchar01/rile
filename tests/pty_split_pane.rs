@@ -4,6 +4,7 @@
 mod support;
 
 use anyhow::Result;
+use std::fs;
 
 use support::{fixtures, keys, pty::RilePty};
 
@@ -153,6 +154,97 @@ fn list_buffers_ret_opens_selected_row_in_list_window() -> Result<()> {
     );
     rile.assert_screen_contains(&format!("window 1 ACTIVE {file_name}"))?;
     rile.assert_screen_contains("list buffers ret fixture")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn switch_buffer_in_split_preserves_window_and_buffer_points() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let left = directory.path().join("left-buffer.txt");
+    let right = directory.path().join("right-buffer.txt");
+    fs::write(&left, "left one\nleft two\nleft three\n")?;
+    fs::write(&right, "right one\nright two\nright three\nright four\n")?;
+    let mut rile = RilePty::spawn(&left, 14, 100)?;
+
+    rile.wait_for_screen_contains("left one")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let right_path = right.display().to_string();
+    rile.send("right path", right_path.as_bytes())?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("right one")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.assert_status_contains("ACTIVE right-buffer.txt Ln 003 Col 000")?;
+
+    rile.send("C-x b", control_x_text("b"))?;
+    rile.send("left buffer", b"left-buffer.txt")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.assert_status_contains("ACTIVE left-buffer.txt Ln 001 Col 000")?;
+
+    rile.send("C-x 2", control_x_text("2"))?;
+    rile.assert_screen_contains("window 0 ACTIVE left-buffer.txt")?;
+    rile.assert_screen_contains("window 1 inactive left-buffer.txt")?;
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_screen_contains("window 1 ACTIVE left-buffer.txt")?;
+
+    rile.send("C-x b", control_x_text("b"))?;
+    rile.send("right buffer", b"right-buffer.txt")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.assert_screen_contains("window 0 inactive left-buffer.txt")?;
+    rile.assert_status_contains("window 1 ACTIVE right-buffer.txt Ln 003 Col 000")?;
+    let (lower_row, _) = rile.cursor_position();
+    assert!(
+        lower_row > 5,
+        "switch-buffer did not keep the lower split selected\n{}",
+        rile.screen_dump()
+    );
+
+    rile.send("C-p", keys::control('p'))?;
+    rile.assert_status_contains("window 1 ACTIVE right-buffer.txt Ln 002 Col 000")?;
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_screen_contains("window 0 ACTIVE left-buffer.txt Ln 001 Col 000")?;
+    rile.send("C-x o", control_x_text("o"))?;
+    rile.assert_status_contains("window 1 ACTIVE right-buffer.txt Ln 002 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn kill_buffer_replaces_all_windows_showing_target() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let fallback = directory.path().join("fallback-buffer.txt");
+    let target = directory.path().join("target-buffer.txt");
+    fs::write(&fallback, "fallback buffer\n")?;
+    fs::write(&target, "target buffer\n")?;
+    let mut rile = RilePty::spawn(&fallback, 14, 100)?;
+
+    rile.wait_for_screen_contains("fallback buffer")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let target_path = target.display().to_string();
+    rile.send("target path", target_path.as_bytes())?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("target buffer")?;
+
+    rile.send("C-x 2", control_x_text("2"))?;
+    rile.assert_screen_contains("window 0 ACTIVE target-buffer.txt")?;
+    rile.assert_screen_contains("window 1 inactive target-buffer.txt")?;
+
+    rile.send("C-x k", control_x_text("k"))?;
+    rile.assert_screen_contains("Kill buffer (default target-buffer.txt):")?;
+    rile.send("RET", keys::ENTER)?;
+
+    rile.assert_screen_contains("Killed buffer target-buffer.txt")?;
+    rile.assert_screen_contains("window 0 ACTIVE fallback-buffer.txt")?;
+    rile.assert_screen_contains("window 1 inactive fallback-buffer.txt")?;
+    rile.assert_screen_contains("fallback buffer")?;
+    assert!(
+        !rile.snapshot_text().contains("target buffer"),
+        "killed buffer text still rendered\n{}",
+        rile.screen_dump()
+    );
 
     rile.quit()?;
     Ok(())

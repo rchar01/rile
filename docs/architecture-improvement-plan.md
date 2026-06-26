@@ -83,13 +83,13 @@ Goal: protect behavior before moving code.
 
 Tasks:
 
-- [ ] Add or confirm tests for switching buffers in split windows while
+- [x] Add or confirm tests for switching buffers in split windows while
   preserving point and selected-window state.
 - [ ] Add or confirm tests for help, messages, shell-output, and completion
   buffer return behavior.
 - [ ] Add or confirm tests for horizontal scroll state across window and buffer
   switches.
-- [ ] Add or confirm tests for killing a buffer that is shown in one or more
+- [x] Add or confirm tests for killing a buffer that is shown in one or more
   windows.
 
 Likely files:
@@ -106,6 +106,12 @@ Validation gate:
 
 - [ ] Run focused editor tests with `./scripts/in-container cargo test --locked editor`.
 - [ ] Run relevant PTY tests with `./scripts/in-container cargo test --locked --test <target>`.
+
+Next slice:
+
+- Add or confirm horizontal scroll state across window and buffer switches, then
+  confirm special-buffer return coverage before starting Step 1.2 help
+  formatting extraction.
 
 ### Step 1.2 Extract Pure Help Formatting
 
@@ -396,6 +402,8 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Added Step 1.1 split-window switch-buffer coverage. | `tests/pty_split_pane.rs` covers switching buffers in the selected split while preserving per-buffer point and selected-window state; `./scripts/in-container cargo test --locked editor -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_split_pane -- --nocapture` passed. |
+| 2026-06-26 | Added the first Step 1.1 safety test for killing a buffer shown in multiple windows. | `tests/pty_split_pane.rs` covers replacing every window that displayed the killed buffer while preserving the selected window; `./scripts/in-container cargo test --locked editor -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_split_pane -- --nocapture` passed. |
 | 2026-06-26 | Plan created from architecture review and self-critique. | User requested a written phased improvement plan. |
 
 ## Decision Log
