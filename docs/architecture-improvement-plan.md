@@ -118,11 +118,11 @@ Goal: reduce `src/editor.rs` size without changing mutable editor behavior.
 
 Tasks:
 
-- [ ] Move help/about/describe formatting helpers into a small helper module only
+- [x] Move help/about/describe formatting helpers into a small helper module only
   if the move does not require broad visibility changes.
-- [ ] Keep `Editor` responsible for opening help buffers and collecting current
+- [x] Keep `Editor` responsible for opening help buffers and collecting current
   editor state.
-- [ ] Preserve command, key, option, mode, buffer, messages, and about output.
+- [x] Preserve command, key, option, mode, buffer, messages, and about output.
 
 Likely files:
 
@@ -134,8 +134,8 @@ Risk: low.
 
 Validation gate:
 
-- [ ] Run focused help and describe tests.
-- [ ] Run representative PTY help tests.
+- [x] Run focused help and describe tests.
+- [x] Run representative PTY help tests.
 
 ### Step 1.3 Extract Pure Search Helpers
 
@@ -401,6 +401,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 1.2 pure help formatting extraction. | `src/editor/help.rs` now owns help/about/describe formatting helpers while `Editor` still collects state and opens help buffers; focused editor help tests and representative PTY movement help tests passed. |
 | 2026-06-26 | Completed the remaining Step 1.1 characterization checks. | `tests/pty_scrolling.rs` covers horizontal scroll state across split-window and buffer switches; existing help, messages, shell-output, and completions-buffer return tests were confirmed with `./scripts/in-container cargo test --locked --test pty_scrolling -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_movement -- --nocapture`, `./scripts/in-container cargo test --locked --test pty_shell_command -- --nocapture`, and the `editor::tests::completions_buffer_completion_restores_previous_buffer_on_cancel` / `editor::tests::completions_buffer_completion_restores_previous_buffer_on_accept` unit tests. |
 | 2026-06-26 | Added Step 1.1 split-window switch-buffer coverage. | `tests/pty_split_pane.rs` covers switching buffers in the selected split while preserving per-buffer point and selected-window state; `./scripts/in-container cargo test --locked editor -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_split_pane -- --nocapture` passed. |
 | 2026-06-26 | Added the first Step 1.1 safety test for killing a buffer shown in multiple windows. | `tests/pty_split_pane.rs` covers replacing every window that displayed the killed buffer while preserving the selected window; `./scripts/in-container cargo test --locked editor -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_split_pane -- --nocapture` passed. |
