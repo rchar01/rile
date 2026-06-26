@@ -1,5 +1,15 @@
 2026-06-26  Robert Charusta  <rch-public@posteo.net>
 
+	* src/editor.rs: Scroll horizontal viewports with context columns and expose
+	active linear-region line-end-space state.
+	* src/terminal/mod.rs: Preserve region faces when drawing hidden-edge markers
+	and paint selected line-end padding with the region face.
+	* tests/pty_scrolling.rs: Cover context-preserving horizontal scrolling.
+	* README.md, docs/development.md, NEWS: Document long-line region and
+	horizontal-scrolling polish.
+
+2026-06-26  Robert Charusta  <rch-public@posteo.net>
+
 	* tools/reference/emacs/scenarios/long-line-core.scenario: New file.
 	* tools/reference/zile/scenarios/long-line.scenario: Expand the capture to
 	cover horizontal movement, region display, and help-buffer clipping.

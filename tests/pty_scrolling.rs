@@ -212,3 +212,40 @@ fn horizontal_scrolling_marks_both_hidden_edges() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn horizontal_scrolling_keeps_context_around_long_line_cursor() -> Result<()> {
+    let file = fixtures::fixture_path("long_lines.txt");
+    let mut rile = RilePty::spawn(&file, 8, 32)?;
+
+    rile.wait_for_screen_contains("000 | 0123456789")?;
+    for _ in 0..36 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    assert!(
+        rile.screen_rows()[0].starts_with("$123456789 0123456789 012345678"),
+        "right scroll should keep context before point\n{}",
+        rile.screen_dump()
+    );
+
+    for _ in 0..20 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    assert!(
+        rile.screen_rows()[0].starts_with("$3456789 0123456789 0123456789"),
+        "continued right scroll should advance in chunks\n{}",
+        rile.screen_dump()
+    );
+
+    for _ in 0..25 {
+        rile.send("C-b", keys::control('b'))?;
+    }
+    assert!(
+        rile.screen_rows()[0].starts_with("$56789 0123456789 0123456789"),
+        "backward movement should scroll left with context\n{}",
+        rile.screen_dump()
+    );
+
+    rile.quit()?;
+    Ok(())
+}

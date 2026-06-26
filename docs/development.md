@@ -123,7 +123,9 @@ Milestone 9 adds windows and splits:
 Milestone 10 adds region, kill/yank, and undo:
 
 - `C-@` and `set-mark-command` set an active mark at point;
-- active regions render through `render::Face::Region` and terminal ANSI highlighting;
+- active regions render through `render::Face::Region` and terminal ANSI
+  highlighting, including horizontally clipped long lines and selected line-end
+  padding when the region crosses a line break;
 - `C-w` and `kill-region` delete the active region into the kill ring;
 - `M-w` and `copy-region-as-kill` copy the active region without deleting it;
 - `C-y` and `yank` insert the latest kill-ring entry, including coalesced

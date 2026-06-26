@@ -480,10 +480,19 @@ impl Editor {
         }
 
         if text_columns > 0 {
+            const HORIZONTAL_SCROLL_CONTEXT: usize = 5;
+            let context = HORIZONTAL_SCROLL_CONTEXT.min(text_columns.saturating_sub(1));
             if cursor_display_column < viewport.first_visible_column {
                 viewport.first_visible_column = cursor_display_column;
             } else if cursor_display_column >= viewport.first_visible_column + text_columns {
-                viewport.first_visible_column = cursor_display_column + 1 - text_columns;
+                viewport.first_visible_column = cursor_display_column
+                    .saturating_add(1)
+                    .saturating_sub(text_columns)
+                    .saturating_add(context);
+            } else if cursor_display_column < viewport.first_visible_column.saturating_add(context)
+            {
+                let shift = text_columns.saturating_sub(context * 2 + 2).max(1);
+                viewport.first_visible_column = viewport.first_visible_column.saturating_sub(shift);
             }
         }
     }
@@ -665,6 +674,19 @@ impl Editor {
         };
         let providers: [&dyn DecorationProvider; 4] = [&syntax, &region, &query_replace, &search];
         collect_spans_for_line(&providers, line_index, line)
+    }
+
+    pub fn region_highlights_line_end_space(&self, buffer: BufferId, line_index: usize) -> bool {
+        let Some(region) = self.region else {
+            return false;
+        };
+        if !region.active || region.buffer != buffer || region.shape != RegionShape::Linear {
+            return false;
+        }
+        let Some(range) = self.active_region_range() else {
+            return false;
+        };
+        line_index >= range.start.line && line_index < range.end.line
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -13075,7 +13097,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .window_viewport(editor.current_window_id())
                 .expect("viewport should exist")
                 .first_visible_column,
-            4
+            6
         );
 
         editor
@@ -13088,6 +13110,38 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .expect("viewport should exist")
                 .first_visible_column,
             0
+        );
+    }
+
+    #[test]
+    fn viewport_scrolls_horizontally_with_context_columns() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor.ensure_current_window_contains_cursor(10, 32, 36);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_column,
+            10
+        );
+
+        editor.ensure_current_window_contains_cursor(10, 32, 56);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_column,
+            30
+        );
+
+        editor.ensure_current_window_contains_cursor(10, 32, 31);
+        assert_eq!(
+            editor
+                .window_viewport(editor.current_window_id())
+                .expect("viewport should exist")
+                .first_visible_column,
+            10
         );
     }
 

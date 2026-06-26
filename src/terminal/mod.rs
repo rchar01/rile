@@ -619,6 +619,8 @@ fn draw_buffer_rows<W: Write>(
                     width: text_columns,
                     tab_width: editor.tab_width(),
                     theme: editor.theme(),
+                    highlight_line_end_space: editor
+                        .region_highlights_line_end_space(viewport.buffer, line_index),
                 },
             )?;
         } else {
@@ -670,6 +672,7 @@ fn draw_wrapped_help_rows<W: Write>(
                     width: text_columns,
                     tab_width: editor.tab_width(),
                     theme: editor.theme(),
+                    highlight_line_end_space: false,
                 },
             )?,
             None => write_fixed_width_text(terminal, "", text_columns)?,
@@ -876,6 +879,7 @@ struct LineRenderOptions {
     width: usize,
     tab_width: usize,
     theme: ThemeName,
+    highlight_line_end_space: bool,
 }
 
 fn write_buffer_line<W: Write>(
@@ -892,38 +896,76 @@ fn write_buffer_line<W: Write>(
     let line_width = display_width_with_tabs(line, options.tab_width);
     let left_hidden = viewport.first_visible_column > 0;
     let right_hidden = line_width > viewport.first_visible_column.saturating_add(options.width);
-    let used_width = if left_hidden || right_hidden {
-        let segment = mark_hidden_line_edges(segment, left_hidden, right_hidden);
-        write_line_with_spans(terminal, &segment, &[], options.tab_width, options.theme)?
+    let relative_spans = clip_spans(spans, range);
+    let (segment, relative_spans) = if left_hidden || right_hidden {
+        mark_hidden_line_edges(segment, &relative_spans, left_hidden, right_hidden)
     } else {
-        let relative_spans = clip_spans(spans, range);
-        write_line_with_spans(
-            terminal,
-            segment,
-            &relative_spans,
-            options.tab_width,
-            options.theme,
-        )?
+        (segment.to_owned(), relative_spans)
     };
+    let used_width = write_line_with_spans(
+        terminal,
+        &segment,
+        &relative_spans,
+        options.tab_width,
+        options.theme,
+    )?;
     if used_width < options.width {
-        terminal.write_text(&" ".repeat(options.width - used_width))?;
+        let padding = " ".repeat(options.width - used_width);
+        if options.highlight_line_end_space {
+            write_text_with_face_expanded(
+                terminal,
+                &padding,
+                Face::Region,
+                options.tab_width,
+                used_width,
+                options.theme,
+            )?;
+        } else {
+            terminal.write_text(&padding)?;
+        }
     }
     Ok(())
 }
 
-fn mark_hidden_line_edges(segment: &str, left_hidden: bool, right_hidden: bool) -> String {
-    let mut characters = segment.chars().collect::<Vec<_>>();
-    if characters.is_empty() {
-        return "$".to_owned();
+fn mark_hidden_line_edges(
+    segment: &str,
+    spans: &[Span],
+    left_hidden: bool,
+    right_hidden: bool,
+) -> (String, Vec<Span>) {
+    let character_count = segment.chars().count();
+    if character_count == 0 {
+        return ("$".to_owned(), Vec::new());
     }
-    if left_hidden {
-        characters[0] = '$';
+
+    let mut marked = String::new();
+    let mut byte_map = vec![(0, 0)];
+    for (index, (byte, character)) in segment.char_indices().enumerate() {
+        let replacement =
+            (left_hidden && index == 0) || (right_hidden && index + 1 == character_count);
+        let source_end = byte + character.len_utf8();
+        let target_start = marked.len();
+        marked.push(if replacement { '$' } else { character });
+        let target_end = marked.len();
+        byte_map.push((byte, target_start));
+        byte_map.push((source_end, target_end));
     }
-    if right_hidden {
-        let last = characters.len() - 1;
-        characters[last] = '$';
-    }
-    characters.into_iter().collect()
+
+    let spans = spans
+        .iter()
+        .filter_map(|span| {
+            let start = mapped_byte(&byte_map, span.start_byte)?;
+            let end = mapped_byte(&byte_map, span.end_byte)?;
+            (start < end).then(|| Span::new(start, end, span.face))
+        })
+        .collect();
+    (marked, spans)
+}
+
+fn mapped_byte(byte_map: &[(usize, usize)], source: usize) -> Option<usize> {
+    byte_map
+        .iter()
+        .find_map(|(from, to)| (*from == source).then_some(*to))
 }
 
 fn write_fixed_width_text<W: Write>(
@@ -1278,10 +1320,11 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use super::{
-        AnsiTerminal, FrameOptions, TerminalSize, clipped_text, draw_editor_frame,
-        draw_editor_frame_with_options, format_completion_row, mode_line_position,
-        wrapped_help_cursor_position, wrapped_help_visual_lines, write_fixed_width_text_with_face,
-        write_line_number_gutter, write_line_with_spans,
+        AnsiTerminal, FrameOptions, LineRenderOptions, TerminalSize, clipped_text,
+        draw_editor_frame, draw_editor_frame_with_options, format_completion_row,
+        mode_line_position, wrapped_help_cursor_position, wrapped_help_visual_lines,
+        write_buffer_line, write_fixed_width_text_with_face, write_line_number_gutter,
+        write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
@@ -1353,6 +1396,93 @@ mod tests {
         assert_eq!(clipped_text("abcdef", 4), "abc$");
         assert_eq!(clipped_text("abcdef", 1), "$");
         assert_eq!(clipped_text("abc", 4), "abc");
+    }
+
+    #[test]
+    fn hidden_edge_markers_preserve_region_face() {
+        let buffer = Buffer::from_text("abcdefghij");
+        let viewport = Viewport {
+            buffer: BufferId(0),
+            cursor: Position::new(0, 0),
+            first_visible_line: 0,
+            first_visible_column: 2,
+            text_rows: 1,
+        };
+        let spans = [Span::new(0, 10, Face::Region)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_buffer_line(
+            &mut terminal,
+            &buffer,
+            &viewport,
+            0,
+            buffer.line(0).expect("line should exist"),
+            &spans,
+            LineRenderOptions {
+                width: 5,
+                tab_width: 4,
+                theme: ThemeName::Default,
+                highlight_line_end_space: false,
+            },
+        )
+        .expect("render should succeed");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[44m$def$\x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn hidden_edge_markers_preserve_region_face_with_multibyte_edges() {
+        let buffer = Buffer::from_text("abcédef");
+        let viewport = Viewport::new(BufferId(0));
+        let spans = [Span::new(0, "abcédef".len(), Face::Region)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_buffer_line(
+            &mut terminal,
+            &buffer,
+            &viewport,
+            0,
+            buffer.line(0).expect("line should exist"),
+            &spans,
+            LineRenderOptions {
+                width: 4,
+                tab_width: 4,
+                theme: ThemeName::Default,
+                highlight_line_end_space: false,
+            },
+        )
+        .expect("render should succeed");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[44mabc$\x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn selected_line_end_space_uses_region_face() {
+        let buffer = Buffer::from_text("short");
+        let viewport = Viewport::new(BufferId(0));
+        let spans = [Span::new(0, 5, Face::Region)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_buffer_line(
+            &mut terminal,
+            &buffer,
+            &viewport,
+            0,
+            buffer.line(0).expect("line should exist"),
+            &spans,
+            LineRenderOptions {
+                width: 10,
+                tab_width: 4,
+                theme: ThemeName::Default,
+                highlight_line_end_space: true,
+            },
+        )
+        .expect("render should succeed");
+
+        assert_eq!(
+            terminal.into_inner(),
+            b"\x1b[44mshort\x1b[0m\x1b[44m     \x1b[0m".to_vec()
+        );
     }
 
     #[test]
