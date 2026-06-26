@@ -192,18 +192,37 @@ Goal: avoid continuing into architecture churn after small wins.
 
 Tasks:
 
-- [ ] Review whether Phase 1 extractions reduced review pain without widening
+- [x] Review whether Phase 1 extractions reduced review pain without widening
   visibility too much.
-- [ ] Record any remaining repeated patterns with file references.
-- [ ] Decide whether Phase 2 work is justified by concrete pain or upcoming
+- [x] Record any remaining repeated patterns with file references.
+- [x] Decide whether Phase 2 work is justified by concrete pain or upcoming
   features.
 
 Risk: low.
 
 Validation gate:
 
-- [ ] Run `make verify` before treating Phase 1 cleanup as complete.
-- [ ] Update this plan's Progress Log with completed changes and evidence.
+- [x] Run `make verify` before treating Phase 1 cleanup as complete.
+- [x] Update this plan's Progress Log with completed changes and evidence.
+
+Reassessment:
+
+- Phase 1 reduced `Editor` review scope without exposing editor internals outside
+  the `editor` module tree. The extracted help, search, and prompt-history seams
+  use `pub(super)` helpers rather than `pub(crate)` state access.
+- Remaining repeated code is concentrated in returnable special-buffer opening
+  and return paths: `open_help_buffer`, `open_messages_buffer`,
+  `open_shell_output_buffer`, `update_completion_buffer`, and their
+  restore/finish partners in `src/editor.rs`.
+- Buffer-list handling is a related but distinct special-buffer workflow:
+  `list_buffers` and `refresh_visible_buffer_list` share opening/refresh
+  concerns, but not the same return-viewport mechanics.
+- Step 2.1 is justified as the next small candidate because the returnable
+  special-buffer paths repeat cursor, search, region, insert-group, viewport,
+  and return-viewport handling. Buffer-list cleanup should be included only if
+  it stays clear rather than forcing one helper over unlike workflows.
+  Broader command dispatch, terminal, or buffer-storage refactors are not yet
+  justified by the Phase 1 evidence.
 
 ## Phase 2: Architecture Readiness For Rile 1.0
 
@@ -213,13 +232,17 @@ solves a real maintenance or release-readiness problem.
 
 ### Step 2.1 Simplify Special-Buffer Helpers
 
-Goal: reduce repeated help/messages/completions/buffer-list/shell-output buffer
-opening logic.
+Goal: reduce repeated help/messages/completions/shell-output buffer opening and
+return logic, then consider buffer-list refresh only if it fits without hiding
+distinct behavior.
 
 Tasks:
 
-- [ ] Introduce one small helper for named special buffers if repeated code is
-  still visible after Phase 1.
+- [ ] Introduce one small helper for returnable special buffers if repeated
+  cursor, search, region, insert-group, viewport, and return-viewport handling
+  is still visible after Phase 1.
+- [ ] Treat buffer-list opening and refresh as related but distinct unless the
+  helper remains obvious and behavior-preserving.
 - [ ] Keep `DocumentKind` concrete.
 - [ ] Avoid a dynamic special-buffer registry unless new special-buffer types
   become frequent.
@@ -228,7 +251,8 @@ Risk: low to medium.
 
 Validation gate:
 
-- [ ] Run help, messages, completion-buffer, buffer-list, and shell-output tests.
+- [ ] Run help, messages, completion-buffer, and shell-output tests.
+- [ ] Run buffer-list tests too if buffer-list behavior is touched.
 
 ### Step 2.2 Extract Completion Prompt Policy
 
@@ -401,6 +425,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-26 | Completed Step 1.5 Phase 1 reassessment. | `make verify` passed after Step 1.5; review found extracted helper modules remain `pub(super)`, returnable special-buffer open/restore handling is the clearest repeated pattern, and buffer-list refresh should stay distinct unless a helper remains obvious. |
 | 2026-06-26 | Completed Step 1.4 prompt history extraction. | `src/editor/prompt_history.rs` now owns per-prompt-kind history storage, duplicate suppression, navigation, and draft restoration while `Editor` still submits prompts and refreshes completion; `./scripts/in-container cargo test --locked prompt_history -- --nocapture`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `./scripts/in-container cargo test --locked --test pty_completion vertical_mx_prompt_history_recalls_previous_command -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.3 pure search helper extraction. | `src/editor/search.rs` now owns exact forward/backward match helpers and UTF-8-aware repeat-start advancement while `Editor` keeps incremental-search prompt, wrap, and failure state; `./scripts/in-container cargo test --locked editor::search -- --nocapture` and `./scripts/in-container cargo test --locked --test pty_search -- --nocapture` passed. |
 | 2026-06-26 | Completed Step 1.2 pure help formatting extraction. | `src/editor/help.rs` now owns help/about/describe formatting helpers while `Editor` still collects state and opens help buffers; focused editor help tests and representative PTY movement help tests passed. |
@@ -413,4 +438,5 @@ Validation gate:
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-06-26 | Close Phase 1; Step 2.1 is the only currently justified next candidate. | Full verification is green after the small extractions, and the remaining concrete pain is repeated returnable special-buffer open/restore logic rather than a need for broad `Editor` decomposition. |
 | 2026-06-26 | Prefer Phase 1 safety-first cleanup before Phase 2 architecture work. | The current risk is editor centralization, but aggressive refactors could break subtle terminal behavior. |
