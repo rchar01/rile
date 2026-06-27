@@ -199,11 +199,13 @@ Current completion matching supports these forms:
 | --- | --- | --- |
 | `foo` | supported | Literal substring for `orderless`; prefix/basic file matching for files. Lowercase is case-insensitive, uppercase is case-sensitive. |
 | `foo bar` | supported | All `orderless` components must match in any order. |
-| `^foo` | supported | Regular expression component; matches the beginning of a candidate. |
-| `foo$` | supported | Regular expression component; matches the end of a candidate. |
+| `^foo` | supported | Simple literal anchor; matches the beginning of a candidate. |
+| `foo$` | supported | Simple literal anchor; matches the end of a candidate. |
+| `^foo$` | supported | Simple literal anchor; matches the whole candidate. |
 | `f-f` | supported for files | File partial-completion word-prefix matching, such as `find-file`-style components in file names. |
 | `!foo` | supported | Negated `orderless` component; rejects candidates matching `foo`. |
-| `=foo` | supported | Force-literal `orderless` component; treats regex syntax as literal text. Combine as `!=foo` for negated literal matching. |
+| `=foo` | supported | Force-literal `orderless` component; treats `^` and `$` as literal text. Combine as `!=foo` for negated literal matching. |
+| `foo|bar` | not supported | Full regular-expression syntax is not implemented; metacharacters other than simple anchors are literal text. |
 | `ff` | not yet supported | Initialism matching is not implemented. |
 | `f~` | not yet supported | Fuzzy/flex matching is not implemented. |
 

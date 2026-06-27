@@ -243,10 +243,11 @@ moved explicitly. Directory candidates descend after Tab insertion, exact input,
 or explicit selection so directory-first substring matches do not hijack raw
 missing-file input. The default `completion_matching = "orderless"` uses
 component-based matching for non-file prompts: every space-separated component
-must match in any order, lowercase components match case-insensitively, valid
-regular expressions are honored, and invalid regular expressions fall back to
-literal substring matching. `!foo` negates an orderless component, `=foo` forces
-literal matching, and `!=foo` combines both forms for negated literal matching.
+must match in any order, lowercase components match case-insensitively, `^foo`,
+`foo$`, and `^foo$` act as simple literal anchors, and other regexp
+metacharacters are literal text. `!foo` negates an orderless component, `=foo`
+forces literal matching, and `!=foo` combines both forms for negated literal
+matching.
 File prompts override the global orderless default with Emacs-style
 file-category prefix/basic partial-completion matching. Rile's literal prefix,
 substring, and file-category matching also use smart case: lowercase input

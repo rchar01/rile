@@ -71,7 +71,7 @@ Type "x"
 Sleep 500ms
 Type "^find"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/08-after-regexp-anchor.png
+Screenshot {{FRAME_DIR}}/08-after-simple-anchor.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms

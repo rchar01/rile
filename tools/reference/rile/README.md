@@ -45,7 +45,8 @@ Navigation comparison scenarios:
 Completion comparison scenarios:
 
 - `m-x-completion-modern`: Rile command completion frames aligned with the
-  Emacs modern `M-x` scenario, plus Rile Orderless component and regexp frames.
+  Emacs modern `M-x` scenario, plus Rile Orderless component and simple-anchor
+  frames.
 - `find-file-completion-modern`: Rile file completion frames aligned with the
   Emacs modern file scenario, plus a Rile arbitrary-substring rejection frame.
 - `minibuffer-navigation-modern`: Rile minibuffer history, line movement, and

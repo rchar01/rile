@@ -233,7 +233,7 @@ fn vertical_mx_completion_matches_orderless_components() -> Result<()> {
 }
 
 #[test]
-fn vertical_mx_completion_matches_regex_anchor() -> Result<()> {
+fn vertical_mx_completion_matches_simple_anchor() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;
 

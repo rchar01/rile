@@ -297,8 +297,8 @@ prompts:
   deliberately preserved, `M-RET` submits raw minibuffer input, and an explicitly
   moved selection wins over exact minibuffer text;
 - command, option, and buffer prompts use orderless component matching by
-  default, including smart case, regexp, `!foo` negation, and `=foo` literal
-  components;
+  default, including smart case, simple literal anchors, `!foo` negation, and
+  `=foo` literal components;
 - file prompts use Emacs file-category prefix/basic partial-completion matching
   by default, add Rile smart-case literal matching, still preserve no-match raw
   missing-file input, and descend into directories after Tab insertion, exact
@@ -308,10 +308,10 @@ prompts:
 
 The Emacs and Rile `m-x-completion-modern` captures cover command completion
 review with selected-candidate Tab insertion and selected Enter over exact
-input. Rile's matching capture also records Orderless component and regexp
-frames for visual inspection, but Orderless component and regexp correctness is
-covered by Rile's PTY tests because interactive VHS space input can be
-misleading for `M-x`.
+input. Rile's matching capture also records Orderless component and simple-anchor
+frames for visual inspection, but Orderless component correctness is covered by
+Rile's PTY tests because interactive VHS space input can be misleading for
+`M-x`.
 
 The Emacs and Rile `find-file-completion-modern` captures cover file prompt
 prefix filtering, file-category word-component partial-completion matching,

@@ -159,17 +159,17 @@ Goal: replace regex-backed components with explicit string-match kinds.
 
 Tasks:
 
-- [ ] Replace `OrderlessMatcher::Regex(Regex)` with a non-regex matcher enum in
+- [x] Replace `OrderlessMatcher::Regex(Regex)` with a non-regex matcher enum in
   `src/completion.rs`.
-- [ ] Add matcher kinds for literal substring, literal prefix anchor, literal
+- [x] Add matcher kinds for literal substring, literal prefix anchor, literal
   suffix anchor, and literal exact anchor.
-- [ ] Keep existing component flags for negation and force-literal matching.
-- [ ] Ensure `=foo` bypasses anchor parsing and treats all characters literally.
-- [ ] Keep component splitting behavior unchanged, including escaped spaces.
+- [x] Keep existing component flags for negation and force-literal matching.
+- [x] Ensure `=foo` bypasses anchor parsing and treats all characters literally.
+- [x] Keep component splitting behavior unchanged, including escaped spaces.
 
 Validation gate:
 
-- [ ] Unit tests cover literal, negated, force-literal, escaped-space, and simple
+- [x] Unit tests cover literal, negated, force-literal, escaped-space, and simple
   anchor components.
 
 ### Phase 2: Runtime Dependency Removal
@@ -178,15 +178,15 @@ Goal: remove `regex` from Rile's normal runtime dependency graph.
 
 Tasks:
 
-- [ ] Remove `use regex::{Regex, RegexBuilder};` from `src/completion.rs`.
-- [ ] Remove `regex = "1"` from `[dependencies]` in `Cargo.toml`.
-- [ ] Refresh `Cargo.lock` with the normal locked/container workflow.
-- [ ] Confirm `cargo tree --locked -e normal -i regex` no longer points from
+- [x] Remove `use regex::{Regex, RegexBuilder};` from `src/completion.rs`.
+- [x] Remove `regex = "1"` from `[dependencies]` in `Cargo.toml`.
+- [x] Refresh `Cargo.lock` with the normal locked/container workflow.
+- [x] Confirm `cargo tree --locked -e normal -i regex` no longer points from
   `regex` to `rile` through normal dependencies.
 
 Validation gate:
 
-- [ ] `cargo tree --locked -e normal` shows no normal runtime `regex` dependency
+- [x] `cargo tree --locked -e normal` shows no normal runtime `regex` dependency
   under `rile`.
 
 ### Phase 3: Test Migration
@@ -195,23 +195,24 @@ Goal: prove preserved matching behavior and document intentional differences.
 
 Tasks:
 
-- [ ] Replace `orderless_completion_supports_regex_and_literal_fallback` with
+- [x] Replace `orderless_completion_supports_regex_and_literal_fallback` with
   tests for simple anchors and literal metacharacters.
-- [ ] Keep tests proving `find file` and `file find` both match `find-file`.
-- [ ] Add or keep tests proving `re md` and `md re` match `readme.md`.
-- [ ] Keep tests for smart case.
-- [ ] Keep tests for `!foo`, `=foo`, and `!=foo`.
-- [ ] Add tests proving `foo.txt` treats `.` as literal text after migration.
-- [ ] Add tests proving `=^foo` and `=foo$` are literal, not anchors.
-- [ ] Rename or replace `vertical_mx_completion_matches_regex_anchor` in
+- [x] Keep tests proving `find file` and `file find` both match `find-file`.
+- [x] Add or keep tests proving `re md` and `md re` match `readme.md`.
+- [x] Keep tests for smart case.
+- [x] Keep tests for `!foo`, `=foo`, and `!=foo`.
+- [x] Add tests proving `foo.txt` treats `.` as literal text after migration.
+- [x] Add tests proving `=^foo` and `=foo$` are literal, not anchors.
+- [x] Add tests proving bare `^` and `$` are literal text, not empty anchors.
+- [x] Rename or replace `vertical_mx_completion_matches_regex_anchor` in
   `tests/pty_completion.rs` with a simple-anchor PTY test.
-- [ ] Keep relevant file-completion PTY tests unchanged unless behavior actually
+- [x] Keep relevant file-completion PTY tests unchanged unless behavior actually
   changes, which should be treated as a bug.
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked completion -- --nocapture`.
-- [ ] Run `./scripts/in-container cargo test --locked --test pty_completion -- --nocapture`.
+- [x] Run `./scripts/in-container cargo test --locked completion -- --nocapture`.
+- [x] Run `./scripts/in-container cargo test --locked --test pty_completion -- --nocapture`.
 
 ### Phase 4: Documentation And Release Notes
 
@@ -219,19 +220,19 @@ Goal: make public documentation match the new matching language.
 
 Tasks:
 
-- [ ] Update `README.md` completion table to replace regular-expression
+- [x] Update `README.md` completion table to replace regular-expression
   components with simple literal anchors.
-- [ ] Update `docs/development.md` to remove claims that valid regular
+- [x] Update `docs/development.md` to remove claims that valid regular
   expressions are honored.
-- [ ] Update `docs/reference-testing.md` to stop saying reference captures cover
+- [x] Update `docs/reference-testing.md` to stop saying reference captures cover
   regexp completion correctness.
-- [ ] Add a `NEWS` entry noting that completion matching now uses literal
+- [x] Add a `NEWS` entry noting that completion matching now uses literal
   orderless components with simple anchors and no runtime regex engine.
-- [ ] Add a GNU-style `ChangeLog` entry for changed files.
+- [x] Add a GNU-style `ChangeLog` entry for changed files.
 
 Validation gate:
 
-- [ ] Search the repo for stale `regex`, `regexp`, and `regular expression`
+- [x] Search the repo for stale `regex`, `regexp`, and `regular expression`
   wording and either update it or confirm it refers to dev dependencies or
   historical context.
 
@@ -241,16 +242,16 @@ Goal: verify the migration did not regress unrelated editor behavior.
 
 Tasks:
 
-- [ ] Run `make fmt`.
-- [ ] Run `git diff --check`.
-- [ ] Run `make verify`.
-- [ ] Review `git diff` for accidental behavior changes outside completion and
+- [x] Run `make fmt`.
+- [x] Run `git diff --check`.
+- [x] Run `make verify`.
+- [x] Review `git diff` for accidental behavior changes outside completion and
   documentation.
 
 Validation gate:
 
-- [ ] Full `make verify` passes.
-- [ ] Final dependency tree confirms `regex` is not a normal runtime dependency
+- [x] Full `make verify` passes.
+- [x] Final dependency tree confirms `regex` is not a normal runtime dependency
   of `rile`.
 
 ## Risks
@@ -294,6 +295,7 @@ Validation gate:
 | 2026-06-27 | Plan created. | User requested a written migration plan before implementation. |
 | 2026-06-27 | Added pre-migration characterization coverage to the plan. | `src/completion.rs` tests cover `re md`, `md re`, escaped spaces with another component, and force-literal anchor text. |
 | 2026-06-27 | Verified pre-migration completion coverage. | `make fmt`, `./scripts/in-container cargo test --locked completion -- --nocapture`, and `git diff --check` passed. |
+| 2026-06-27 | Removed runtime regex-backed completion matching. | `make verify` passed; `cargo tree --locked -e normal -i regex` reported no normal dependency path from `rile` to `regex`. |
 
 ## Decision Log
 

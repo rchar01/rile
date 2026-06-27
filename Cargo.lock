@@ -421,7 +421,6 @@ dependencies = [
  "insta",
  "libc",
  "predicates",
- "regex",
  "tempfile",
  "unicode-segmentation",
  "unicode-width",

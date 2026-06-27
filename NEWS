@@ -69,6 +69,11 @@ Editing features:
   *Messages* buffer that updates while it is visible.
 * Recall minibuffer prompt history with M-p and M-n, and page completion
   candidates with C-v/PageDown and M-v/PageUp.
+* Completion matching no longer supports full regular-expression components.
+  Orderless command, option, and buffer completion keeps literal components,
+  smart case, `!foo` negation, `=foo` force-literal components, and simple
+  literal anchors with `^foo`, `foo$`, and `^foo$`; other regexp metacharacters
+  are matched as literal text.
 * Keep the terminal cursor on active minibuffer prompts, including completion
   prompts, instead of leaving it at the editing buffer point.
 

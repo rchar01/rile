@@ -4,8 +4,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use regex::{Regex, RegexBuilder};
-
 use crate::command::CommandRegistry;
 use crate::keymap::{KeyMap, format_key_sequence};
 use crate::option::OptionRegistry;
@@ -520,7 +518,6 @@ enum MatchQuality {
     Prefix,
     WordBoundary,
     Substring,
-    Regex,
 }
 
 fn prefix_match_score(value: &str, input: &str) -> MatchScore {
@@ -587,8 +584,10 @@ struct OrderlessComponent {
 
 #[derive(Debug)]
 enum OrderlessMatcher {
-    Regex(Regex),
     Literal,
+    PrefixAnchor,
+    SuffixAnchor,
+    ExactAnchor,
 }
 
 impl OrderlessComponent {
@@ -606,11 +605,7 @@ impl OrderlessComponent {
         let matcher = if force_literal {
             OrderlessMatcher::Literal
         } else {
-            RegexBuilder::new(&text)
-                .case_insensitive(!case_sensitive)
-                .build()
-                .map(OrderlessMatcher::Regex)
-                .unwrap_or(OrderlessMatcher::Literal)
+            OrderlessMatcher::for_text(&text)
         };
         Self {
             text,
@@ -622,18 +617,45 @@ impl OrderlessComponent {
 
     fn match_quality(&self, value: &str) -> Option<MatchQuality> {
         match &self.matcher {
-            OrderlessMatcher::Regex(regex) => {
-                if !regex.is_match(value) {
-                    return None;
-                }
-                Some(
-                    literal_match_quality(value, &self.text, self.case_sensitive)
-                        .unwrap_or(MatchQuality::Regex),
-                )
-            }
             OrderlessMatcher::Literal => {
                 literal_match_quality(value, &self.text, self.case_sensitive)
             }
+            OrderlessMatcher::PrefixAnchor => anchored_prefix_match_quality(
+                value,
+                self.text
+                    .strip_prefix('^')
+                    .expect("prefix anchor should start with ^"),
+                self.case_sensitive,
+            ),
+            OrderlessMatcher::SuffixAnchor => anchored_suffix_match_quality(
+                value,
+                self.text
+                    .strip_suffix('$')
+                    .expect("suffix anchor should end with $"),
+                self.case_sensitive,
+            ),
+            OrderlessMatcher::ExactAnchor => anchored_exact_match_quality(
+                value,
+                self.text
+                    .strip_prefix('^')
+                    .and_then(|text| text.strip_suffix('$'))
+                    .expect("exact anchor should be wrapped by ^ and $"),
+                self.case_sensitive,
+            ),
+        }
+    }
+}
+
+impl OrderlessMatcher {
+    fn for_text(text: &str) -> Self {
+        if text.len() > 2 && text.starts_with('^') && text.ends_with('$') {
+            Self::ExactAnchor
+        } else if text.len() > 1 && text.starts_with('^') {
+            Self::PrefixAnchor
+        } else if text.len() > 1 && text.ends_with('$') {
+            Self::SuffixAnchor
+        } else {
+            Self::Literal
         }
     }
 }
@@ -699,6 +721,42 @@ fn literal_match_quality(
         .then_some(MatchQuality::Substring)
 }
 
+fn anchored_prefix_match_quality(
+    value: &str,
+    component: &str,
+    case_sensitive: bool,
+) -> Option<MatchQuality> {
+    smart_case_starts_with_with_mode(value, component, case_sensitive).then(|| {
+        if smart_case_eq_with_mode(value, component, case_sensitive) {
+            MatchQuality::Exact
+        } else {
+            MatchQuality::Prefix
+        }
+    })
+}
+
+fn anchored_suffix_match_quality(
+    value: &str,
+    component: &str,
+    case_sensitive: bool,
+) -> Option<MatchQuality> {
+    smart_case_ends_with_with_mode(value, component, case_sensitive).then(|| {
+        if smart_case_eq_with_mode(value, component, case_sensitive) {
+            MatchQuality::Exact
+        } else {
+            MatchQuality::Substring
+        }
+    })
+}
+
+fn anchored_exact_match_quality(
+    value: &str,
+    component: &str,
+    case_sensitive: bool,
+) -> Option<MatchQuality> {
+    smart_case_eq_with_mode(value, component, case_sensitive).then_some(MatchQuality::Exact)
+}
+
 fn smart_case_starts_with(value: &str, component: &str) -> bool {
     if is_smart_case_sensitive(component) {
         value.starts_with(component)
@@ -717,6 +775,30 @@ fn smart_case_contains(value: &str, component: &str) -> bool {
 
 fn is_smart_case_sensitive(component: &str) -> bool {
     component.chars().any(char::is_uppercase)
+}
+
+fn smart_case_eq_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        value == component
+    } else {
+        value.to_lowercase() == component.to_lowercase()
+    }
+}
+
+fn smart_case_starts_with_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        value.starts_with(component)
+    } else {
+        value.to_lowercase().starts_with(&component.to_lowercase())
+    }
+}
+
+fn smart_case_ends_with_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        value.ends_with(component)
+    } else {
+        value.to_lowercase().ends_with(&component.to_lowercase())
+    }
 }
 
 fn word_boundary_contains(value: &str, component: &str) -> bool {
@@ -1001,14 +1083,12 @@ mod tests {
     }
 
     #[test]
-    fn orderless_completion_supports_regex_and_literal_fallback() {
+    fn orderless_completion_supports_simple_literal_anchors() {
         let mut session = CompletionSession::buffers(
             [
                 "find-file".to_owned(),
                 "project-find-file".to_owned(),
-                "literal-[name".to_owned(),
-                "foo.txt".to_owned(),
-                "fooxtxt".to_owned(),
+                "find-file-read-only".to_owned(),
             ],
             CompletionConfig::default(),
         );
@@ -1019,7 +1099,7 @@ mod tests {
             .into_iter()
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
-        assert_eq!(values, vec!["find-file"]);
+        assert_eq!(values, vec!["find-file", "find-file-read-only"]);
 
         session.update("file$");
         let values = session
@@ -1029,19 +1109,92 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(values, vec!["find-file", "project-find-file"]);
 
-        session.update("[");
-        assert_eq!(
-            session.selected().map(|candidate| candidate.value.as_str()),
-            Some("literal-[name")
+        session.update("^find-file$");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["find-file"]);
+    }
+
+    #[test]
+    fn orderless_completion_treats_regex_metacharacters_as_literal_text() {
+        let mut session = CompletionSession::buffers(
+            [
+                "foo.txt".to_owned(),
+                "fooxtxt".to_owned(),
+                "foo|bar".to_owned(),
+                "foo-bar".to_owned(),
+                "literal-[abc]".to_owned(),
+                "literal-a".to_owned(),
+                "literal-.*".to_owned(),
+                "literal-anything".to_owned(),
+            ],
+            CompletionConfig::default(),
         );
 
-        session.update(r"foo\.txt");
+        session.update("foo.txt");
         let values = session
             .view_items()
             .into_iter()
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(values, vec!["foo.txt"]);
+
+        session.update("foo|bar");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["foo|bar"]);
+
+        session.update("[abc]");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["literal-[abc]"]);
+
+        session.update(".*");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["literal-.*"]);
+    }
+
+    #[test]
+    fn orderless_completion_treats_bare_anchors_as_literal_text() {
+        let mut session = CompletionSession::buffers(
+            [
+                "^".to_owned(),
+                "^literal".to_owned(),
+                "$".to_owned(),
+                "literal$".to_owned(),
+                "literal".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("^");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["^", "^literal"]);
+
+        session.update("$");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["$", "literal$"]);
     }
 
     #[test]
@@ -1101,7 +1254,7 @@ mod tests {
             .into_iter()
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
-        assert_eq!(values, vec!["foo.txt", "fooxtxt"]);
+        assert_eq!(values, vec!["foo.txt"]);
 
         session.update("=foo.txt");
         let values = session

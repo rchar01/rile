@@ -12,7 +12,6 @@ repository = "https://codeberg.org/rch/rile"
 
 [dependencies]
 libc = "0.2"
-regex = "1"
 unicode-segmentation = "1.12"
 unicode-width = "0.2"
 
