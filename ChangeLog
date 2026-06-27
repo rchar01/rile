@@ -1,5 +1,9 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	* NEWS: Mention prose-first command and key help formatting.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	Make command help formatting more Emacs-like.
 
 	* src/editor/help.rs (format_describe_key_help): Use a prose-first key and
