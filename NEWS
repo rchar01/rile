@@ -63,6 +63,9 @@ Editing features:
   configuration options with C-h v, active modes with C-h m, and the current
   buffer with M-x describe-buffer.  Command and key help use prose-first,
   Emacs-like formatting while Rile-specific metadata remains explicit.
+  Empty command, option, and file prompts, including M-x, C-h f, C-h v,
+  C-x C-f, C-x C-r, and C-x i, accept the visible selected completion candidate
+  on Enter.
 * Show version, build profile, feature-reporting status, terminal backend,
   config path, current directory, and diagnostic guidance with C-h C-a /
   about-rile.

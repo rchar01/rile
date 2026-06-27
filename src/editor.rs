@@ -1146,7 +1146,7 @@ impl Editor {
                     return Ok(EditorOutcome::Continue);
                 };
                 if let Some(directory) =
-                    directory_completion_to_enter(self.completion.as_ref(), &input)
+                    directory_completion_to_enter(kind, self.completion.as_ref(), &input)
                 {
                     self.prompt_history.reset(kind);
                     self.minibuffer.start_prompt(kind, prompt_label(kind));
@@ -6362,6 +6362,34 @@ mod tests {
     }
 
     #[test]
+    fn extended_command_empty_input_accepts_selected_completion() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("about-rile")
+        );
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("enter should execute selected completion");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("About Rile:")
+        );
+    }
+
+    #[test]
     fn extended_command_completion_reports_no_match_as_raw_command() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -9178,6 +9206,36 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_function_empty_input_accepts_selected_completion() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("f".to_owned()))
+            .expect("describe-function should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next command");
+        let selected = editor
+            .completion()
+            .and_then(|completion| completion.selected())
+            .map(|candidate| candidate.value.clone())
+            .expect("describe-function should have a selected command");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-function should accept empty selected completion");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.starts_with(&format!("{selected} is an interactive command.")));
+        assert_ne!(
+            editor.minibuffer().message.as_deref(),
+            Some("No such command: ")
+        );
+    }
+
+    #[test]
     fn describe_function_tab_inserts_selected_command() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -9389,6 +9447,36 @@ M-g g           goto-line                      Go to line or line:column\n"
         let help = editor.document().buffer().serialize();
         assert!(help.contains("completion_matching is a configuration variable."));
         assert!(help.contains("Name: completion_matching"));
+    }
+
+    #[test]
+    fn describe_variable_empty_input_accepts_selected_completion() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("v".to_owned()))
+            .expect("describe-variable should start");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("down should select next option");
+        let selected = editor
+            .completion()
+            .and_then(|completion| completion.selected())
+            .map(|candidate| candidate.value.clone())
+            .expect("describe-variable should have a selected option");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("describe-variable should accept empty selected completion");
+
+        let help = editor.document().buffer().serialize();
+        assert!(help.contains(&format!("{selected} is a configuration variable.")));
+        assert_ne!(
+            editor.minibuffer().message.as_deref(),
+            Some("No such variable: ")
+        );
     }
 
     #[test]
@@ -9874,6 +9962,56 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn find_file_empty_input_accepts_selected_completion() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let target = directory.path().join("aaa-target.txt");
+        fs::write(&start, "start").expect("start file should be written");
+        fs::write(&target, "target").expect("target file should be written");
+        let document = Document::open(&start).expect("start file should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should prompt");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("aaa-target.txt")
+        );
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty selected file should open");
+
+        assert_eq!(editor.document().path(), Some(target.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "target");
+    }
+
+    #[test]
+    fn find_file_read_only_empty_input_accepts_selected_completion() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let target = directory.path().join("aaa-target.txt");
+        fs::write(&start, "start").expect("start file should be written");
+        fs::write(&target, "target").expect("target file should be written");
+        let document = Document::open(&start).expect("start file should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("find-file-read-only")
+            .expect("find-file-read-only should prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty selected file should open read-only");
+
+        assert_eq!(editor.document().path(), Some(target.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "target");
+        assert!(editor.document().is_read_only());
+    }
+
+    #[test]
     fn find_file_read_only_marks_existing_buffer_read_only() {
         let directory = TestDir::new();
         let path = directory.path().join("shared.txt");
@@ -9986,15 +10124,15 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn find_file_prompt_reports_empty_input() {
+    fn find_file_prompt_meta_ret_reports_empty_input() {
         let mut editor = Editor::new(Document::scratch());
 
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt");
         editor
-            .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("empty input should be reported");
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
+            .expect("raw empty input should be reported");
 
         assert_eq!(
             editor.minibuffer().message.as_deref(),
@@ -10103,15 +10241,48 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn insert_file_prompt_reports_empty_input() {
+    fn insert_file_empty_input_accepts_selected_completion() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let source = directory.path().join("aaa-source.txt");
+        fs::write(&start, "before\nafter\n").expect("start file should be written");
+        fs::write(&source, "inserted\n").expect("source file should be written");
+        let document = Document::open(&start).expect("start file should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('n'))
+            .expect("cursor should move to second line");
+        editor
+            .execute_command_by_name("insert-file")
+            .expect("insert-file should prompt");
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(|completion| completion.selected())
+                .map(|candidate| candidate.value.as_str()),
+            Some("aaa-source.txt")
+        );
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty selected file should insert");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "before\ninserted\nafter\n"
+        );
+    }
+
+    #[test]
+    fn insert_file_prompt_meta_ret_reports_empty_input() {
         let mut editor = Editor::new(Document::scratch());
 
         editor
             .execute_command_by_name("insert-file")
             .expect("insert-file should prompt");
         editor
-            .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("empty input should be reported");
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
+            .expect("raw empty input should be reported");
 
         assert_eq!(
             editor.minibuffer().message.as_deref(),

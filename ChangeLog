@@ -1,5 +1,42 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	Accept empty selected command, option, and file completions.
+
+	* src/editor/completion_policy.rs (accepted_completion_input): Accept the
+	selected command, option, or file candidate for empty completion input.
+	(directory_completion_to_enter): Enter selected directories for empty file
+	completion input.
+	(selected_file_prompt): New function.
+	(empty_command_accepts_selected_candidate,
+	empty_extended_command_accepts_selected_candidate,
+	empty_command_accepts_explicit_selection,
+	empty_option_accepts_selected_candidate, empty_file_accepts_selected_candidate,
+	empty_write_file_keeps_raw_input_with_file_completion,
+	directory_completion_enters_empty_selected_directory,
+	directory_completion_ignores_empty_write_file_prompt): New tests.
+	* src/editor.rs (extended_command_empty_input_accepts_selected_completion,
+	describe_function_empty_input_accepts_selected_completion,
+	describe_variable_empty_input_accepts_selected_completion,
+	find_file_empty_input_accepts_selected_completion,
+	find_file_read_only_empty_input_accepts_selected_completion,
+	insert_file_empty_input_accepts_selected_completion): New tests.
+	(find_file_prompt_meta_ret_reports_empty_input): Rename test from
+	find_file_prompt_reports_empty_input.
+	(insert_file_prompt_meta_ret_reports_empty_input): Rename test from
+	insert_file_prompt_reports_empty_input.
+	* tests/pty_completion.rs
+	(vertical_mx_empty_input_accepts_selected_command): New test.
+	(vertical_describe_function_empty_input_accepts_selection,
+	vertical_describe_variable_empty_input_accepts_selection,
+	vertical_find_file_empty_input_accepts_selected_file,
+	vertical_find_file_empty_input_enters_selected_directory,
+	vertical_find_file_read_only_empty_input_accepts_selected_file,
+	vertical_insert_file_empty_input_accepts_selected_file): New tests.
+	* NEWS: Document selected-candidate Enter acceptance for empty command and
+	option help prompts and file prompts.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	* NEWS: Mention prose-first command and key help formatting.
 
 2026-06-27  Robert Charusta  <rch-public@posteo.net>

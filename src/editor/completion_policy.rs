@@ -25,6 +25,16 @@ pub(super) fn accepted_completion_input(context: CompletionAcceptContext<'_>) ->
                 .map(str::to_owned)
                 .unwrap_or_else(|| input.to_owned());
         }
+        if matches!(
+            context.completion.map(CompletionSession::source),
+            Some(CompletionSource::Commands | CompletionSource::Options)
+        ) || matches!(
+            context.completion.map(CompletionSession::source),
+            Some(CompletionSource::Files)
+        ) && selected_file_prompt(context.kind)
+        {
+            return selected_value(context.completion).unwrap_or_else(|| input.to_owned());
+        }
         return input.to_owned();
     }
 
@@ -55,24 +65,34 @@ pub(super) fn accepted_completion_input(context: CompletionAcceptContext<'_>) ->
 }
 
 pub(super) fn directory_completion_to_enter(
+    kind: PromptKind,
     completion: Option<&CompletionSession>,
     input: &str,
 ) -> Option<String> {
-    if input.trim().is_empty() {
+    if !selected_file_prompt(kind) {
         return None;
     }
+    let trimmed = input.trim();
     let completion =
         completion.filter(|completion| completion.source() == CompletionSource::Files)?;
     let candidate = completion
         .selected()
         .filter(|candidate| candidate.is_directory())?;
     if completion.has_matches()
-        && (completion.selection_explicit()
-            || candidate.value.trim_end_matches('/') == input.trim().trim_end_matches('/'))
+        && (trimmed.is_empty()
+            || completion.selection_explicit()
+            || candidate.value.trim_end_matches('/') == trimmed.trim_end_matches('/'))
     {
         return Some(candidate.value.clone());
     }
     None
+}
+
+fn selected_file_prompt(kind: PromptKind) -> bool {
+    matches!(
+        kind,
+        PromptKind::FindFile | PromptKind::FindFileReadOnly | PromptKind::InsertFile
+    )
 }
 
 pub(super) fn raw_completion_input(input: &str) -> String {
@@ -174,6 +194,85 @@ mod tests {
     }
 
     #[test]
+    fn empty_command_accepts_selected_candidate() {
+        let completion = CompletionSession::commands(
+            &CommandRegistry::default(),
+            &KeyMap::default(),
+            CompletionConfig::default(),
+        );
+        let selected = completion
+            .selected()
+            .expect("command completion should select a candidate")
+            .value
+            .clone();
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::DescribeFunction,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, selected);
+    }
+
+    #[test]
+    fn empty_extended_command_accepts_selected_candidate() {
+        let completion = CompletionSession::commands(
+            &CommandRegistry::default(),
+            &KeyMap::default(),
+            CompletionConfig::default(),
+        );
+        let selected = completion
+            .selected()
+            .expect("command completion should select a candidate")
+            .value
+            .clone();
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::ExtendedCommand,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, selected);
+    }
+
+    #[test]
+    fn empty_command_accepts_explicit_selection() {
+        let mut completion = CompletionSession::commands(
+            &CommandRegistry::default(),
+            &KeyMap::default(),
+            CompletionConfig::default(),
+        );
+        completion.move_selection(1);
+        let selected = completion
+            .selected()
+            .expect("command completion should select a candidate")
+            .value
+            .clone();
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::DescribeFunction,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, selected);
+    }
+
+    #[test]
     fn exact_option_accepts_raw_input_without_explicit_selection() {
         let completion =
             CompletionSession::options(&OptionRegistry::default(), CompletionConfig::default());
@@ -192,6 +291,29 @@ mod tests {
     }
 
     #[test]
+    fn empty_option_accepts_selected_candidate() {
+        let completion =
+            CompletionSession::options(&OptionRegistry::default(), CompletionConfig::default());
+        let selected = completion
+            .selected()
+            .expect("option completion should select a candidate")
+            .value
+            .clone();
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::DescribeVariable,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, selected);
+    }
+
+    #[test]
     fn exact_buffer_accepts_raw_input_without_explicit_selection() {
         let completion =
             CompletionSession::buffers(["other-buffer".to_owned()], CompletionConfig::default());
@@ -207,6 +329,49 @@ mod tests {
         });
 
         assert_eq!(accepted, "exact-buffer");
+    }
+
+    #[test]
+    fn empty_file_accepts_selected_candidate() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        std::fs::write(temp.path().join("alpha.txt"), "alpha").expect("fixture should write");
+        let completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+        let selected = completion
+            .selected()
+            .expect("file completion should select a candidate")
+            .value
+            .clone();
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::FindFile,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, selected);
+    }
+
+    #[test]
+    fn empty_write_file_keeps_raw_input_with_file_completion() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        std::fs::write(temp.path().join("alpha.txt"), "alpha").expect("fixture should write");
+        let completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::WriteFile,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, "");
     }
 
     #[test]
@@ -238,8 +403,32 @@ mod tests {
         completion.update("alpha");
 
         assert_eq!(
-            directory_completion_to_enter(Some(&completion), "alpha-dir/"),
+            directory_completion_to_enter(PromptKind::FindFile, Some(&completion), "alpha-dir/"),
             Some("alpha-dir/".to_owned())
+        );
+    }
+
+    #[test]
+    fn directory_completion_enters_empty_selected_directory() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        std::fs::create_dir(temp.path().join("alpha-dir")).expect("directory should create");
+        let completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+
+        assert_eq!(
+            directory_completion_to_enter(PromptKind::FindFile, Some(&completion), ""),
+            Some("alpha-dir/".to_owned())
+        );
+    }
+
+    #[test]
+    fn directory_completion_ignores_empty_write_file_prompt() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        std::fs::create_dir(temp.path().join("alpha-dir")).expect("directory should create");
+        let completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+
+        assert_eq!(
+            directory_completion_to_enter(PromptKind::WriteFile, Some(&completion), ""),
+            None
         );
     }
 

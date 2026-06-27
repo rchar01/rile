@@ -91,6 +91,23 @@ fn vertical_mx_completion_selection_moves_with_down() -> Result<()> {
 }
 
 #[test]
+fn vertical_mx_empty_input_accepts_selected_command() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.assert_screen_contains("about-rile")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("About Rile:")?;
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_mx_completion_selection_moves_with_control_keys() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;
@@ -287,6 +304,30 @@ fn vertical_describe_function_completion_accepts_explicit_selection() -> Result<
 }
 
 #[test]
+fn vertical_describe_function_empty_input_accepts_selection() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("f", b"f")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("is an interactive command.")?;
+    if rile.snapshot_text().contains("No such command:") {
+        anyhow::bail!(
+            "empty selected command was rejected\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_describe_function_completion_tab_inserts_selected_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 14, 100)?;
@@ -340,6 +381,27 @@ fn vertical_describe_variable_completion_accepts_explicit_selection() -> Result<
     rile.send("Enter", keys::ENTER)?;
 
     rile.assert_screen_contains("completion_matching is a configuration variable.")?;
+
+    rile.send("q", b"q")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_describe_variable_empty_input_accepts_selection() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 14, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("v", b"v")?;
+    rile.send("Down", keys::DOWN)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("is a configuration variable.")?;
+    if rile.snapshot_text().contains("No such variable:") {
+        anyhow::bail!("empty selected option was rejected\n{}", rile.screen_dump());
+    }
 
     rile.send("q", b"q")?;
     rile.quit()?;
@@ -450,6 +512,45 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
     rile.send("Tab", keys::TAB)?;
 
     rile.assert_screen_contains("Find file: alpha-note.txt")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_empty_input_accepts_selected_file() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("000-target.txt"), "target\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.assert_screen_contains("000-target.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("target")?;
+    rile.assert_status_contains("ACTIVE 000-target.txt")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_empty_input_enters_selected_directory() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::create_dir(directory.path().join("aaa-dir"))?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Find file: aaa-dir/")?;
 
     rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
@@ -687,6 +788,27 @@ fn vertical_find_file_read_only_completion_tab_inserts_selected_file() -> Result
 }
 
 #[test]
+fn vertical_find_file_read_only_empty_input_accepts_selected_file() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("000-target.txt"), "target\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-r", keys::control_sequence("xr"))?;
+    rile.assert_screen_contains("000-target.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("target")?;
+    rile.assert_status_contains("ACTIVE 000-target.txt")?;
+    rile.assert_status_contains("ro:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_find_file_read_only_completion_accepts_explicit_selection() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
@@ -754,6 +876,27 @@ fn vertical_insert_file_completion_tab_inserts_selected_file() -> Result<()> {
     rile.assert_screen_contains("Insert file: alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_insert_file_empty_input_accepts_selected_file() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("000-source.txt"), "inserted\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("i", b"i")?;
+    rile.assert_screen_contains("000-source.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("inserted")?;
+    rile.assert_screen_contains("start")?;
+
     rile.quit()?;
     Ok(())
 }
