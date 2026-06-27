@@ -284,7 +284,7 @@ fn default_options() -> Vec<OptionSpec> {
             id: OptionId::CompletionMatching,
             name: "completion_matching",
             summary: "Completion matching",
-            doc: "Matching strategy used for command, option, and buffer completion candidates. File prompts use a file-category prefix/partial-completion override when this is `orderless`.",
+            doc: "Matching strategy used for command, option, and buffer completion candidates. File prompts use file-category prefix, partial-completion, and substring matching when this is `orderless`.",
             value_type: OptionType::Choice(COMPLETION_MATCHING_VALUES),
             default: OptionValue::Choice("orderless"),
             valid_values: "orderless, prefix, or substring",

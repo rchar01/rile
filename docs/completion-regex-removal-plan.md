@@ -265,18 +265,15 @@ Validation gate:
 - Simple anchors may look like regex anchors, so docs and tests must be clear
   that only literal anchoring is supported.
 
-## Open Questions
+## Resolved Questions
 
-- [ ] Should `^` and `$` alone be treated as literal characters or as empty
-  anchors? Recommended answer: literal characters, because empty anchors are not
-  useful in completion prompts.
-- [ ] Should `foo.txt` match only literal `foo.txt`, or should existing behavior
-  where regex `.` matched any character be temporarily preserved with special
-  compatibility code? Recommended answer: make `.` literal and document the
-  intentional simplification.
-- [ ] Is full Emacs Orderless regexp-component compatibility required for Rile
-  1.0? Recommended answer: no, unless exact Emacs Orderless compatibility becomes
-  an explicit release goal.
+- [x] `^` and `$` alone are literal characters, not empty anchors, because empty
+  anchors are not useful in completion prompts.
+- [x] `foo.txt` matches literal `foo.txt`; regex `.` compatibility was not
+  preserved with special-case code.
+- [x] Full Emacs Orderless regexp-component compatibility is not required for
+  Rile 1.0 unless exact Emacs Orderless compatibility becomes an explicit release
+  goal.
 
 ## Acceptance Criteria
 
@@ -284,7 +281,8 @@ Validation gate:
 - `src/completion.rs` contains no `regex` crate imports or regex builders.
 - Command, option, and buffer completion still support orderless literal
   components, smart case, negation, force-literal matching, and simple anchors.
-- File completion behavior remains unchanged.
+- File prompts use source-specific matching rather than global orderless command
+  matching; later file-completion alignment added default substring matching.
 - Public docs no longer promise full regular-expression component support.
 - Focused completion tests and `make verify` pass.
 

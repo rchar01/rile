@@ -1,5 +1,16 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	Clean up completion follow-up details.
+
+	* src/completion.rs (file_completion_parts): Return FileCompletionParts
+	directly.
+	(default_file_completion_allows_unordered_file_components): New test.
+	* src/option.rs: Mention file substring matching in completion_matching help.
+	* docs/completion-regex-removal-plan.md: Mark migration questions resolved and
+	remove stale file-completion acceptance wording.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	Make file completion match Emacs-modern substring behavior.
 
 	* src/completion.rs (CompletionSession::refresh_file_candidates): Sort file

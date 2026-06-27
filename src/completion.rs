@@ -393,10 +393,7 @@ impl CompletionSession {
             self.candidates.clear();
             return;
         };
-        let Some(parts) = file_completion_parts(base_dir, input) else {
-            self.candidates.clear();
-            return;
-        };
+        let parts = file_completion_parts(base_dir, input);
         let Ok(entries) = fs::read_dir(&parts.search_dir) else {
             self.candidates.clear();
             return;
@@ -452,7 +449,7 @@ struct FileCompletionParts {
     name_prefix: String,
 }
 
-fn file_completion_parts(base_dir: &Path, input: &str) -> Option<FileCompletionParts> {
+fn file_completion_parts(base_dir: &Path, input: &str) -> FileCompletionParts {
     let (dir_part, name_prefix) = match input.rsplit_once('/') {
         Some((dir, name)) => (format!("{dir}/"), name.to_owned()),
         None => (String::new(), input.to_owned()),
@@ -464,11 +461,11 @@ fn file_completion_parts(base_dir: &Path, input: &str) -> Option<FileCompletionP
     } else {
         base_dir.join(&dir_part)
     };
-    Some(FileCompletionParts {
+    FileCompletionParts {
         search_dir,
         display_prefix: dir_part,
         name_prefix,
-    })
+    }
 }
 
 fn item_matches(matching: CompletionMatching, value: &str, input: &str) -> bool {
@@ -1546,6 +1543,21 @@ mod tests {
         );
 
         session.update("re-md");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("README.md")
+        );
+    }
+
+    #[test]
+    fn default_file_completion_allows_unordered_file_components() {
+        let directory = TestDir::new();
+        fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
+        fs::write(directory.path().join("manual.md"), "manual").expect("fixture should write");
+        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+
+        session.update("md re");
+
         assert_eq!(
             session.selected().map(|candidate| candidate.value.as_str()),
             Some("README.md")
