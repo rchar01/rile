@@ -1,5 +1,27 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	Make command help formatting more Emacs-like.
+
+	* src/editor/help.rs (format_describe_key_help): Use a prose-first key and
+	keymap sentence and share the command-help body.
+	(format_unbound_key_help): Report undefined keys.
+	(format_command_help, append_command_help_body): Use bindings, summary, and
+	documentation prose instead of command metadata fields.
+	(append_command_field): Remove function.
+	* src/editor.rs (describe_key_opens_help_for_complete_binding,
+	describe_key_displays_space_key_as_spc,
+	describe_function_opens_help_for_command,
+	describe_function_completion_selects_command,
+	describe_function_completion_explicit_selection_overrides_exact_name,
+	describe_key_reports_shadowed_lower_priority_bindings): Update tests.
+	(describe_key_opens_help_for_unbound_key): New test.
+	(describe_key_handles_missing_command_metadata): New test.
+	* tests/pty_movement.rs (describe_key_opens_help_for_binding): Update expected
+	command sentence.
+	(describe_function_opens_help_for_command): Assert command summary text.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	Clean up completion follow-up details.
 
 	* src/completion.rs (file_completion_parts): Return FileCompletionParts

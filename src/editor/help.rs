@@ -129,16 +129,20 @@ pub(super) fn format_describe_key_help(
 ) -> String {
     let command = commands.get_by_id(command);
     let name = command.map(|command| command.name).unwrap_or("<unknown>");
+    let source = keymaps
+        .keymap_name(keymap)
+        .map(|keymap_name| format!(" (found in {keymap_name})"))
+        .unwrap_or_default();
     let mut text = format!(
-        "{} runs the command `{}`.\n\n",
+        "{} runs the command {}{}.\n\n",
         format_key_sequence(sequence),
-        name
+        name,
+        source
     );
-    if let Some(keymap_name) = keymaps.keymap_name(keymap) {
-        text.push_str(&format!("It was found in `{keymap_name}`.\n\n"));
-    }
     append_shadowed_key_bindings(&mut text, commands, keymaps, sequence, keymap);
-    text.push_str(&format_command_help(keymaps, command, name));
+    if command.is_some() {
+        append_command_help_body(&mut text, keymaps, command);
+    }
     text
 }
 
@@ -371,10 +375,7 @@ fn yes_no(value: bool) -> &'static str {
 }
 
 pub(super) fn format_unbound_key_help(sequence: &[KeyEvent]) -> String {
-    format!(
-        "{} is not bound to any command.\n",
-        format_key_sequence(sequence)
-    )
+    format!("{} is undefined.\n", format_key_sequence(sequence))
 }
 
 pub(super) fn format_unbound_key_message(sequence: &[KeyEvent]) -> String {
@@ -390,37 +391,36 @@ fn format_command_help(
     name: &str,
 ) -> String {
     let mut text = match command {
-        Some(command) => {
-            let mut text = format!("{} is an interactive command.\n\n", command.name);
-            append_command_field(&mut text, "Name", command.name);
-            append_command_field(&mut text, "Category", command.category.label());
-            append_command_field(&mut text, "Summary", command.summary);
-            append_command_field(
-                &mut text,
-                "Interactive",
-                if command.interactive { "yes" } else { "no" },
-            );
-            text
-        }
-        None => format!("{} is not a known interactive command.\n", name),
+        Some(command) => format!("{} is an interactive command.\n\n", command.name),
+        None => return format!("{} is not a known interactive command.\n", name),
     };
+    append_command_help_body(&mut text, keymaps, command);
+    text
+}
+
+fn append_command_help_body(
+    text: &mut String,
+    keymaps: &KeyMapStack<'_>,
+    command: Option<CommandSpec>,
+) {
     let bindings = command
         .map(|command| keymaps.bindings_for_command(command.command))
         .unwrap_or_default();
     if bindings.is_empty() {
-        text.push_str("It is not bound to any key.\n");
+        text.push_str("It is not bound to any key.\n\n");
     } else {
         let keys = bindings
             .iter()
             .map(|binding| format_key_sequence(&binding.binding.sequence))
             .collect::<Vec<_>>()
             .join(", ");
-        text.push_str(&format!("It is bound to {}.\n", keys));
+        text.push_str(&format!("It is bound to {}.\n\n", keys));
     }
     if let Some(command) = command {
-        append_wrapped_prose(&mut text, command.doc);
+        text.push_str(command.summary);
+        text.push_str("\n\n");
+        append_wrapped_prose(text, command.doc);
     }
-    text
 }
 
 fn append_help_heading(text: &mut String, heading: &str) {
@@ -435,10 +435,6 @@ fn append_key_table_header(text: &mut String) {
 
 fn append_key_table_row(text: &mut String, key: &str, binding: &str, description: &str) {
     text.push_str(&format!("{key:<15} {binding:<30} {description}\n"));
-}
-
-fn append_command_field(text: &mut String, label: &str, value: &str) {
-    text.push_str(&format!("{label}: {value}\n"));
 }
 
 fn append_option_field(text: &mut String, label: &str, value: impl std::fmt::Display) {

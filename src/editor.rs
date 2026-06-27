@@ -8955,10 +8955,10 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(editor.current_buffer_name(), "*Help*");
         let help = editor.document().buffer().serialize();
-        assert!(help.contains("C-x C-f runs the command `find-file`."));
-        assert!(help.contains("find-file is an interactive command."));
+        assert!(help.starts_with("C-x C-f runs the command find-file (found in global-map)."));
+        assert!(help.contains("\n\nIt is bound to C-x C-f.\n\n"));
+        assert!(help.contains("Open file by path\n\n"));
         assert!(help.contains("Prompt for a file path and open it for editing."));
-        assert!(help.contains("It is bound to C-x C-f."));
     }
 
     #[test]
@@ -8979,7 +8979,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("describe-key should finish");
 
         let help = editor.document().buffer().serialize();
-        assert!(help.contains("C-x SPC runs the command `rectangle-mark-mode`."));
+        assert!(help.contains("C-x SPC runs the command rectangle-mark-mode"));
         assert!(help.contains("It is bound to C-x SPC."));
     }
 
@@ -9057,6 +9057,27 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn describe_key_opens_help_for_unbound_key() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('h'))
+            .expect("help prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("k".to_owned()))
+            .expect("describe-key should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('z'))
+            .expect("describe-key should finish");
+
+        assert_eq!(editor.current_buffer_name(), "*Help*");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "C-z is undefined.\n"
+        );
+    }
+
+    #[test]
     fn describe_key_briefly_cancel_clears_pending_sequence() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -9099,13 +9120,10 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(editor.current_buffer_name(), "*Help*");
         let help = editor.document().buffer().serialize();
-        assert!(help.contains("find-file is an interactive command."));
-        assert!(help.contains("Name: find-file"));
-        assert!(help.contains("Category: Files"));
-        assert!(help.contains("Summary: Open file by path"));
-        assert!(help.contains("Interactive: yes"));
+        assert!(help.starts_with("find-file is an interactive command.\n\n"));
+        assert!(help.contains("It is bound to C-x C-f.\n\n"));
+        assert!(help.contains("Open file by path\n\n"));
         assert!(help.contains("Prompt for a file path and open it for editing."));
-        assert!(help.contains("It is bound to C-x C-f."));
     }
 
     #[test]
@@ -9130,7 +9148,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .document()
                 .buffer()
                 .serialize()
-                .contains("find-file is an interactive command.")
+                .starts_with("find-file is an interactive command.")
         );
     }
 
@@ -9156,7 +9174,7 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         let help = editor.document().buffer().serialize();
         assert!(help.contains("find-file-read-only is an interactive command."));
-        assert!(help.contains("Name: find-file-read-only"));
+        assert!(help.contains("Open file read-only by path"));
     }
 
     #[test]
@@ -9563,9 +9581,29 @@ M-g g           goto-line                      Go to line or line:column\n"
             Command::OtherWindow,
         );
 
-        assert!(help.contains("It was found in `special-buffer-map`."));
+        assert!(help.starts_with("q runs the command other-window (found in special-buffer-map)."));
         assert!(help.contains("Shadowed lower-priority bindings:\n- global-map: forward-char"));
-        assert!(help.contains("Summary: Select next window"));
+        assert!(help.contains("Select next window\n\n"));
+    }
+
+    #[test]
+    fn describe_key_handles_missing_command_metadata() {
+        let global = KeyMap::named(
+            KeyMapId::Global,
+            "global-map",
+            [KeyBinding::new([KeyEvent::Ctrl('x')], Command::ForwardChar)],
+        );
+        let stack = KeyMapStack::global(&global);
+        let help = format_describe_key_help(
+            &CommandRegistry::new([]),
+            &stack,
+            &[KeyEvent::Ctrl('x')],
+            KeyMapId::Global,
+            Command::ForwardChar,
+        );
+
+        assert!(help.starts_with("C-x runs the command <unknown> (found in global-map)."));
+        assert!(!help.contains("It is not bound to any key."));
     }
 
     #[test]
@@ -9656,8 +9694,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("describe-key should describe local q");
 
         let help = editor.document().buffer().serialize();
-        assert!(help.contains("q runs the command `quit-help-window`."));
-        assert!(help.contains("It was found in `help-mode-map`."));
+        assert!(help.contains("q runs the command quit-help-window (found in help-mode-map)."));
         assert!(help.contains("It is bound to q."));
     }
 
