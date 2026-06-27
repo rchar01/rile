@@ -1,3 +1,10 @@
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
+	* src/completion.rs (orderless_completion_matches_short_components_in_any_order,
+	orderless_completion_preserves_escaped_space_components,
+	orderless_completion_force_literal_preserves_anchor_text): New tests.
+	* docs/completion-regex-removal-plan.md: New file.
+
 2026-06-26  Robert Charusta  <rch-public@posteo.net>
 
 	* src/editor.rs: Recenter horizontally at the default Emacs scroll margin.

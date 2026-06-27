@@ -920,6 +920,63 @@ mod tests {
     }
 
     #[test]
+    fn orderless_completion_matches_short_components_in_any_order() {
+        let mut session = CompletionSession::buffers(
+            [
+                "readme.md".to_owned(),
+                "reader.org".to_owned(),
+                "manual.md".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("re md");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["readme.md"]);
+
+        session.update("md re");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["readme.md"]);
+    }
+
+    #[test]
+    fn orderless_completion_preserves_escaped_space_components() {
+        let mut session = CompletionSession::buffers(
+            [
+                "alpha beta final.txt".to_owned(),
+                "alpha beta draft.txt".to_owned(),
+                "alpha-gamma beta final.txt".to_owned(),
+                "alpha.txt".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update(r"alpha\ beta final");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["alpha beta final.txt"]);
+
+        session.update(r"final alpha\ beta");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["alpha beta final.txt"]);
+    }
+
+    #[test]
     fn orderless_completion_uses_smart_case() {
         let mut session = CompletionSession::buffers(
             ["find-file".to_owned(), "Find-Function".to_owned()],
@@ -1104,6 +1161,35 @@ mod tests {
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(values, vec!["find-file"]);
+    }
+
+    #[test]
+    fn orderless_completion_force_literal_preserves_anchor_text() {
+        let mut session = CompletionSession::buffers(
+            [
+                "^find".to_owned(),
+                "find-file".to_owned(),
+                "file$".to_owned(),
+                "project-file".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("=^find");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["^find"]);
+
+        session.update("=file$");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["file$"]);
     }
 
     #[test]
