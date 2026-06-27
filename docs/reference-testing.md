@@ -299,10 +299,10 @@ prompts:
 - command, option, and buffer prompts use orderless component matching by
   default, including smart case, simple literal anchors, `!foo` negation, and
   `=foo` literal components;
-- file prompts use Emacs file-category prefix/basic partial-completion matching
-  by default, add Rile smart-case literal matching, still preserve no-match raw
-  missing-file input, and descend into directories after Tab insertion, exact
-  input, or explicit selection;
+- file prompts use Emacs file-category matching by default, including prefix,
+  word-component partial completion, substring matching, smart case, raw `M-RET`
+  input, and directory descent after Tab insertion, exact input, or explicit
+  selection;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
@@ -315,10 +315,8 @@ Rile's PTY tests because interactive VHS space input can be misleading for
 
 The Emacs and Rile `find-file-completion-modern` captures cover file prompt
 prefix filtering, file-category word-component partial-completion matching,
-selected-candidate Tab insertion, selected Enter over exact input, directory
-descent, exact files, and no-match raw missing-file input. Rile's matching
-capture also records arbitrary-substring input so reviewers can see that file
-prompts do not inherit global Orderless matching.
+substring matching, selected-candidate Tab insertion, selected Enter over exact
+input, directory descent, exact files, and raw `M-RET` missing-file input.
 
 The Emacs and Rile `minibuffer-navigation-modern` captures focus on
 minibuffer movement: history with `M-p`/`M-n`, line candidate movement with

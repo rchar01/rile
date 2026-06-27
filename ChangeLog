@@ -1,5 +1,29 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	Make file completion match Emacs-modern substring behavior.
+
+	* src/completion.rs (CompletionSession::refresh_file_candidates): Sort file
+	candidates by match score before directory and name ordering.
+	(file_match_score, split_file_completion_components,
+	file_word_components_match, file_substring_components_match, smart_case_eq):
+	New functions.
+	(file_category_matches, partial_completion_matches): Remove functions.
+	(orderless_completion_uses_space_components_not_hyphen_shorthand,
+	default_file_completion_uses_substring_matching): New tests.
+	(default_file_completion_uses_partial_completion): Cover space-separated and
+	hyphen-separated file components.
+	* tests/pty_completion.rs
+	(vertical_find_file_completion_accepts_substring_match,
+	vertical_find_file_completion_matches_space_components): New tests.
+	(vertical_find_file_completion_keeps_raw_arbitrary_substring_input): Remove
+	test.
+	* README.md, NEWS, docs/development.md, docs/reference-testing.md,
+	docs/completion-regex-removal-plan.md, tools/reference/rile/README.md,
+	tools/reference/rile/scenarios/find-file-completion-modern.scenario: Document
+	file prefix, word-component, and substring completion.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	Remove regex-backed completion matching.
 
 	* Cargo.toml: Remove regex dependency.

@@ -22,8 +22,7 @@ semantics unless the project chooses to keep the dependency.
   small string matcher.
 - Preserve command, option, and buffer orderless completion semantics that do
   not require a regular-expression engine.
-- Preserve file completion behavior, including the file-category prefix/basic
-  partial-completion override.
+- Preserve file completion behavior, including the file-category override.
 - Update unit tests, PTY tests, README/user docs, development docs, reference
   testing notes, `NEWS`, and `ChangeLog` to match the behavior change.
 - Remove `regex = "1"` from runtime dependencies in `Cargo.toml` and refresh
@@ -43,8 +42,8 @@ semantics unless the project chooses to keep the dependency.
 
 - Runtime `regex` use is isolated to `src/completion.rs`.
 - `regex` is currently used only for non-file orderless completion components.
-- File prompts already override global orderless matching with
-  file-category-style prefix/basic partial-completion behavior.
+- File prompts already override global orderless matching with file-category
+  behavior.
 - Current docs advertise regular-expression components in `README.md`,
   `docs/development.md`, and `docs/reference-testing.md`.
 - Current tests cover regex behavior in `src/completion.rs` and
@@ -83,9 +82,10 @@ Preserve these behaviors:
 
 Preserve these file-prompt behaviors:
 
-- File prompts continue to use prefix/basic partial-completion matching instead
-  of global orderless component matching.
-- Raw missing-file input continues to be accepted for file prompts.
+- File prompts continue to use file-category matching instead of global orderless
+  command-style matching.
+- Raw missing-file input continues to be accepted for file prompts through
+  `M-RET` when a candidate is selected.
 - Directory candidates continue to descend after Tab insertion, exact input, or
   explicit selection.
 - Smart-case matching continues to apply to file prompts.

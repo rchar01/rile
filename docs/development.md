@@ -236,22 +236,21 @@ prompts use Vertico-style raw exit:
 `M-RET` submits the raw minibuffer input even when a completion candidate is
 selected.
 File completion resolves relative candidates against the current buffer's
-directory when available, accepts selected existing candidates on Enter, keeps
-no-match raw missing-file input working, descends into selected directories, and
-opens existing files by exact input when the selected candidate has not been
-moved explicitly. Directory candidates descend after Tab insertion, exact input,
-or explicit selection so directory-first substring matches do not hijack raw
-missing-file input. The default `completion_matching = "orderless"` uses
+directory when available, accepts selected existing candidates on Enter,
+descends into selected directories, opens exact typed existing files, and uses
+`M-RET` to keep raw missing-file input available when a completion candidate is
+selected. Directory candidates descend after Tab insertion, exact input, or
+explicit selection. The default `completion_matching = "orderless"` uses
 component-based matching for non-file prompts: every space-separated component
 must match in any order, lowercase components match case-insensitively, `^foo`,
 `foo$`, and `^foo$` act as simple literal anchors, and other regexp
 metacharacters are literal text. `!foo` negates an orderless component, `=foo`
 forces literal matching, and `!=foo` combines both forms for negated literal
 matching.
-File prompts override the global orderless default with Emacs-style
-file-category prefix/basic partial-completion matching. Rile's literal prefix,
-substring, and file-category matching also use smart case: lowercase input
-matches case-insensitively, while uppercase input is case-sensitive.
+File prompts override the global orderless default with Emacs-style file-category
+matching: literal prefixes, word-component partial completion, and substring
+matches. Rile's file matching also uses smart case: lowercase input matches
+case-insensitively, while uppercase input is case-sensitive.
 C-x b empty input switches to the default previous buffer, while C-x k empty
 input kills the default current buffer. The default `completion_style =
 "vertical"` reserves rows above the minibuffer and shows candidate annotations.

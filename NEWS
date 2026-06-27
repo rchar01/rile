@@ -44,8 +44,8 @@ Editing features:
   C-u M-| to replace the region with successful stdout.
 * Open files through C-x C-f with file-name completion, selected-candidate
   insertion on Tab, selected existing-path acceptance on Enter, directory
-  descent after Tab, exact input, or explicit selection, and no-match raw
-  missing-file input.
+  descent after Tab, exact input, or explicit selection, substring candidate
+  matching, and raw missing-file input through M-RET.
 * Insert file contents at point with C-x i and file-name completion, including
   selected existing-path acceptance on Enter.
 * Open files read-only through C-x C-r with file-name completion, including
@@ -101,14 +101,13 @@ Interface features:
   and M-RET submits raw minibuffer input.
   Command, option, and buffer matching defaults to modern orderless-style
   behavior: space-separated components must all match in any order, lowercase
-  components match case-insensitively, valid regular expressions are accepted,
-  invalid regular expressions fall back to literal matching, `!foo` negates a
-  component, and `=foo` forces literal matching.  File completion uses
-  Emacs-style file-category prefix/basic partial-completion matching by default
-  instead of orderless, with smart-case literal matching.  The configurable
-  completion matching strategies are `orderless`, `prefix`, and `substring`;
-  the earlier experimental `basic-substring` value has been removed before the
-  first release.
+  components match case-insensitively, simple literal anchors are accepted,
+  `!foo` negates a component, and `=foo` forces literal matching.  File
+  completion uses Emacs-style file-category prefix, word-component, and
+  substring matching by default instead of orderless, with smart-case literal
+  matching.  The configurable completion matching strategies are `orderless`,
+  `prefix`, and `substring`; the earlier experimental `basic-substring` value
+  has been removed before the first release.
   Command completions show the first known key binding when available.
 * Complete C-h f command names with the shared command-completion source and
   C-h v option names with the option registry.

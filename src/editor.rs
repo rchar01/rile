@@ -6600,13 +6600,12 @@ mod tests {
     }
 
     #[test]
-    fn find_file_completion_keeps_raw_non_prefix_input_by_default() {
+    fn find_file_completion_accepts_default_substring_match() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
-        let missing = directory.path().join("ote");
+        let alpha = directory.path().join("alpha-note.txt");
         fs::write(&start, "start").expect("start fixture should write");
-        fs::write(directory.path().join("alpha-note.txt"), "alpha")
-            .expect("alpha fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
         let mut editor = Editor::new(document);
 
@@ -6621,10 +6620,10 @@ mod tests {
             .expect("prompt input should update completion");
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
-            .expect("enter should open raw non-prefix input");
+            .expect("enter should accept selected substring match");
 
-        assert_eq!(editor.document().path(), Some(missing.as_path()));
-        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.document().path(), Some(alpha.as_path()));
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
     }
 
     #[test]

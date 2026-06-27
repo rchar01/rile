@@ -186,10 +186,11 @@ minibuffer text instead; for `C-x C-f`, this opens or creates the typed path eve
 when a completion candidate is selected. The default `orderless` matching for
 command, option, and buffer prompts splits input on spaces and requires every
 component to match in any order. File prompts follow Emacs file-category behavior
-instead: they use prefix/basic partial-completion matching by default, preserve
-no-match missing-file input, and keep directory descent separate from orderless
-command matching. Lowercase completion input is matched case-insensitively, while
-uppercase input is case-sensitive, including file-name completion.
+instead: they use prefix, word-component, and substring matching by default, keep
+directory descent separate from orderless command matching, and use `M-RET` for
+raw missing-file input when a candidate is selected. Lowercase completion input
+is matched case-insensitively, while uppercase input is case-sensitive,
+including file-name completion.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 
@@ -197,12 +198,13 @@ Current completion matching supports these forms:
 
 | Query component | Status | Meaning |
 | --- | --- | --- |
-| `foo` | supported | Literal substring for `orderless`; prefix/basic file matching for files. Lowercase is case-insensitive, uppercase is case-sensitive. |
+| `foo` | supported | Literal substring for `orderless`; prefix, word-component, or substring matching for files. Lowercase is case-insensitive, uppercase is case-sensitive. |
 | `foo bar` | supported | All `orderless` components must match in any order. |
 | `^foo` | supported | Simple literal anchor; matches the beginning of a candidate. |
 | `foo$` | supported | Simple literal anchor; matches the end of a candidate. |
 | `^foo$` | supported | Simple literal anchor; matches the whole candidate. |
 | `f-f` | supported for files | File partial-completion word-prefix matching, such as `find-file`-style components in file names. |
+| `tice` | supported for files | File substring matching, such as `NOTICE.md`. |
 | `!foo` | supported | Negated `orderless` component; rejects candidates matching `foo`. |
 | `=foo` | supported | Force-literal `orderless` component; treats `^` and `$` as literal text. Combine as `!=foo` for negated literal matching. |
 | `foo|bar` | not supported | Full regular-expression syntax is not implemented; metacharacters other than simple anchors are literal text. |

@@ -414,32 +414,34 @@ impl CompletionSession {
             .collect::<Vec<_>>();
         let use_file_category_matching = self.config.matching == CompletionMatching::Orderless;
 
-        let mut candidates = entries
+        let mut scored_candidates = entries
             .into_iter()
             .filter_map(|(name, file_type)| {
-                let matches = if use_file_category_matching {
-                    file_category_matches(&name, &parts.name_prefix)
+                let score = if use_file_category_matching {
+                    file_match_score(&name, &parts.name_prefix)
                 } else {
-                    item_matches(self.config.matching, &name, &parts.name_prefix)
+                    item_match_score(self.config.matching, &name, &parts.name_prefix)
                 };
-                if !matches {
-                    return None;
-                }
+                let score = score?;
                 let value = format!("{}{}", parts.display_prefix, name);
-                if file_type.is_dir() {
-                    Some(CompletionCandidate::directory(format!("{value}/")))
+                let candidate = if file_type.is_dir() {
+                    CompletionCandidate::directory(format!("{value}/"))
                 } else {
-                    Some(CompletionCandidate::file(value))
-                }
+                    CompletionCandidate::file(value)
+                };
+                Some((candidate, score))
             })
             .collect::<Vec<_>>();
-        candidates.sort_by(|left, right| {
-            right
-                .is_directory()
-                .cmp(&left.is_directory())
+        scored_candidates.sort_by(|(left, left_score), (right, right_score)| {
+            left_score
+                .cmp(right_score)
+                .then_with(|| right.is_directory().cmp(&left.is_directory()))
                 .then_with(|| left.value.cmp(&right.value))
         });
-        self.candidates = candidates;
+        self.candidates = scored_candidates
+            .into_iter()
+            .map(|(candidate, _)| candidate)
+            .collect();
     }
 }
 
@@ -473,25 +475,67 @@ fn item_matches(matching: CompletionMatching, value: &str, input: &str) -> bool 
     item_match_score(matching, value, input).is_some()
 }
 
-fn file_category_matches(name: &str, input: &str) -> bool {
-    smart_case_starts_with(name, input) || partial_completion_matches(name, input)
+fn file_match_score(name: &str, input: &str) -> Option<MatchScore> {
+    if input.is_empty() {
+        return Some(MatchScore {
+            quality: MatchQuality::Prefix,
+            component_count: 0,
+        });
+    }
+    if smart_case_eq(name, input) {
+        return Some(MatchScore {
+            quality: MatchQuality::Exact,
+            component_count: 1,
+        });
+    }
+    if smart_case_starts_with(name, input) {
+        return Some(MatchScore {
+            quality: MatchQuality::Prefix,
+            component_count: 1,
+        });
+    }
+    let components = split_file_completion_components(input);
+    if components.is_empty() {
+        return Some(MatchScore {
+            quality: MatchQuality::Prefix,
+            component_count: 0,
+        });
+    }
+    if file_word_components_match(name, &components) {
+        return Some(MatchScore {
+            quality: MatchQuality::WordBoundary,
+            component_count: components.len(),
+        });
+    }
+    file_substring_components_match(name, &components).then_some(MatchScore {
+        quality: MatchQuality::Substring,
+        component_count: components.len(),
+    })
 }
 
-fn partial_completion_matches(name: &str, input: &str) -> bool {
-    let mut components = input.split('-').filter(|component| !component.is_empty());
-    let Some(first) = components.next() else {
-        return true;
-    };
-    let mut words = name.split(['-', '_', '.', ' ']);
-    if !words.any(|word| smart_case_starts_with(word, first)) {
-        return false;
-    }
-    for component in components {
-        if !words.any(|word| smart_case_starts_with(word, component)) {
-            return false;
-        }
-    }
-    true
+fn split_file_completion_components(input: &str) -> Vec<&str> {
+    input
+        .split(|character: char| character == '-' || character.is_ascii_whitespace())
+        .filter(|component| !component.is_empty())
+        .collect()
+}
+
+fn file_word_components_match(name: &str, components: &[&str]) -> bool {
+    let words = name
+        .split(['-', '_', '.', ' '])
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>();
+    components.iter().all(|component| {
+        words
+            .iter()
+            .any(|word| smart_case_starts_with(word, component))
+    })
+}
+
+fn file_substring_components_match(name: &str, components: &[&str]) -> bool {
+    components
+        .iter()
+        .all(|component| smart_case_contains(name, component))
 }
 
 fn item_match_score(matching: CompletionMatching, value: &str, input: &str) -> Option<MatchScore> {
@@ -777,6 +821,10 @@ fn is_smart_case_sensitive(component: &str) -> bool {
     component.chars().any(char::is_uppercase)
 }
 
+fn smart_case_eq(value: &str, component: &str) -> bool {
+    smart_case_eq_with_mode(value, component, is_smart_case_sensitive(component))
+}
+
 fn smart_case_eq_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
     if case_sensitive {
         value == component
@@ -1027,6 +1075,40 @@ mod tests {
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
         assert_eq!(values, vec!["readme.md"]);
+    }
+
+    #[test]
+    fn orderless_completion_uses_space_components_not_hyphen_shorthand() {
+        let mut session = CompletionSession::buffers(
+            [
+                "pass-coffin-open-timer".to_owned(),
+                "pass-coffin-close".to_owned(),
+                "passphrase-cache".to_owned(),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.update("p c o t");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["pass-coffin-open-timer"]);
+
+        session.update("pass cof");
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| item.candidate.value.as_str().to_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(values, vec!["pass-coffin-close", "pass-coffin-open-timer"]);
+
+        session.update("p-c-o-t");
+        assert_eq!(session.match_count(), 0);
+
+        session.update("passcof");
+        assert_eq!(session.match_count(), 0);
     }
 
     #[test]
@@ -1414,20 +1496,20 @@ mod tests {
     }
 
     #[test]
-    fn default_file_completion_does_not_use_arbitrary_substring() {
+    fn default_file_completion_uses_substring_matching() {
         let directory = TestDir::new();
-        fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
-        fs::write(directory.path().join("beta-note.txt"), "beta").expect("fixture should write");
+        fs::write(directory.path().join("NOTICE.md"), "notice").expect("fixture should write");
+        fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
         let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
 
-        session.update("ote");
+        session.update("tice");
 
         let values = session
             .view_items()
             .into_iter()
             .map(|item| item.candidate.value.as_str().to_owned())
             .collect::<Vec<_>>();
-        assert!(values.is_empty());
+        assert_eq!(values, vec!["NOTICE.md"]);
     }
 
     #[test]
@@ -1435,6 +1517,7 @@ mod tests {
         let directory = TestDir::new();
         fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
         fs::write(directory.path().join("alphabet.txt"), "alphabet").expect("fixture should write");
+        fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
         let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
 
         session.update("a-n");
@@ -1448,6 +1531,24 @@ mod tests {
         assert_eq!(
             session.selected().map(|candidate| candidate.value.as_str()),
             Some("alpha-note.txt")
+        );
+
+        session.update("re me");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("README.md")
+        );
+
+        session.update("me re");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("README.md")
+        );
+
+        session.update("re-md");
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("README.md")
         );
     }
 

@@ -126,7 +126,7 @@ Ctrl+F
 Sleep 500ms
 Type "ote"
 Sleep 500ms
-Screenshot {{FRAME_DIR}}/18-after-arbitrary-substring-input.png
+Screenshot {{FRAME_DIR}}/18-after-substring-input.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms

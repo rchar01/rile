@@ -525,19 +525,48 @@ fn vertical_find_file_completion_uses_smart_case_and_meta_enter_raw_input() -> R
 }
 
 #[test]
-fn vertical_find_file_completion_keeps_raw_arbitrary_substring_input() -> Result<()> {
+fn vertical_find_file_completion_accepts_substring_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");
     fs::write(&start, "start\n")?;
-    fs::write(directory.path().join("project-note.txt"), "project note\n")?;
+    fs::write(directory.path().join("NOTICE.md"), "notice\n")?;
     let mut rile = RilePty::spawn(&start, 14, 100)?;
 
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
-    rile.send("ote", b"ote")?;
+    rile.send("tice", b"tice")?;
+    rile.assert_screen_contains("NOTICE.md")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_status_contains("ACTIVE ote")?;
+    rile.assert_screen_contains("notice")?;
+    rile.assert_status_contains("ACTIVE NOTICE.md")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("tice", b"tice")?;
+    rile.send("M-RET", keys::meta_enter())?;
+
+    rile.assert_status_contains("ACTIVE tice")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_completion_matches_space_components() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(directory.path().join("README.md"), "readme\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("re me", b"re me")?;
+    rile.assert_screen_contains("README.md")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("readme")?;
+    rile.assert_status_contains("ACTIVE README.md")?;
 
     rile.quit()?;
     Ok(())
