@@ -1,5 +1,37 @@
 2026-06-28  Robert Charusta  <rch-public@posteo.net>
 
+	Show file prompt base directories.
+
+	* src/editor.rs (start_find_file, start_find_file_read_only,
+	start_insert_file): Initialize file prompt input to the current buffer
+	directory.
+	(file_prompt_base_input): New function.
+	(find_file_completion_resolves_relative_paths_from_current_buffer_directory):
+	Assert visible prompt base input.
+	* src/terminal/mod.rs (minibuffer_visible_text_and_cursor,
+	raw_minibuffer_cursor_column, text_from_display_column): New functions.
+	(draw_minibuffer, minibuffer_cursor_column): Clip long prompts from the left
+	when needed to keep the prompt cursor visible.
+	(text_from_display_column_keeps_prompt_tail): New test.
+	* tests/pty_completion.rs
+	(vertical_find_file_long_base_path_keeps_prompt_tail_visible): New test.
+	* tools/reference/emacs/scenarios/find-file-long-path-core.scenario: New
+	scenario.
+	* tools/reference/emacs/scenarios/find-file-completion-modern.scenario:
+	Add long-path prompt frames.
+	* tools/reference/rile/scenarios/find-file-completion-modern.scenario:
+	Likewise.
+	* tools/reference/zile/scenarios/find-file-completion.scenario: Likewise.
+	* README.md: Document visible file prompt bases.
+	* NEWS: Likewise.
+	* docs/development.md: Likewise.
+	* docs/reference-testing.md: Update reference notes.
+	* tools/reference/emacs/README.md: List long-path scenario.
+	* tools/reference/rile/README.md: Document long-path frames.
+	* tools/reference/zile/README.md: Likewise.
+
+2026-06-28  Robert Charusta  <rch-public@posteo.net>
+
 	Add minibuffer prompt delete and kill commands.
 
 	* src/input.rs (KeyEvent): Add CtrlSpecial variant.

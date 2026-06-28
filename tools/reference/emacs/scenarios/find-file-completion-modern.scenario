@@ -13,12 +13,15 @@ setup_reference_files() {
   local capture_dir=$1
   mkdir -p "$capture_dir/find-file-completion-modern"
   mkdir -p "$capture_dir/find-file-completion-modern/nested-dir"
+  mkdir -p "$capture_dir/find-file-completion-modern/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name"
   printf '%s\n' 'alpha note' > "$capture_dir/find-file-completion-modern/alpha-note.txt"
   printf '%s\n' 'alpha note extra' > "$capture_dir/find-file-completion-modern/alpha-note.txt-extra"
   printf '%s\n' 'alphabet note' > "$capture_dir/find-file-completion-modern/alphabet-note.txt"
   printf '%s\n' 'beta note' > "$capture_dir/find-file-completion-modern/beta-note.txt"
   printf '%s\n' 'nested file note' > "$capture_dir/find-file-completion-modern/nested-file.txt"
   printf '%s\n' 'inside nested directory' > "$capture_dir/find-file-completion-modern/nested-dir/inside.txt"
+  printf '%s\n' 'long path start' > "$capture_dir/find-file-completion-modern/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/start-long-path.txt"
+  printf '%s\n' 'long path target' > "$capture_dir/find-file-completion-modern/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/target-long-name.txt"
 }
 
 vhs_steps() {
@@ -119,6 +122,29 @@ Sleep 500ms
 Tab
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/17-after-partial-file-tab.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Ctrl+A
+Ctrl+K
+Sleep 500ms
+Type "/workspace/{{FRAME_DIR}}/../find-file-completion-modern/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/start-long-path.txt"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/18-after-long-path-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/19-long-base-prompt.png
+Sleep 500ms
+Type "target-long-name.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/20-long-base-after-target.png
 Sleep 500ms
 Ctrl+G
 Sleep 500ms

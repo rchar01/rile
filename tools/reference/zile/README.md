@@ -42,7 +42,8 @@ Baseline inspection scenarios:
   behavior on long lines.
 - `long-document-scroll`: page scrolling and position text.
 - `m-x-completion`: command prompt completion after Tab.
-- `find-file-completion`: file prompt completion after Tab.
+- `find-file-completion`: file prompt completion after Tab, including long
+  current-directory prompt display.
 - `incremental-search-wrap`: incremental search wrapping behavior.
 - `insert-file`: `C-x i` insert-file behavior.
 - `quoted-insert`: `C-q` quoted-insert behavior.

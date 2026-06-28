@@ -11,10 +11,13 @@ FIXTURE_CONTENT=$'file completion fixture\n'
 setup_reference_files() {
   local capture_dir=$1
   mkdir -p "$capture_dir/notes" "$capture_dir/src"
+  mkdir -p "$capture_dir/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name"
   printf '%s\n' 'alpha note' > "$capture_dir/notes/alpha-note.txt"
   printf '%s\n' 'alphabet note' > "$capture_dir/notes/alphabet-note.txt"
   printf '%s\n' 'beta note' > "$capture_dir/notes/beta-note.txt"
   printf '%s\n' 'source file' > "$capture_dir/src/main.rs"
+  printf '%s\n' 'long path start' > "$capture_dir/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/start-long-path.txt"
+  printf '%s\n' 'long path target' > "$capture_dir/very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/target-long-name.txt"
 }
 
 vhs_steps() {
@@ -43,6 +46,29 @@ Sleep 500ms
 Ctrl+G
 Sleep 500ms
 Screenshot {{FRAME_DIR}}/05-after-cancel.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Ctrl+A
+Ctrl+K
+Sleep 500ms
+Type "/workspace/{{FRAME_DIR}}/../very-long-project-directory-name/nested-editor-fixtures/current-buffer-directory-with-long-name/start-long-path.txt"
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-long-path-open.png
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-long-base-prompt.png
+Sleep 500ms
+Type "target-long-name.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-long-base-after-target.png
+Sleep 500ms
+Ctrl+G
 Sleep 500ms
 Ctrl+X
 Ctrl+C

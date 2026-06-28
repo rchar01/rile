@@ -304,9 +304,10 @@ prompts:
   default, including smart case, simple literal anchors, `!foo` negation, and
   `=foo` literal components;
 - file prompts use Emacs file-category matching by default, including prefix,
-  word-component partial completion, substring matching, smart case, raw `M-RET`
-  input, and directory descent after Tab insertion, exact input, explicit
-  selection, empty input, or a typed prefix of the selected directory;
+   word-component partial completion, substring matching, smart case, raw `M-RET`
+  input, visible editable current-directory bases, long-path prompt-tail display,
+  and directory descent after Tab insertion, exact input, explicit selection, or a
+  typed prefix of the selected directory;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 
@@ -320,7 +321,10 @@ Rile's PTY tests because interactive VHS space input can be misleading for
 The Emacs and Rile `find-file-completion-modern` captures cover file prompt
 prefix filtering, file-category word-component partial-completion matching,
 substring matching, selected-candidate Tab insertion, selected Enter over exact
-input, directory descent, exact files, and raw `M-RET` missing-file input.
+input, directory descent, exact files, raw `M-RET` missing-file input, and
+long-current-directory prompt display. The Zile `find-file-completion` capture
+and Emacs `find-file-long-path-core` capture also include long-path prompt
+frames for comparison with non-Vertico prompt rendering.
 
 The Emacs and Rile `minibuffer-navigation-modern` captures focus on
 minibuffer movement: history with `M-p`/`M-n`, line candidate movement with
@@ -332,11 +336,10 @@ the user-visible mechanics it intentionally implements: selected-candidate
 movement, Tab insertion, selected Enter behavior, Orderless-style command
 matching, and file-category partial completion instead of global Orderless file
 matching. The captures also show intentional display differences. Emacs modern
-has a much larger command universe, richer Marginalia file metadata, and longer
-absolute file prompts; Rile shows its smaller command registry, simpler
-annotations, and compact file prompts. Treat those as acceptable product-scope
-differences unless a future feature explicitly targets richer annotations or a
-larger command surface.
+has a much larger command universe and richer Marginalia file metadata; Rile
+shows its smaller command registry and simpler annotations. Treat those as
+acceptable product-scope differences unless a future feature explicitly targets
+richer annotations or a larger command surface.
 
 ## Kill Buffer Completion Review Notes
 

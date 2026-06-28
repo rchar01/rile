@@ -240,12 +240,14 @@ to input bounds, `C-f`/Right and `C-b`/Left move by grapheme, `M-f` and `M-b`
 move by word, insertion occurs at point, Backspace deletes before point, and
 `C-d`/Delete deletes after point. `C-k`, `M-d`, `M-Backspace`, and unambiguous
 CSI-u `C-Backspace` kill prompt text into the normal kill ring.
-File completion resolves relative candidates against the current buffer's
-directory when available, accepts selected existing candidates on Enter,
-descends into selected directories, opens exact typed existing files, and uses
-`M-RET` to keep raw missing-file input available when a completion candidate is
-selected. Directory candidates descend after Tab insertion, exact input,
-explicit selection, empty input, or a typed prefix of the selected directory;
+File prompts initialize the editable minibuffer input to the current buffer's
+directory when available, making the base path visible before typing. Long
+minibuffer prompt rendering follows the prompt cursor so the tail of deep paths
+and filenames stays visible. File completion accepts selected existing candidates
+on Enter, descends into selected directories, opens exact typed existing files,
+and uses `M-RET` to keep raw missing-file input available when a completion
+candidate is selected. Directory candidates descend after Tab insertion, exact
+input, explicit selection, or a typed prefix of the selected directory;
 substring-only directory matches keep the raw typed path. The default
 `completion_matching = "orderless"` uses
 component-based matching for non-file prompts: every space-separated component

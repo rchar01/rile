@@ -82,6 +82,8 @@ Initial inspection scenarios:
 - `describe-variable-completion-modern`: Vertico/Marginalia `C-h v` variable
   completion behavior.
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.
+- `find-file-long-path-core`: base Emacs `C-x C-f` prompt display with a long
+  current directory.
 - `incremental-search-wrap-core`: base Emacs incremental search wrapping behavior.
 - `insert-file-core`: base Emacs `C-x i` insert-file behavior.
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.

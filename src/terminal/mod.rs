@@ -336,7 +336,8 @@ fn draw_editor_frame_with_options<W: Write>(
     draw_minibuffer(terminal, editor, size, minibuffer_row)?;
     draw_completion_popup(terminal, editor, size, minibuffer_row + 1, completion_rows)?;
 
-    if let Some(cursor_column) = minibuffer_cursor_column(editor) {
+    if let Some(cursor_column) = minibuffer_cursor_column(editor, usize::from(size.columns.max(1)))
+    {
         move_cursor_to_minibuffer(terminal, size, minibuffer_row, cursor_column)?;
     } else {
         move_cursor_to_current_window(terminal, editor, &layouts)?;
@@ -353,8 +354,11 @@ fn draw_minibuffer<W: Write>(
     terminal.move_cursor(row as u16, 1)?;
     terminal.clear_line()?;
     let columns = usize::from(size.columns.max(1));
-    if let Some(text) = editor.minibuffer_display_text() {
-        let face = if text.starts_with("Error:") {
+    if let Some((text, _)) = minibuffer_visible_text_and_cursor(editor, columns) {
+        let face = if editor
+            .minibuffer_display_text()
+            .is_some_and(|text| text.starts_with("Error:"))
+        {
             Face::Error
         } else {
             Face::Minibuffer
@@ -434,7 +438,30 @@ fn draw_completion_popup<W: Write>(
     Ok(())
 }
 
-fn minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
+fn minibuffer_cursor_column(editor: &Editor, columns: usize) -> Option<usize> {
+    minibuffer_visible_text_and_cursor(editor, columns).and_then(|(_, cursor)| cursor)
+}
+
+fn minibuffer_visible_text_and_cursor(
+    editor: &Editor,
+    columns: usize,
+) -> Option<(String, Option<usize>)> {
+    let text = editor.minibuffer_display_text()?;
+    let cursor = raw_minibuffer_cursor_column(editor);
+    let Some(cursor) = cursor else {
+        return Some((text, None));
+    };
+    if columns == 0 || cursor < columns {
+        return Some((text, Some(cursor)));
+    }
+    let start_column = cursor + 1 - columns;
+    Some((
+        text_from_display_column(&text, start_column),
+        Some(columns - 1),
+    ))
+}
+
+fn raw_minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
     let prompt = editor.minibuffer().prompt()?;
     let input_before_cursor = editor.minibuffer().prompt_input_before_cursor()?;
     let prompt_column = text_display_width(&prompt.label) + text_display_width(input_before_cursor);
@@ -447,6 +474,20 @@ fn minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
         return Some(text_display_width(&prefix) + prompt_column);
     }
     Some(prompt_column)
+}
+
+fn text_from_display_column(text: &str, start_column: usize) -> String {
+    let mut column = 0;
+    let mut start_byte = text.len();
+    for (byte, character) in text.char_indices() {
+        let next_column = column + character.width().unwrap_or(0);
+        if next_column > start_column {
+            start_byte = byte;
+            break;
+        }
+        column = next_column;
+    }
+    text[start_byte..].to_owned()
 }
 
 fn move_cursor_to_minibuffer<W: Write>(
@@ -1352,9 +1393,9 @@ mod tests {
     use super::{
         AnsiTerminal, FrameOptions, LineRenderOptions, TerminalSize, clipped_text,
         draw_editor_frame, draw_editor_frame_with_options, format_completion_row,
-        mode_line_position, wrapped_help_cursor_position, wrapped_help_visual_lines,
-        write_buffer_line, write_fixed_width_text_with_face, write_line_number_gutter,
-        write_line_with_spans,
+        mode_line_position, text_from_display_column, wrapped_help_cursor_position,
+        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
+        write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
@@ -1426,6 +1467,14 @@ mod tests {
         assert_eq!(clipped_text("abcdef", 4), "abc$");
         assert_eq!(clipped_text("abcdef", 1), "$");
         assert_eq!(clipped_text("abc", 4), "abc");
+    }
+
+    #[test]
+    fn text_from_display_column_keeps_prompt_tail() {
+        let text = "Find file: /very/long/path/name.txt";
+        let start = "Find file: /very/".chars().count();
+
+        assert_eq!(text_from_display_column(text, start), "long/path/name.txt");
     }
 
     #[test]

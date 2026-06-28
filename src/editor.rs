@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use crate::buffer::undo::UndoRecord;
 use crate::buffer::{BufferId, Position, RectangleEdit, TextRange};
@@ -1248,7 +1248,7 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Text(text) => {
-                self.minibuffer.insert_prompt_text(&text);
+                self.insert_completion_prompt_text(&text);
                 self.reset_current_prompt_history_navigation();
                 self.update_completion_from_prompt();
                 self.record_prompt_non_kill_key();
@@ -1318,6 +1318,28 @@ impl Editor {
             }
             _ => PromptEditOutcome::Unhandled,
         }
+    }
+
+    fn insert_completion_prompt_text(&mut self, text: &str) {
+        if text.starts_with(MAIN_SEPARATOR) && self.file_prompt_is_at_default_base() {
+            self.minibuffer.set_prompt_input(text.to_owned());
+        } else {
+            self.minibuffer.insert_prompt_text(text);
+        }
+    }
+
+    fn file_prompt_is_at_default_base(&self) -> bool {
+        if !matches!(
+            self.minibuffer.prompt_kind(),
+            Some(PromptKind::FindFile | PromptKind::FindFileReadOnly | PromptKind::InsertFile)
+        ) {
+            return false;
+        }
+        let Some(input) = self.minibuffer.prompt_input() else {
+            return false;
+        };
+        self.minibuffer.prompt_input_before_cursor() == Some(input)
+            && input == file_prompt_base_input(&self.find_file_base_dir())
     }
 
     fn record_prompt_non_kill_key(&mut self) {
@@ -3925,23 +3947,23 @@ impl Editor {
     }
 
     fn start_find_file(&mut self) -> Result<()> {
+        let base_dir = self.find_file_base_dir();
         self.minibuffer
             .start_prompt(PromptKind::FindFile, "Find file: ");
-        self.completion = Some(CompletionSession::files(
-            self.find_file_base_dir(),
-            self.completion_config,
-        ));
+        self.minibuffer
+            .set_prompt_input(file_prompt_base_input(&base_dir));
+        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
         self.update_completion_from_prompt();
         Ok(())
     }
 
     fn start_find_file_read_only(&mut self) -> Result<()> {
+        let base_dir = self.find_file_base_dir();
         self.minibuffer
             .start_prompt(PromptKind::FindFileReadOnly, "Find file read-only: ");
-        self.completion = Some(CompletionSession::files(
-            self.find_file_base_dir(),
-            self.completion_config,
-        ));
+        self.minibuffer
+            .set_prompt_input(file_prompt_base_input(&base_dir));
+        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
         self.update_completion_from_prompt();
         Ok(())
     }
@@ -3950,12 +3972,12 @@ impl Editor {
         if !self.ensure_buffer_editable() {
             return Ok(());
         }
+        let base_dir = self.find_file_base_dir();
         self.minibuffer
             .start_prompt(PromptKind::InsertFile, "Insert file: ");
-        self.completion = Some(CompletionSession::files(
-            self.find_file_base_dir(),
-            self.completion_config,
-        ));
+        self.minibuffer
+            .set_prompt_input(file_prompt_base_input(&base_dir));
+        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
         self.update_completion_from_prompt();
         Ok(())
     }
@@ -5778,6 +5800,14 @@ fn prompt_label(kind: PromptKind) -> &'static str {
     }
 }
 
+fn file_prompt_base_input(base_dir: &Path) -> String {
+    let mut input = base_dir.display().to_string();
+    if !input.ends_with(MAIN_SEPARATOR) {
+        input.push(MAIN_SEPARATOR);
+    }
+    input
+}
+
 fn dirty_kill_prompt(name: &str) -> String {
     format!("Buffer {name} modified; kill anyway? (y or n) ")
 }
@@ -5855,7 +5885,7 @@ mod tests {
     };
     use super::{
         AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, KillEntry,
-        format_rectangle_number,
+        file_prompt_base_input, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -5974,6 +6004,11 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    fn current_dir_prompt_input() -> String {
+        let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        file_prompt_base_input(&current_dir)
     }
 
     fn send_c_x_r(editor: &mut Editor, key: KeyEvent) {
@@ -6550,9 +6585,16 @@ mod tests {
             editor.minibuffer().prompt_kind(),
             Some(PromptKind::FindFileReadOnly)
         );
+        assert!(
+            editor
+                .minibuffer()
+                .display_text()
+                .as_deref()
+                .is_some_and(|text| text.starts_with("Find file read-only: "))
+        );
         assert_eq!(
-            editor.minibuffer().display_text().as_deref(),
-            Some("Find file read-only: ")
+            editor.minibuffer().prompt_input(),
+            Some(current_dir_prompt_input().as_str())
         );
     }
 
@@ -6655,9 +6697,9 @@ mod tests {
     fn find_file_completion_tab_inserts_selected_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-note.txt");
         fs::write(&start, "start").expect("start fixture should write");
-        fs::write(directory.path().join("alpha-note.txt"), "alpha")
-            .expect("alpha fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
         fs::write(directory.path().join("alphabet-note.txt"), "alphabet")
             .expect("alphabet fixture should write");
         let document = Document::open(&start).expect("start fixture should open");
@@ -6676,7 +6718,8 @@ mod tests {
             .handle_key(KeyEvent::Special(SpecialKey::Tab))
             .expect("tab should insert selected file");
 
-        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-note.txt"));
+        let expected = alpha.to_string_lossy();
+        assert_eq!(editor.minibuffer().prompt_input(), Some(expected.as_ref()));
     }
 
     #[test]
@@ -6941,6 +6984,11 @@ mod tests {
         editor
             .handle_key(KeyEvent::Ctrl('f'))
             .expect("find-file should start prompt");
+        let expected_base = file_prompt_base_input(&nested);
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some(expected_base.as_str())
+        );
         editor
             .handle_key(KeyEvent::Text("sibling.txt".to_owned()))
             .expect("prompt input should update completion");
@@ -6976,7 +7024,8 @@ mod tests {
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("enter should descend into directory");
 
-        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha-dir/"));
+        let expected = file_prompt_base_input(&directory.path().join("alpha-dir"));
+        assert_eq!(editor.minibuffer().prompt_input(), Some(expected.as_str()));
         assert!(editor.completion().is_some());
     }
 
@@ -7004,10 +7053,8 @@ mod tests {
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("second enter should descend into selected child directory");
 
-        assert_eq!(
-            editor.minibuffer().prompt_input(),
-            Some("aaa-dir/child-dir/")
-        );
+        let expected = file_prompt_base_input(&parent.join("child-dir"));
+        assert_eq!(editor.minibuffer().prompt_input(), Some(expected.as_str()));
         assert!(editor.completion().is_some());
     }
 
@@ -7043,7 +7090,8 @@ mod tests {
         let text = editor
             .minibuffer_display_text()
             .expect("ido should render minibuffer text");
-        assert!(text.contains("Find file: alpha"));
+        assert!(text.contains("Find file: "));
+        assert!(text.contains("alpha"));
         assert!(text.contains("alpha-note.txt"));
     }
 
@@ -8420,7 +8468,10 @@ mod tests {
             .handle_key(KeyEvent::Meta('p'))
             .expect("M-p should not recall M-x history");
 
-        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some(current_dir_prompt_input().as_str())
+        );
     }
 
     #[test]
@@ -10326,15 +10377,15 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Ctrl('f'))
             .expect("find-file should prompt");
+        let expected_base = current_dir_prompt_input();
+        let expected_prompt = format!("Find file: {expected_base}");
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),
-            Some("Find file: ")
+            Some(expected_prompt.as_str())
         );
-        for character in path.to_string_lossy().chars() {
-            editor
-                .handle_key(KeyEvent::Text(character.to_string()))
-                .expect("file prompt should update");
-        }
+        editor
+            .minibuffer
+            .set_prompt_input(path.to_string_lossy().into_owned());
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("file prompt should open file");
@@ -10351,6 +10402,32 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn find_file_absolute_path_replaces_default_prompt_base() {
+        let directory = TestDir::new();
+        let path = directory.path().join("absolute.txt");
+        fs::write(&path, "absolute").expect("file should be written");
+        let path_text = path.to_string_lossy().into_owned();
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should prompt");
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some(current_dir_prompt_input().as_str())
+        );
+
+        editor
+            .handle_key(KeyEvent::Text(path_text.clone()))
+            .expect("absolute path should replace prompt base");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(path_text.as_str()));
+    }
+
+    #[test]
     fn find_file_read_only_prompt_opens_read_only_file() {
         let directory = TestDir::new();
         let path = directory.path().join("readonly.txt");
@@ -10363,15 +10440,15 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Ctrl('r'))
             .expect("read-only find-file should prompt");
+        let expected_base = current_dir_prompt_input();
+        let expected_prompt = format!("Find file read-only: {expected_base}");
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),
-            Some("Find file read-only: ")
+            Some(expected_prompt.as_str())
         );
-        for character in path.to_string_lossy().chars() {
-            editor
-                .handle_key(KeyEvent::Text(character.to_string()))
-                .expect("file prompt should update");
-        }
+        editor
+            .minibuffer
+            .set_prompt_input(path.to_string_lossy().into_owned());
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("file prompt should open file read-only");
@@ -10420,12 +10497,13 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt");
+        let expected = target.to_string_lossy();
         assert_eq!(
             editor
                 .completion()
                 .and_then(|completion| completion.selected())
                 .map(|candidate| candidate.value.as_str()),
-            Some("aaa-target.txt")
+            Some(expected.as_ref())
         );
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
@@ -10555,11 +10633,9 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt");
-        for character in path.to_string_lossy().chars() {
-            editor
-                .handle_key(KeyEvent::Text(character.to_string()))
-                .expect("file prompt should update");
-        }
+        editor
+            .minibuffer
+            .set_prompt_input(path.to_string_lossy().into_owned());
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("missing file should become buffer");
@@ -10576,6 +10652,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt");
+        editor.minibuffer.set_prompt_input("");
         editor
             .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
             .expect("raw empty input should be reported");
@@ -10659,11 +10736,18 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Text("i".to_owned()))
             .expect("insert-file should prompt");
+        let expected_base = file_prompt_base_input(directory.path());
+        let expected_prompt = format!("Insert file: {expected_base}");
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),
-            Some("Insert file: ")
+            Some(expected_prompt.as_str())
         );
-        submit_prompt_text(&mut editor, source.to_str().expect("path should be utf-8"));
+        editor
+            .minibuffer
+            .set_prompt_input(source.to_string_lossy().into_owned());
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("insert-file prompt should submit");
 
         assert_eq!(
             editor.document().buffer().serialize(),
@@ -10702,12 +10786,13 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("insert-file")
             .expect("insert-file should prompt");
+        let expected = source.to_string_lossy();
         assert_eq!(
             editor
                 .completion()
                 .and_then(|completion| completion.selected())
                 .map(|candidate| candidate.value.as_str()),
-            Some("aaa-source.txt")
+            Some(expected.as_ref())
         );
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
@@ -10726,6 +10811,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("insert-file")
             .expect("insert-file should prompt");
+        editor.minibuffer.set_prompt_input("");
         editor
             .handle_key(KeyEvent::MetaSpecial(SpecialKey::Enter))
             .expect("raw empty input should be reported");
@@ -10815,11 +10901,9 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt");
-        for character in path.to_string_lossy().chars() {
-            editor
-                .handle_key(KeyEvent::Text(character.to_string()))
-                .expect("file prompt should update");
-        }
+        editor
+            .minibuffer
+            .set_prompt_input(path.to_string_lossy().into_owned());
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("file should open");
@@ -10828,11 +10912,9 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .execute_command_by_name("find-file")
             .expect("find-file should prompt again");
-        for character in path.to_string_lossy().chars() {
-            editor
-                .handle_key(KeyEvent::Text(character.to_string()))
-                .expect("file prompt should update");
-        }
+        editor
+            .minibuffer
+            .set_prompt_input(path.to_string_lossy().into_owned());
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("existing file buffer should be reused");

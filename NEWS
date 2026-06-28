@@ -42,11 +42,11 @@ Editing features:
 * Run shell commands with M-!, display captured stdout/stderr by default, and
   insert stdout with C-u M-!.  Use M-| to send the active region to stdin and
   C-u M-| to replace the region with successful stdout.
-* Open files through C-x C-f with file-name completion, selected-candidate
-  insertion on Tab, selected existing-path acceptance on Enter, directory
-  descent after Tab, exact input, explicit selection, empty input, or a typed
-  directory prefix, substring candidate matching, and raw missing-file input
-  through M-RET.
+* Open files through C-x C-f with file-name completion and a visible editable
+  current-directory base.  Tab inserts the selected candidate, Enter accepts
+  selected existing paths, directories descend after Tab, exact input, explicit
+  selection, or a typed directory prefix, substring candidate matching works, and
+  M-RET keeps raw missing-file input available.
 * Insert file contents at point with C-x i and file-name completion, including
   selected existing-path acceptance on Enter.
 * Open files read-only through C-x C-r with file-name completion, including
@@ -64,9 +64,9 @@ Editing features:
   configuration options with C-h v, active modes with C-h m, and the current
   buffer with M-x describe-buffer.  Command and key help use prose-first,
   Emacs-like formatting while Rile-specific metadata remains explicit.
-  Empty command, option, and file prompts, including M-x, C-h f, C-h v,
-  C-x C-f, C-x C-r, and C-x i, accept the visible selected completion candidate
-  on Enter.
+  Empty command and option prompts, including M-x, C-h f, and C-h v, accept the
+  visible selected completion candidate on Enter; file prompts start from their
+  visible current-directory base.
 * Show version, build profile, feature-reporting status, terminal backend,
   config path, current directory, and diagnostic guidance with C-h C-a /
   about-rile.
@@ -75,8 +75,9 @@ Editing features:
 * Edit minibuffer prompt text with cursor movement using C-a/Home, C-e/End,
   C-f/Right, C-b/Left, M-f, and M-b.  C-d/Delete deletes after point; C-k, M-d,
   M-Backspace, and terminal-encoded C-Backspace kill prompt text into the normal
-  kill ring.  Recall minibuffer prompt history with M-p and M-n, and page
-  completion candidates with C-v/PageDown and M-v/PageUp.
+  kill ring.  Long prompts keep the cursor-side tail visible.  Recall
+  minibuffer prompt history with M-p and M-n, and page completion candidates with
+  C-v/PageDown and M-v/PageUp.
 * Completion matching no longer supports full regular-expression components.
   Orderless command, option, and buffer completion keeps literal components,
   smart case, `!foo` negation, `=foo` force-literal components, and simple

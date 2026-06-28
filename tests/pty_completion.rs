@@ -3,7 +3,7 @@
 
 mod support;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use std::fs;
 
 use support::{fixtures, keys, pty::RilePty};
@@ -32,6 +32,8 @@ fn exercise_prompt_movement_keys(rile: &mut RilePty, prompt: &str) -> Result<()>
 fn open_file_by_path(rile: &mut RilePty, path: &std::path::Path, visible_text: &str) -> Result<()> {
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     let path = path.display().to_string();
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     rile.send("file path", path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
     rile.wait_for_screen_contains(visible_text)
@@ -185,7 +187,7 @@ fn vertical_completion_movement_keys_cover_prompt_sources() -> Result<()> {
 
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     rile.send("alpha prefix", b"alpha-")?;
-    exercise_prompt_movement_keys(&mut rile, "Find file: alpha-")?;
+    exercise_prompt_movement_keys(&mut rile, "alpha-")?;
     rile.send("C-g", keys::control('g'))?;
 
     for index in 0..10 {
@@ -511,9 +513,46 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
     rile.send("alp", b"alp")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Find file: alpha-note.txt")?;
+    rile.assert_screen_contains("alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_long_base_path_keeps_prompt_tail_visible() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let deep = directory
+        .path()
+        .join("very-long-project-directory-name")
+        .join("nested-editor-fixtures")
+        .join("current-buffer-directory-with-long-name");
+    fs::create_dir_all(&deep)?;
+    let start = deep.join("start.txt");
+    let target = deep.join("target-long-name.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&target, "target long path\n")?;
+    let mut rile = RilePty::spawn(&start, 10, 50)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("target file", b"target-long-name.txt")?;
+
+    let (cursor_row, _) = rile.cursor_position();
+    let rows = rile.screen_rows();
+    let prompt_row = rows.get(cursor_row as usize).cloned().unwrap_or_default();
+    if !prompt_row.contains("target-long-name.txt") {
+        bail!(
+            "long file prompt did not keep the typed file visible\nprompt row: {prompt_row}\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("target long path")?;
+
     rile.quit()?;
     Ok(())
 }
@@ -550,7 +589,7 @@ fn vertical_find_file_empty_input_enters_selected_directory() -> Result<()> {
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("Find file: aaa-dir/")?;
+    rile.assert_screen_contains("aaa-dir/")?;
 
     rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
@@ -570,10 +609,10 @@ fn vertical_find_file_empty_input_enters_selected_child_directory() -> Result<()
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     rile.send("Enter", keys::ENTER)?;
-    rile.assert_screen_contains("Find file: aaa-dir/")?;
+    rile.assert_screen_contains("aaa-dir/")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("Find file: aaa-dir/child-dir/")?;
+    rile.assert_screen_contains("aaa-dir/child-dir/")?;
     assert!(!rile.snapshot_text().contains("Is a directory"));
 
     rile.send("C-g", keys::control('g'))?;
@@ -595,10 +634,10 @@ fn vertical_find_file_directory_prefix_enters_selected_child_directory() -> Resu
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     rile.send("aaa", b"aaa")?;
     rile.send("Enter", keys::ENTER)?;
-    rile.assert_screen_contains("Find file: aaa-dir/")?;
+    rile.assert_screen_contains("aaa-dir/")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.assert_screen_contains("Find file: aaa-dir/child-dir/")?;
+    rile.assert_screen_contains("aaa-dir/child-dir/")?;
     assert!(!rile.snapshot_text().contains("Is a directory"));
 
     rile.send("C-g", keys::control('g'))?;
@@ -620,7 +659,7 @@ fn vertical_find_file_completion_tab_inserts_partial_file_match() -> Result<()> 
     rile.send("a-n", b"a-n")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Find file: alpha-note.txt")?;
+    rile.assert_screen_contains("alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
@@ -782,7 +821,7 @@ fn vertical_find_file_completion_tab_enters_directory() -> Result<()> {
     rile.send("nested-dir", b"nested-dir")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Find file: nested-dir/")?;
+    rile.assert_screen_contains("nested-dir/")?;
 
     rile.send("note.txt", b"note.txt")?;
     rile.send("Enter", keys::ENTER)?;
@@ -829,7 +868,7 @@ fn vertical_find_file_read_only_completion_tab_inserts_selected_file() -> Result
     rile.send("alp", b"alp")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Find file read-only: alpha-note.txt")?;
+    rile.assert_screen_contains("alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
@@ -922,7 +961,7 @@ fn vertical_insert_file_completion_tab_inserts_selected_file() -> Result<()> {
     rile.send("alp", b"alp")?;
     rile.send("Tab", keys::TAB)?;
 
-    rile.assert_screen_contains("Insert file: alpha-note.txt")?;
+    rile.assert_screen_contains("alpha-note.txt")?;
 
     rile.send("C-g", keys::control('g'))?;
     rile.quit()?;
@@ -1012,12 +1051,16 @@ fn vertical_buffer_completion_tab_extends_and_switches() -> Result<()> {
 
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let alpha_path = alpha.display().to_string();
     rile.send("alpha-buffer path", alpha_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
     rile.wait_for_screen_contains("alpha buffer")?;
 
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let alphabet_path = alphabet.display().to_string();
     rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
@@ -1052,12 +1095,16 @@ fn vertical_buffer_completion_preserves_space_sensitive_exact_name() -> Result<(
 
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let spaced_path = spaced.display().to_string();
     rile.send("spaced-buffer path", spaced_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
     rile.wait_for_screen_contains("leading alpha buffer")?;
 
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let alphabet_path = alphabet.display().to_string();
     rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
@@ -1087,12 +1134,16 @@ fn vertical_buffer_completion_enter_accepts_selected_default() -> Result<()> {
 
     rile.wait_for_screen_contains("start")?;
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let alpha_path = alpha.display().to_string();
     rile.send("alpha-buffer path", alpha_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
     rile.wait_for_screen_contains("alpha buffer")?;
 
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
     let alphabet_path = alphabet.display().to_string();
     rile.send("alphabet-buffer path", alphabet_path.as_bytes())?;
     rile.send("Enter", keys::ENTER)?;
@@ -1503,9 +1554,9 @@ fn vertical_prompt_history_meta_keys_cover_completion_prompt_sources() -> Result
     rile.send("C-x C-f", keys::control_sequence("xf"))?;
     rile.send("file draft", b"draft-file")?;
     rile.send("M-p", keys::meta('p'))?;
-    rile.assert_screen_contains("Find file: alpha-history.txt")?;
+    rile.assert_screen_contains("alpha-history.txt")?;
     rile.send("M-n", keys::meta('n'))?;
-    rile.assert_screen_contains("Find file: draft-file")?;
+    rile.assert_screen_contains("draft-file")?;
     rile.send("C-g", keys::control('g'))?;
 
     rile.send("C-h", keys::control('h'))?;
