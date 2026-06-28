@@ -1,3 +1,14 @@
+2026-06-28  Robert Charusta  <rch-public@posteo.net>
+
+	Show active regions in wrapped help buffers.
+
+	* src/terminal/mod.rs (draw_wrapped_help_rows): Collect editor decoration
+	spans for wrapped help rows and pass region line-end highlighting through.
+	(write_wrapped_help_line): Accept spans, clip them to the visual line range,
+	and render selected line-end padding with the region face.
+	(help_buffers_render_region_face,
+	wrapped_help_buffers_render_region_face): New tests.
+
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
 	Fix repeated Enter descent in file completion.

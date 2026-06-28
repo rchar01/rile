@@ -664,17 +664,27 @@ fn draw_wrapped_help_rows<W: Write>(
             continue;
         }
         match visual_lines.get(row).and_then(|line| line.as_ref()) {
-            Some(visual_line) => write_wrapped_help_line(
-                terminal,
-                buffer,
-                visual_line,
-                LineRenderOptions {
-                    width: text_columns,
-                    tab_width: editor.tab_width(),
-                    theme: editor.theme(),
-                    highlight_line_end_space: false,
-                },
-            )?,
+            Some(visual_line) => {
+                let spans = buffer
+                    .line(visual_line.line_index)
+                    .map(|line| {
+                        editor.spans_for_buffer_line(viewport.buffer, visual_line.line_index, line)
+                    })
+                    .unwrap_or_default();
+                write_wrapped_help_line(
+                    terminal,
+                    buffer,
+                    visual_line,
+                    &spans,
+                    LineRenderOptions {
+                        width: text_columns,
+                        tab_width: editor.tab_width(),
+                        theme: editor.theme(),
+                        highlight_line_end_space: editor
+                            .region_highlights_line_end_space(viewport.buffer, line_index),
+                    },
+                )?;
+            }
             None => write_fixed_width_text(terminal, "", text_columns)?,
         }
     }
@@ -744,6 +754,7 @@ fn write_wrapped_help_line<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     buffer: &Buffer,
     visual_line: &HelpVisualLine,
+    spans: &[Span],
     options: LineRenderOptions,
 ) -> Result<()> {
     let Some(line) = buffer.line(visual_line.line_index) else {
@@ -755,9 +766,15 @@ fn write_wrapped_help_line<W: Write>(
         visual_line.start_column,
         content_width,
     )?;
+    let relative_spans = clip_spans(spans, range.clone());
     let segment = &line[range];
-    let mut used_width =
-        write_line_with_spans(terminal, segment, &[], options.tab_width, options.theme)?;
+    let mut used_width = write_line_with_spans(
+        terminal,
+        segment,
+        &relative_spans,
+        options.tab_width,
+        options.theme,
+    )?;
     if visual_line.continued && options.width > 1 {
         let continuation_column = options.width.saturating_sub(1);
         if used_width < continuation_column {
@@ -767,7 +784,19 @@ fn write_wrapped_help_line<W: Write>(
         used_width = options.width;
     }
     if used_width < options.width {
-        terminal.write_text(&" ".repeat(options.width - used_width))?;
+        let padding = " ".repeat(options.width - used_width);
+        if options.highlight_line_end_space {
+            write_text_with_face_expanded(
+                terminal,
+                &padding,
+                Face::Region,
+                options.tab_width,
+                used_width,
+                options.theme,
+            )?;
+        } else {
+            terminal.write_text(&padding)?;
+        }
     }
     Ok(())
 }
@@ -1542,6 +1571,45 @@ mod tests {
 
         assert!(frame.contains("abcde\\"));
         assert!(frame.contains("fghij "));
+    }
+
+    #[test]
+    fn help_buffers_render_region_face() {
+        let document = Document::help("alpha beta");
+        let mut editor = Editor::new(document);
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("mark-whole-buffer should activate region");
+        let size = TerminalSize {
+            rows: 4,
+            columns: 20,
+        };
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(&frame, b"\x1b[44malpha beta\x1b[0m"));
+    }
+
+    #[test]
+    fn wrapped_help_buffers_render_region_face() {
+        let document = Document::help("abcdefghij\nnext");
+        let mut editor = Editor::new(document);
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("mark-whole-buffer should activate region");
+        let size = TerminalSize {
+            rows: 5,
+            columns: 6,
+        };
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(&frame, b"\x1b[44mabcde\x1b[0m\\"));
+        assert!(contains_bytes(&frame, b"\x1b[44mfghij\x1b[0m"));
+        assert!(contains_bytes(
+            &frame,
+            b"\x1b[44mfghij\x1b[0m\x1b[44m \x1b[0m"
+        ));
     }
 
     #[test]
