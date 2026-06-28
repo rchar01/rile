@@ -301,8 +301,8 @@ prompts:
   `=foo` literal components;
 - file prompts use Emacs file-category matching by default, including prefix,
   word-component partial completion, substring matching, smart case, raw `M-RET`
-  input, and directory descent after Tab insertion, exact input, or explicit
-  selection;
+  input, and directory descent after Tab insertion, exact input, explicit
+  selection, empty input, or a typed prefix of the selected directory;
 - empty input remains prompt-specific: `C-x b` switches to the default previous
   buffer, while `C-x k` kills the default current buffer.
 

@@ -558,6 +558,55 @@ fn vertical_find_file_empty_input_enters_selected_directory() -> Result<()> {
 }
 
 #[test]
+fn vertical_find_file_empty_input_enters_selected_child_directory() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let parent = directory.path().join("aaa-dir");
+    fs::write(&start, "start\n")?;
+    fs::create_dir(&parent)?;
+    fs::create_dir(parent.join("child-dir"))?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Find file: aaa-dir/")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Find file: aaa-dir/child-dir/")?;
+    assert!(!rile.snapshot_text().contains("Is a directory"));
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn vertical_find_file_directory_prefix_enters_selected_child_directory() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let parent = directory.path().join("aaa-dir");
+    fs::write(&start, "start\n")?;
+    fs::create_dir(&parent)?;
+    fs::create_dir(parent.join("child-dir"))?;
+    let mut rile = RilePty::spawn(&start, 14, 100)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("aaa", b"aaa")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Find file: aaa-dir/")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Find file: aaa-dir/child-dir/")?;
+    assert!(!rile.snapshot_text().contains("Is a directory"));
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_find_file_completion_tab_inserts_partial_file_match() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");

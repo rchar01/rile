@@ -6786,6 +6786,37 @@ mod tests {
     }
 
     #[test]
+    fn find_file_completion_enters_selected_child_directory() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let parent = directory.path().join("aaa-dir");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::create_dir(&parent).expect("parent directory should create");
+        fs::create_dir(parent.join("child-dir")).expect("child directory should create");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("empty enter should descend into selected directory");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("second enter should descend into selected child directory");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("aaa-dir/child-dir/")
+        );
+        assert!(editor.completion().is_some());
+    }
+
+    #[test]
     fn ido_file_completion_renders_candidates_in_minibuffer() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");

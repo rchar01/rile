@@ -79,13 +79,28 @@ pub(super) fn directory_completion_to_enter(
         .selected()
         .filter(|candidate| candidate.is_directory())?;
     if completion.has_matches()
-        && (trimmed.is_empty()
-            || completion.selection_explicit()
-            || candidate.value.trim_end_matches('/') == trimmed.trim_end_matches('/'))
+        && directory_input_selects_candidate(
+            &candidate.value,
+            trimmed,
+            completion.selection_explicit(),
+        )
     {
         return Some(candidate.value.clone());
     }
     None
+}
+
+fn directory_input_selects_candidate(
+    candidate: &str,
+    input: &str,
+    selection_explicit: bool,
+) -> bool {
+    if input.is_empty() || selection_explicit {
+        return true;
+    }
+    let candidate = candidate.trim_end_matches('/');
+    let input = input.trim_end_matches('/');
+    candidate == input || candidate.starts_with(input)
 }
 
 fn selected_file_prompt(kind: PromptKind) -> bool {
@@ -405,6 +420,40 @@ mod tests {
         assert_eq!(
             directory_completion_to_enter(PromptKind::FindFile, Some(&completion), "alpha-dir/"),
             Some("alpha-dir/".to_owned())
+        );
+    }
+
+    #[test]
+    fn directory_completion_enters_selected_child_directory_for_file_prompts() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        let parent = temp.path().join("alpha-dir");
+        std::fs::create_dir(&parent).expect("directory should create");
+        std::fs::create_dir(parent.join("child-dir")).expect("child directory should create");
+        let mut completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+        completion.update("alpha-dir/");
+
+        for kind in [
+            PromptKind::FindFile,
+            PromptKind::FindFileReadOnly,
+            PromptKind::InsertFile,
+        ] {
+            assert_eq!(
+                directory_completion_to_enter(kind, Some(&completion), "alpha-dir/"),
+                Some("alpha-dir/child-dir/".to_owned())
+            );
+        }
+    }
+
+    #[test]
+    fn directory_completion_ignores_substring_selected_directory() {
+        let temp = tempfile::tempdir().expect("tempdir should create");
+        std::fs::create_dir(temp.path().join("alpha-note-dir")).expect("directory should create");
+        let mut completion = CompletionSession::files(temp.path(), CompletionConfig::default());
+        completion.update("note");
+
+        assert_eq!(
+            directory_completion_to_enter(PromptKind::FindFile, Some(&completion), "note"),
+            None
         );
     }
 

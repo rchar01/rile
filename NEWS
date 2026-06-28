@@ -44,8 +44,9 @@ Editing features:
   C-u M-| to replace the region with successful stdout.
 * Open files through C-x C-f with file-name completion, selected-candidate
   insertion on Tab, selected existing-path acceptance on Enter, directory
-  descent after Tab, exact input, or explicit selection, substring candidate
-  matching, and raw missing-file input through M-RET.
+  descent after Tab, exact input, explicit selection, empty input, or a typed
+  directory prefix, substring candidate matching, and raw missing-file input
+  through M-RET.
 * Insert file contents at point with C-x i and file-name completion, including
   selected existing-path acceptance on Enter.
 * Open files read-only through C-x C-r with file-name completion, including

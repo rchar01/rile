@@ -107,7 +107,7 @@ Basic editor keys:
 - `C-x C-f` prompts for a file path with completion and opens it; Tab inserts
   the selected path, Enter accepts the selected existing path, and no-match
   missing-file input opens a new buffer. Directory candidates descend after Tab,
-  exact input, or explicit selection.
+  exact input, explicit selection, empty input, or a typed directory prefix.
 - `C-x i` prompts for a file path with completion and inserts its contents;
   Enter accepts the selected existing path.
 - `C-x C-r` prompts for a file path with completion and opens it read-only;
@@ -191,6 +191,9 @@ directory descent separate from orderless command matching, and use `M-RET` for
 raw missing-file input when a candidate is selected. Lowercase completion input
 is matched case-insensitively, while uppercase input is case-sensitive,
 including file-name completion.
+Directory candidates descend on Enter when selected from empty input, exact
+directory text, an explicitly moved selection, or a typed prefix of the selected
+directory; substring-only directory matches keep the raw typed path.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)`, when one exists.
 

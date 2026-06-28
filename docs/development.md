@@ -239,8 +239,10 @@ File completion resolves relative candidates against the current buffer's
 directory when available, accepts selected existing candidates on Enter,
 descends into selected directories, opens exact typed existing files, and uses
 `M-RET` to keep raw missing-file input available when a completion candidate is
-selected. Directory candidates descend after Tab insertion, exact input, or
-explicit selection. The default `completion_matching = "orderless"` uses
+selected. Directory candidates descend after Tab insertion, exact input,
+explicit selection, empty input, or a typed prefix of the selected directory;
+substring-only directory matches keep the raw typed path. The default
+`completion_matching = "orderless"` uses
 component-based matching for non-file prompts: every space-separated component
 must match in any order, lowercase components match case-insensitively, `^foo`,
 `foo$`, and `^foo$` act as simple literal anchors, and other regexp

@@ -1,5 +1,26 @@
 2026-06-27  Robert Charusta  <rch-public@posteo.net>
 
+	Fix repeated Enter descent in file completion.
+
+	* src/editor/completion_policy.rs (directory_completion_to_enter): Treat a
+	selected directory below the typed prefix as an Enter-descent candidate.
+	(directory_input_selects_candidate): New function.
+	(directory_completion_enters_selected_child_directory_for_file_prompts,
+	directory_completion_ignores_substring_selected_directory): New tests.
+	* src/editor.rs (find_file_completion_enters_selected_child_directory): New
+	test.
+	* tests/pty_completion.rs
+	(vertical_find_file_empty_input_enters_selected_child_directory,
+	vertical_find_file_directory_prefix_enters_selected_child_directory): New tests.
+	* README.md: Document selected directory descent after empty input and typed
+	prefixes.
+	* docs/development.md: Likewise.
+	* docs/reference-testing.md: Likewise.
+	* NEWS: Document directory descent after empty input and typed directory
+	prefixes.
+
+2026-06-27  Robert Charusta  <rch-public@posteo.net>
+
 	Accept empty selected command, option, and file completions.
 
 	* src/editor/completion_policy.rs (accepted_completion_input): Accept the
