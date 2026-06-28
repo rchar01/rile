@@ -1111,6 +1111,7 @@ impl Editor {
                 self.reset_current_prompt_history_navigation();
                 Ok(EditorOutcome::Continue)
             }
+            key if self.handle_prompt_edit_key(&key) => Ok(EditorOutcome::Continue),
             KeyEvent::Meta('p') => {
                 self.recall_prompt_history(-1);
                 Ok(EditorOutcome::Continue)
@@ -1191,6 +1192,7 @@ impl Editor {
                 self.reset_current_prompt_history_navigation();
                 Ok(EditorOutcome::Continue)
             }
+            key if self.handle_prompt_edit_key(&key) => Ok(EditorOutcome::Continue),
             KeyEvent::Meta('p') => {
                 self.recall_prompt_history(-1);
                 self.update_completion_from_prompt();
@@ -1236,6 +1238,28 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             _ => Ok(EditorOutcome::Continue),
+        }
+    }
+
+    fn handle_prompt_edit_key(&mut self, key: &KeyEvent) -> bool {
+        match key {
+            KeyEvent::Ctrl('f') | KeyEvent::Special(SpecialKey::ArrowRight) => {
+                self.minibuffer.move_prompt_grapheme_forward();
+                true
+            }
+            KeyEvent::Ctrl('b') | KeyEvent::Special(SpecialKey::ArrowLeft) => {
+                self.minibuffer.move_prompt_grapheme_backward();
+                true
+            }
+            KeyEvent::Meta('f') => {
+                self.minibuffer.move_prompt_word_forward();
+                true
+            }
+            KeyEvent::Meta('b') => {
+                self.minibuffer.move_prompt_word_backward();
+                true
+            }
+            _ => false,
         }
     }
 
@@ -4690,6 +4714,7 @@ impl Editor {
                 self.minibuffer.delete_prompt_grapheme_backward();
                 self.update_incremental_search()?;
             }
+            key if self.handle_prompt_edit_key(&key) => {}
             KeyEvent::Ctrl('s') => self.repeat_incremental_search(SearchDirection::Forward)?,
             KeyEvent::Ctrl('r') => self.repeat_incremental_search(SearchDirection::Backward)?,
             KeyEvent::Text(text) => {
@@ -7919,6 +7944,84 @@ mod tests {
                 .expect("M-n should restore prompt draft");
             assert_eq!(editor.minibuffer().prompt_input(), Some("draft input"));
         }
+    }
+
+    #[test]
+    fn plain_prompt_inserts_at_minibuffer_cursor() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+
+        editor
+            .handle_key(KeyEvent::Text("ac".to_owned()))
+            .expect("prompt input should insert");
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("C-b should move within prompt");
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("prompt input should insert at cursor");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("abc"));
+        assert_eq!(editor.minibuffer().prompt_input_before_cursor(), Some("ab"));
+    }
+
+    #[test]
+    fn completion_prompt_inserts_at_minibuffer_cursor() {
+        let mut editor = Editor::new(Document::scratch());
+        let completion = CompletionSession::commands(
+            &CommandRegistry::default(),
+            &KeyMap::default(),
+            editor.completion_config,
+        );
+        start_test_completion_prompt(
+            &mut editor,
+            PromptKind::ExtendedCommand,
+            completion,
+            "toggle-search-highlighting",
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("C-b should move within completion prompt");
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("prompt input should insert at cursor");
+
+        assert_eq!(
+            editor.minibuffer().prompt_input(),
+            Some("toggle-search-highlightinxg")
+        );
+        assert_eq!(
+            editor.minibuffer().prompt_input_before_cursor(),
+            Some("toggle-search-highlightinx")
+        );
+    }
+
+    #[test]
+    fn prompt_word_movement_uses_minibuffer_cursor() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("one two_three");
+
+        editor
+            .handle_key(KeyEvent::Meta('b'))
+            .expect("M-b should move by word in prompt");
+        assert_eq!(
+            editor.minibuffer().prompt_input_before_cursor(),
+            Some("one ")
+        );
+
+        editor
+            .handle_key(KeyEvent::Meta('f'))
+            .expect("M-f should move by word in prompt");
+        assert_eq!(
+            editor.minibuffer().prompt_input_before_cursor(),
+            Some("one two_three")
+        );
     }
 
     #[test]
@@ -13126,6 +13229,36 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("search accept should keep match");
         assert_eq!(editor.cursor(), Position::new(1, 0));
         assert_eq!(editor.minibuffer().prompt(), None);
+    }
+
+    #[test]
+    fn incremental_search_prompt_inserts_at_minibuffer_cursor() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpa".to_owned()))
+            .expect("search input should update");
+        editor
+            .handle_key(KeyEvent::Ctrl('b'))
+            .expect("C-b should move within search prompt");
+        editor
+            .handle_key(KeyEvent::Text("h".to_owned()))
+            .expect("search input should insert at cursor");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha"));
+        assert_eq!(
+            editor.minibuffer().prompt_input_before_cursor(),
+            Some("alph")
+        );
+        assert_eq!(editor.cursor(), Position::new(0, 0));
     }
 
     #[test]

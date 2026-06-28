@@ -4,6 +4,7 @@
 use std::path::Path;
 
 use crate::render::{Face, Span};
+use crate::text::is_word_character;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MajorMode {
@@ -293,10 +294,6 @@ fn push_keyword_span(
     if keywords.contains(&&segment[start..end]) {
         spans.push(Span::new(base + start, base + end, Face::SyntaxKeyword));
     }
-}
-
-fn is_word_character(character: char) -> bool {
-    character == '_' || character.is_alphanumeric()
 }
 
 #[cfg(test)]

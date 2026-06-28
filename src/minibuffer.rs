@@ -3,6 +3,8 @@
 
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::text::{move_word_backward_byte, move_word_forward_byte};
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MinibufferState {
     pub message: Option<String>,
@@ -38,6 +40,7 @@ pub struct PromptState {
     pub kind: PromptKind,
     pub label: String,
     pub input: String,
+    pub cursor_byte: usize,
 }
 
 impl MinibufferState {
@@ -58,6 +61,7 @@ impl MinibufferState {
             kind,
             label: label.into(),
             input: String::new(),
+            cursor_byte: 0,
         });
     }
 
@@ -81,13 +85,15 @@ impl MinibufferState {
 
     pub fn insert_prompt_text(&mut self, text: &str) {
         if let Some(prompt) = &mut self.prompt {
-            prompt.input.push_str(text);
+            prompt.input.insert_str(prompt.cursor_byte, text);
+            prompt.cursor_byte += text.len();
         }
     }
 
     pub fn set_prompt_input(&mut self, input: impl Into<String>) {
         if let Some(prompt) = &mut self.prompt {
             prompt.input = input.into();
+            prompt.cursor_byte = prompt.input.len();
         }
     }
 
@@ -95,10 +101,55 @@ impl MinibufferState {
         let Some(prompt) = &mut self.prompt else {
             return;
         };
-        let Some((byte, _)) = prompt.input.grapheme_indices(true).next_back() else {
+        let Some((byte, _)) = prompt.input[..prompt.cursor_byte]
+            .grapheme_indices(true)
+            .next_back()
+        else {
             return;
         };
-        prompt.input.truncate(byte);
+        prompt.input.drain(byte..prompt.cursor_byte);
+        prompt.cursor_byte = byte;
+    }
+
+    pub fn move_prompt_grapheme_forward(&mut self) {
+        let Some(prompt) = &mut self.prompt else {
+            return;
+        };
+        let Some(grapheme) = prompt.input[prompt.cursor_byte..].graphemes(true).next() else {
+            return;
+        };
+        prompt.cursor_byte += grapheme.len();
+    }
+
+    pub fn move_prompt_grapheme_backward(&mut self) {
+        let Some(prompt) = &mut self.prompt else {
+            return;
+        };
+        let Some((byte, _)) = prompt.input[..prompt.cursor_byte]
+            .grapheme_indices(true)
+            .next_back()
+        else {
+            return;
+        };
+        prompt.cursor_byte = byte;
+    }
+
+    pub fn move_prompt_word_forward(&mut self) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.cursor_byte = move_word_forward_byte(&prompt.input, prompt.cursor_byte);
+        }
+    }
+
+    pub fn move_prompt_word_backward(&mut self) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.cursor_byte = move_word_backward_byte(&prompt.input, prompt.cursor_byte);
+        }
+    }
+
+    pub fn prompt_input_before_cursor(&self) -> Option<&str> {
+        self.prompt
+            .as_ref()
+            .map(|prompt| &prompt.input[..prompt.cursor_byte])
     }
 
     pub fn take_prompt_input(&mut self) -> Option<(PromptKind, String)> {
@@ -165,6 +216,65 @@ mod tests {
         minibuffer.delete_prompt_grapheme_backward();
 
         assert_eq!(minibuffer.prompt_input(), Some(""));
+    }
+
+    #[test]
+    fn prompt_insert_and_backspace_use_cursor() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        minibuffer.insert_prompt_text("ac");
+        minibuffer.move_prompt_grapheme_backward();
+        minibuffer.insert_prompt_text("b");
+        minibuffer.delete_prompt_grapheme_backward();
+        minibuffer.insert_prompt_text("B");
+
+        assert_eq!(minibuffer.prompt_input(), Some("aBc"));
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("aB"));
+    }
+
+    #[test]
+    fn prompt_grapheme_movement_is_unicode_safe() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::FindFile, "Find file: ");
+        minibuffer.insert_prompt_text("e\u{301}x");
+        minibuffer.move_prompt_grapheme_backward();
+        minibuffer.move_prompt_grapheme_backward();
+
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some(""));
+
+        minibuffer.move_prompt_grapheme_forward();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("e\u{301}"));
+    }
+
+    #[test]
+    fn prompt_word_movement_uses_shared_boundaries() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        minibuffer.insert_prompt_text("one two_three");
+        minibuffer.move_prompt_word_backward();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("one "));
+        minibuffer.move_prompt_word_backward();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some(""));
+        minibuffer.move_prompt_word_forward();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("one"));
+    }
+
+    #[test]
+    fn prompt_word_movement_preserves_grapheme_boundaries() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        minibuffer.insert_prompt_text("e\u{301} next");
+        while minibuffer.prompt_input_before_cursor() != Some("") {
+            minibuffer.move_prompt_grapheme_backward();
+        }
+
+        minibuffer.move_prompt_word_forward();
+
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("e\u{301}"));
     }
 
     #[test]

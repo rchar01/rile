@@ -72,8 +72,9 @@ Editing features:
   about-rile.
 * Review transient status and error history with C-h e in a read-only
   *Messages* buffer that updates while it is visible.
-* Recall minibuffer prompt history with M-p and M-n, and page completion
-  candidates with C-v/PageDown and M-v/PageUp.
+* Edit minibuffer prompt text with cursor movement using C-f/Right, C-b/Left,
+  M-f, and M-b.  Recall minibuffer prompt history with M-p and M-n, and page
+  completion candidates with C-v/PageDown and M-v/PageUp.
 * Completion matching no longer supports full regular-expression components.
   Orderless command, option, and buffer completion keeps literal components,
   smart case, `!foo` negation, `=foo` force-literal components, and simple

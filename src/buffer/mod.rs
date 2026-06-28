@@ -6,6 +6,7 @@ use std::ops::Range;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+use crate::text::{move_word_backward_byte, move_word_forward_byte};
 use crate::{Result, RileError};
 
 pub mod undo;
@@ -369,41 +370,14 @@ impl Buffer {
         self.validate_position(position)?;
         let text = self.serialize();
         let absolute = self.absolute_offset(position);
-        let mut seen_word = false;
-
-        for (offset, character) in text[absolute..].char_indices() {
-            let is_word = is_word_character(character);
-            if seen_word && !is_word {
-                return self.position_for_absolute(absolute + offset);
-            }
-            seen_word |= is_word;
-        }
-
-        Ok(self.end_position())
+        self.position_for_absolute(move_word_forward_byte(&text, absolute))
     }
 
     pub fn move_word_backward(&self, position: Position) -> Result<Position> {
         self.validate_position(position)?;
         let text = self.serialize();
         let absolute = self.absolute_offset(position);
-        let mut word_start = None;
-        let mut in_word = false;
-
-        for (offset, character) in text[..absolute].char_indices() {
-            if is_word_character(character) {
-                if !in_word {
-                    word_start = Some(offset);
-                }
-                in_word = true;
-            } else {
-                in_word = false;
-            }
-        }
-
-        match word_start {
-            Some(offset) => self.position_for_absolute(offset),
-            None => Ok(Position::new(0, 0)),
-        }
+        self.position_for_absolute(move_word_backward_byte(&text, absolute))
     }
 
     pub fn move_line(
@@ -519,10 +493,6 @@ impl Buffer {
         }
         Ok(self.end_position())
     }
-}
-
-fn is_word_character(character: char) -> bool {
-    character == '_' || character.is_alphanumeric()
 }
 
 #[cfg(test)]

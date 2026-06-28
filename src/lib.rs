@@ -19,6 +19,7 @@ pub mod render;
 pub mod shell;
 pub mod syntax;
 pub mod terminal;
+mod text;
 pub mod window;
 
 pub use error::{Result, RileError};

@@ -1,5 +1,45 @@
 2026-06-28  Robert Charusta  <rch-public@posteo.net>
 
+	Add minibuffer prompt cursor movement.
+
+	* src/text.rs: New file.
+	(is_word_character, move_word_forward_byte,
+	move_word_backward_byte, next_grapheme_boundary,
+	previous_grapheme_boundary): New functions.
+	* src/lib.rs: Add text module.
+	* src/buffer/mod.rs (move_word_forward, move_word_backward): Use shared text
+	word movement helpers.
+	(is_word_character): Remove function.
+	* src/syntax.rs: Use shared is_word_character.
+	(is_word_character): Remove function.
+	* src/minibuffer.rs (PromptState): Add cursor_byte.
+	(start_prompt, insert_prompt_text, set_prompt_input,
+	delete_prompt_grapheme_backward): Track and use the prompt cursor.
+	(move_prompt_grapheme_forward, move_prompt_grapheme_backward,
+	move_prompt_word_forward, move_prompt_word_backward,
+	prompt_input_before_cursor): New methods.
+	(prompt_insert_and_backspace_use_cursor,
+	prompt_grapheme_movement_is_unicode_safe,
+	prompt_word_movement_uses_shared_boundaries,
+	prompt_word_movement_preserves_grapheme_boundaries): New tests.
+	* src/editor.rs (handle_prompt_key, handle_completion_prompt_key,
+	handle_search_prompt_key): Handle prompt cursor movement keys.
+	(handle_prompt_edit_key): New function.
+	(plain_prompt_inserts_at_minibuffer_cursor,
+	completion_prompt_inserts_at_minibuffer_cursor,
+	prompt_word_movement_uses_minibuffer_cursor,
+	incremental_search_prompt_inserts_at_minibuffer_cursor): New tests.
+	* src/terminal/mod.rs (minibuffer_cursor_column): Place the terminal cursor
+	from the prompt input before the minibuffer cursor.
+	* tests/pty_completion.rs
+	(minibuffer_cursor_movement_inserts_at_prompt_point): New test.
+	* README.md: Document minibuffer cursor movement keys.
+	* NEWS: Likewise.
+	* docs/development.md: Document prompt cursor editing behavior.
+	* docs/reference-testing.md: Likewise.
+
+2026-06-28  Robert Charusta  <rch-public@posteo.net>
+
 	Show active regions in wrapped help buffers.
 
 	* src/terminal/mod.rs (draw_wrapped_help_rows): Collect editor decoration

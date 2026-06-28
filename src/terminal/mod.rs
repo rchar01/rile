@@ -436,7 +436,8 @@ fn draw_completion_popup<W: Write>(
 
 fn minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
     let prompt = editor.minibuffer().prompt()?;
-    let prompt_column = text_display_width(&prompt.label) + text_display_width(&prompt.input);
+    let input_before_cursor = editor.minibuffer().prompt_input_before_cursor()?;
+    let prompt_column = text_display_width(&prompt.label) + text_display_width(input_before_cursor);
     let Some(completion) = editor.completion() else {
         return Some(prompt_column);
     };

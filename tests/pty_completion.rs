@@ -1558,3 +1558,49 @@ fn vertical_prompt_history_meta_keys_cover_completion_prompt_sources() -> Result
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn minibuffer_cursor_movement_inserts_at_prompt_point() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send("prompt text", b"ac")?;
+    let (_, end_column) = rile.cursor_position();
+
+    rile.send("C-b", keys::control('b'))?;
+    let (_, moved_column) = rile.cursor_position();
+    if moved_column + 1 != end_column {
+        anyhow::bail!(
+            "C-b did not move minibuffer cursor left\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("insert at prompt point", b"b")?;
+
+    rile.assert_screen_contains("Shell command: abc")?;
+    let (_, inserted_column) = rile.cursor_position();
+    if inserted_column != moved_column + 1 {
+        anyhow::bail!(
+            "insert did not leave cursor after inserted minibuffer text\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send("word prompt text", b"one tw")?;
+    rile.send("M-b", keys::meta('b'))?;
+    rile.send("insert before word", b"X")?;
+    rile.assert_screen_contains("Shell command: one Xtw")?;
+    rile.send("M-f", keys::meta('f'))?;
+    rile.send("insert after word", b"!")?;
+    rile.assert_screen_contains("Shell command: one Xtw!")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}

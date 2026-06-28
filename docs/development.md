@@ -235,6 +235,9 @@ explicitly moved selection wins over exact minibuffer text on Enter. Completion
 prompts use Vertico-style raw exit:
 `M-RET` submits the raw minibuffer input even when a completion candidate is
 selected.
+Minibuffer prompt editing tracks an input cursor: `C-f`/Right and `C-b`/Left
+move by grapheme, `M-f` and `M-b` move by word, insertion occurs at point, and
+Backspace deletes before point.
 File completion resolves relative candidates against the current buffer's
 directory when available, accepts selected existing candidates on Enter,
 descends into selected directories, opens exact typed existing files, and uses
