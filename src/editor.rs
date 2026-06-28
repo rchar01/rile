@@ -297,6 +297,12 @@ enum KillDirection {
     Backward,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PromptEditOutcome {
+    Unhandled,
+    Handled { changed: bool },
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QueryReplaceState {
     query: String,
@@ -1107,11 +1113,12 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
-                self.minibuffer.delete_prompt_grapheme_backward();
-                self.reset_current_prompt_history_navigation();
+                if self.minibuffer.delete_prompt_grapheme_backward() {
+                    self.reset_current_prompt_history_navigation();
+                }
+                self.record_prompt_non_kill_key();
                 Ok(EditorOutcome::Continue)
             }
-            key if self.handle_prompt_edit_key(&key) => Ok(EditorOutcome::Continue),
             KeyEvent::Meta('p') => {
                 self.recall_prompt_history(-1);
                 Ok(EditorOutcome::Continue)
@@ -1123,10 +1130,18 @@ impl Editor {
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
                 self.reset_current_prompt_history_navigation();
+                self.record_prompt_non_kill_key();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => Ok(EditorOutcome::Continue),
-            _ => Ok(EditorOutcome::Continue),
+            key => {
+                if let PromptEditOutcome::Handled { changed } = self.handle_prompt_edit_key(&key)
+                    && changed
+                {
+                    self.reset_current_prompt_history_navigation();
+                }
+                Ok(EditorOutcome::Continue)
+            }
         }
     }
 
@@ -1182,9 +1197,11 @@ impl Editor {
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
-                self.minibuffer.delete_prompt_grapheme_backward();
-                self.reset_current_prompt_history_navigation();
-                self.update_completion_from_prompt();
+                if self.minibuffer.delete_prompt_grapheme_backward() {
+                    self.reset_current_prompt_history_navigation();
+                    self.update_completion_from_prompt();
+                }
+                self.record_prompt_non_kill_key();
                 Ok(EditorOutcome::Continue)
             }
             KeyEvent::Special(SpecialKey::Tab) => {
@@ -1192,7 +1209,6 @@ impl Editor {
                 self.reset_current_prompt_history_navigation();
                 Ok(EditorOutcome::Continue)
             }
-            key if self.handle_prompt_edit_key(&key) => Ok(EditorOutcome::Continue),
             KeyEvent::Meta('p') => {
                 self.recall_prompt_history(-1);
                 self.update_completion_from_prompt();
@@ -1235,32 +1251,95 @@ impl Editor {
                 self.minibuffer.insert_prompt_text(&text);
                 self.reset_current_prompt_history_navigation();
                 self.update_completion_from_prompt();
+                self.record_prompt_non_kill_key();
                 Ok(EditorOutcome::Continue)
             }
-            _ => Ok(EditorOutcome::Continue),
+            key => {
+                if let PromptEditOutcome::Handled { changed } = self.handle_prompt_edit_key(&key)
+                    && changed
+                {
+                    self.reset_current_prompt_history_navigation();
+                    self.update_completion_from_prompt();
+                }
+                Ok(EditorOutcome::Continue)
+            }
         }
     }
 
-    fn handle_prompt_edit_key(&mut self, key: &KeyEvent) -> bool {
+    fn handle_prompt_edit_key(&mut self, key: &KeyEvent) -> PromptEditOutcome {
         match key {
             KeyEvent::Ctrl('f') | KeyEvent::Special(SpecialKey::ArrowRight) => {
                 self.minibuffer.move_prompt_grapheme_forward();
-                true
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
             }
             KeyEvent::Ctrl('b') | KeyEvent::Special(SpecialKey::ArrowLeft) => {
                 self.minibuffer.move_prompt_grapheme_backward();
-                true
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
             }
             KeyEvent::Meta('f') => {
                 self.minibuffer.move_prompt_word_forward();
-                true
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
             }
             KeyEvent::Meta('b') => {
                 self.minibuffer.move_prompt_word_backward();
-                true
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
             }
-            _ => false,
+            KeyEvent::Ctrl('a') | KeyEvent::Special(SpecialKey::Home) => {
+                self.minibuffer.move_prompt_start();
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
+            }
+            KeyEvent::Ctrl('e') | KeyEvent::Special(SpecialKey::End) => {
+                self.minibuffer.move_prompt_end();
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed: false }
+            }
+            KeyEvent::Ctrl('d') | KeyEvent::Special(SpecialKey::Delete) => {
+                let changed = self.minibuffer.delete_prompt_grapheme_forward();
+                self.record_prompt_non_kill_key();
+                PromptEditOutcome::Handled { changed }
+            }
+            KeyEvent::Ctrl('k') => {
+                let killed = self.minibuffer.delete_prompt_to_end();
+                self.record_prompt_kill(killed, KillDirection::Forward)
+            }
+            KeyEvent::Meta('d') => {
+                let killed = self.minibuffer.delete_prompt_word_forward();
+                self.record_prompt_kill(killed, KillDirection::Forward)
+            }
+            KeyEvent::MetaSpecial(SpecialKey::Backspace)
+            | KeyEvent::CtrlSpecial(SpecialKey::Backspace) => {
+                let killed = self.minibuffer.delete_prompt_word_backward();
+                self.record_prompt_kill(killed, KillDirection::Backward)
+            }
+            _ => PromptEditOutcome::Unhandled,
         }
+    }
+
+    fn record_prompt_non_kill_key(&mut self) {
+        self.last_command_was_kill = false;
+        self.kill_recorded_this_command = false;
+        self.yank_state = None;
+    }
+
+    fn record_prompt_kill(
+        &mut self,
+        killed: Option<String>,
+        direction: KillDirection,
+    ) -> PromptEditOutcome {
+        let Some(text) = killed else {
+            self.record_prompt_non_kill_key();
+            return PromptEditOutcome::Handled { changed: false };
+        };
+        self.yank_state = None;
+        self.push_command_kill(KillEntry::Text(text), direction);
+        self.last_command_was_kill = true;
+        self.kill_recorded_this_command = false;
+        PromptEditOutcome::Handled { changed: true }
     }
 
     fn completion_accept_input(&self, kind: PromptKind, input: &str) -> String {
@@ -2452,6 +2531,7 @@ impl Editor {
                 .minibuffer
                 .set_error("quoted NUL insertion is not supported"),
             KeyEvent::Ctrl(_)
+            | KeyEvent::CtrlSpecial(_)
             | KeyEvent::Meta(_)
             | KeyEvent::MetaSpecial(_)
             | KeyEvent::Special(_) => self
@@ -4711,18 +4791,26 @@ impl Editor {
                 self.minibuffer.cancel_prompt();
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
-                self.minibuffer.delete_prompt_grapheme_backward();
-                self.update_incremental_search()?;
+                if self.minibuffer.delete_prompt_grapheme_backward() {
+                    self.update_incremental_search()?;
+                }
+                self.record_prompt_non_kill_key();
             }
-            key if self.handle_prompt_edit_key(&key) => {}
             KeyEvent::Ctrl('s') => self.repeat_incremental_search(SearchDirection::Forward)?,
             KeyEvent::Ctrl('r') => self.repeat_incremental_search(SearchDirection::Backward)?,
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
                 self.update_incremental_search()?;
+                self.record_prompt_non_kill_key();
             }
             KeyEvent::Special(SpecialKey::Tab) => {}
-            _ => {}
+            key => {
+                if let PromptEditOutcome::Handled { changed } = self.handle_prompt_edit_key(&key)
+                    && changed
+                {
+                    self.update_incremental_search()?;
+                }
+            }
         }
         Ok(EditorOutcome::Continue)
     }
@@ -5955,6 +6043,88 @@ mod tests {
         editor.completion = Some(completion);
         editor.minibuffer.set_prompt_input(input);
         editor.update_completion_from_prompt();
+    }
+
+    fn assert_completion_prompt_edit_refreshes_matches(
+        initial_input: &str,
+        setup_keys: &[KeyEvent],
+        edit_key: KeyEvent,
+        expected_input: &str,
+    ) {
+        let mut editor = Editor::new(Document::scratch());
+        let completion = CompletionSession::commands(
+            &CommandRegistry::default(),
+            &KeyMap::default(),
+            editor.completion_config,
+        );
+        start_test_completion_prompt(
+            &mut editor,
+            PromptKind::ExtendedCommand,
+            completion,
+            initial_input,
+        );
+        assert_eq!(
+            editor.completion().map(CompletionSession::match_count),
+            Some(0)
+        );
+
+        for key in setup_keys {
+            editor
+                .handle_key(key.clone())
+                .expect("setup key should be handled");
+        }
+        editor
+            .handle_key(edit_key)
+            .expect("prompt edit should refresh completion");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(expected_input));
+        assert_eq!(
+            editor.completion().map(CompletionSession::match_count),
+            Some(1)
+        );
+    }
+
+    fn assert_incremental_search_prompt_edit_updates_live_search(
+        initial_input: &str,
+        setup_keys: &[KeyEvent],
+        edit_key: KeyEvent,
+        expected_input: &str,
+    ) {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), " alpha beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text(initial_input.to_owned()))
+            .expect("search input should update");
+        let failing_message = format!("Failing I-search: {initial_input}");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some(failing_message.as_str())
+        );
+
+        for key in setup_keys {
+            editor
+                .handle_key(key.clone())
+                .expect("setup key should be handled");
+        }
+        editor
+            .handle_key(edit_key)
+            .expect("prompt edit should update search");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(expected_input));
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        let found_message = format!("I-search: {expected_input}");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some(found_message.as_str())
+        );
     }
 
     fn mark_columns_one_to_three_across_two_lines(editor: &mut Editor) {
@@ -8021,6 +8191,148 @@ mod tests {
         assert_eq!(
             editor.minibuffer().prompt_input_before_cursor(),
             Some("one two_three")
+        );
+    }
+
+    #[test]
+    fn prompt_start_end_and_forward_delete_use_minibuffer_cursor() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("abc");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("C-a should move to prompt start");
+        assert_eq!(editor.minibuffer().prompt_input_before_cursor(), Some(""));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('d'))
+            .expect("C-d should delete after prompt point");
+        assert_eq!(editor.minibuffer().prompt_input(), Some("bc"));
+
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::End))
+            .expect("End should move to prompt end");
+        assert_eq!(editor.minibuffer().prompt_input_before_cursor(), Some("bc"));
+    }
+
+    #[test]
+    fn minibuffer_kill_line_yanks_into_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("echo suffix");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("C-a should move to prompt start");
+        editor
+            .handle_key(KeyEvent::Ctrl('k'))
+            .expect("C-k should kill prompt suffix");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        editor
+            .execute_command_by_name("yank")
+            .expect("yank should insert minibuffer kill");
+
+        assert_eq!(editor.document().buffer().serialize(), "echo suffix");
+    }
+
+    #[test]
+    fn minibuffer_word_kills_yank_into_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("alpha beta");
+
+        editor
+            .handle_key(KeyEvent::MetaSpecial(SpecialKey::Backspace))
+            .expect("M-Backspace should kill previous prompt word");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        editor
+            .execute_command_by_name("yank")
+            .expect("yank should insert minibuffer kill");
+
+        assert_eq!(editor.document().buffer().serialize(), "beta");
+
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("gamma delta");
+        editor
+            .handle_key(KeyEvent::Ctrl('a'))
+            .expect("C-a should move to prompt start");
+        editor
+            .handle_key(KeyEvent::Meta('d'))
+            .expect("M-d should kill next prompt word");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        editor
+            .execute_command_by_name("yank")
+            .expect("yank should insert minibuffer kill");
+
+        assert_eq!(editor.document().buffer().serialize(), "betagamma");
+
+        editor
+            .minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        editor.minibuffer.insert_prompt_text("omega psi");
+        editor
+            .handle_key(KeyEvent::CtrlSpecial(SpecialKey::Backspace))
+            .expect("C-Backspace should kill previous prompt word when encoded");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel prompt");
+        editor
+            .execute_command_by_name("yank")
+            .expect("yank should insert minibuffer kill");
+
+        assert_eq!(editor.document().buffer().serialize(), "betagammapsi");
+    }
+
+    #[test]
+    fn completion_prompt_deletion_refreshes_matches() {
+        assert_completion_prompt_edit_refreshes_matches(
+            "ztoggle-search-highlighting",
+            &[KeyEvent::Ctrl('a')],
+            KeyEvent::Ctrl('d'),
+            "toggle-search-highlighting",
+        );
+    }
+
+    #[test]
+    fn completion_prompt_kill_commands_refresh_matches() {
+        assert_completion_prompt_edit_refreshes_matches(
+            "toggle-search-highlightingz",
+            &[KeyEvent::Ctrl('b')],
+            KeyEvent::Ctrl('k'),
+            "toggle-search-highlighting",
+        );
+        assert_completion_prompt_edit_refreshes_matches(
+            "z toggle-search-highlighting",
+            &[KeyEvent::Ctrl('a')],
+            KeyEvent::Meta('d'),
+            " toggle-search-highlighting",
+        );
+        assert_completion_prompt_edit_refreshes_matches(
+            "z toggle-search-highlighting",
+            &[KeyEvent::Ctrl('a'), KeyEvent::Ctrl('f')],
+            KeyEvent::MetaSpecial(SpecialKey::Backspace),
+            " toggle-search-highlighting",
+        );
+        assert_completion_prompt_edit_refreshes_matches(
+            "z toggle-search-highlighting",
+            &[KeyEvent::Ctrl('a'), KeyEvent::Ctrl('f')],
+            KeyEvent::CtrlSpecial(SpecialKey::Backspace),
+            " toggle-search-highlighting",
         );
     }
 
@@ -13259,6 +13571,44 @@ M-g g           goto-line                      Go to line or line:column\n"
             Some("alph")
         );
         assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn incremental_search_prompt_deletion_updates_live_search() {
+        assert_incremental_search_prompt_edit_updates_live_search(
+            "x alpha",
+            &[KeyEvent::Ctrl('a')],
+            KeyEvent::Ctrl('d'),
+            " alpha",
+        );
+    }
+
+    #[test]
+    fn incremental_search_prompt_kill_commands_update_live_search() {
+        assert_incremental_search_prompt_edit_updates_live_search(
+            " alphax",
+            &[KeyEvent::Ctrl('b')],
+            KeyEvent::Ctrl('k'),
+            " alpha",
+        );
+        assert_incremental_search_prompt_edit_updates_live_search(
+            "x alpha",
+            &[KeyEvent::Ctrl('a')],
+            KeyEvent::Meta('d'),
+            " alpha",
+        );
+        assert_incremental_search_prompt_edit_updates_live_search(
+            "x alpha",
+            &[KeyEvent::Ctrl('a'), KeyEvent::Ctrl('f')],
+            KeyEvent::MetaSpecial(SpecialKey::Backspace),
+            " alpha",
+        );
+        assert_incremental_search_prompt_edit_updates_live_search(
+            "x alpha",
+            &[KeyEvent::Ctrl('a'), KeyEvent::Ctrl('f')],
+            KeyEvent::CtrlSpecial(SpecialKey::Backspace),
+            " alpha",
+        );
     }
 
     #[test]

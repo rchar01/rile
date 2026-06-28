@@ -120,8 +120,10 @@ Basic editor keys:
 - `C-x k` prompts for a buffer name with completion and kills it; empty input
   kills the current buffer, Tab or Enter accepts the selected candidate, and
   buffers with unsaved changes use an Emacs-style `y-or-n-p` confirmation.
-- Minibuffer prompts support `C-f`/Right, `C-b`/Left, `M-f`, and `M-b` cursor
-  movement while editing prompt text.
+- Minibuffer prompts support `C-a`/Home, `C-e`/End, `C-f`/Right,
+  `C-b`/Left, `M-f`, and `M-b` cursor movement while editing prompt text.
+  `C-d`/Delete deletes after point; `C-k`, `M-d`, `M-Backspace`, and
+  terminal-encoded `C-Backspace` kill prompt text into the normal kill ring.
 - `C-x 2` splits the current window below.
 - `C-x 3` splits the current window right.
 - `C-x 0` deletes the current window.

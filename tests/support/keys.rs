@@ -33,3 +33,7 @@ pub fn meta_backspace() -> Vec<u8> {
 pub fn meta_enter() -> Vec<u8> {
     vec![b'\x1b', b'\r']
 }
+
+pub fn ctrl_backspace() -> Vec<u8> {
+    b"\x1b[127;5u".to_vec()
+}

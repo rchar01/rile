@@ -1601,6 +1601,32 @@ fn minibuffer_cursor_movement_inserts_at_prompt_point() -> Result<()> {
     rile.assert_screen_contains("Shell command: one Xtw!")?;
     rile.send("C-g", keys::control('g'))?;
 
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send("kill prompt text", b"abc suffix")?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("replacement", b"z")?;
+    rile.assert_screen_contains("Shell command: zabc suffix")?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("end marker", b"!")?;
+    rile.assert_screen_contains("Shell command: zabc suffix!")?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-k", keys::control('k'))?;
+    rile.assert_screen_contains("Shell command: z")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send("ctrl backspace text", b"omega psi")?;
+    rile.send("C-Backspace", keys::ctrl_backspace())?;
+    rile.assert_screen_contains("Shell command: omega")?;
+    if rile.snapshot_text().contains("omega psi") {
+        anyhow::bail!(
+            "C-Backspace did not delete prompt word\n{}",
+            rile.screen_dump()
+        );
+    }
+    rile.send("C-g", keys::control('g'))?;
+
     rile.quit()?;
     Ok(())
 }

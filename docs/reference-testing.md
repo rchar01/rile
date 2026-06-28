@@ -297,7 +297,9 @@ prompts:
   deliberately preserved, `M-RET` submits raw minibuffer input, and an explicitly
   moved selection wins over exact minibuffer text;
 - minibuffer prompt text uses an input cursor with `C-f`/Right, `C-b`/Left,
-  `M-f`, and `M-b` movement, point-aware insertion, and Backspace before point;
+  `M-f`, `M-b`, `C-a`/Home, and `C-e`/End movement, point-aware insertion,
+  Backspace and `C-d`/Delete, and kill-ring deletion with `C-k`, `M-d`,
+  `M-Backspace`, and terminal-encoded `C-Backspace`;
 - command, option, and buffer prompts use orderless component matching by
   default, including smart case, simple literal anchors, `!foo` negation, and
   `=foo` literal components;

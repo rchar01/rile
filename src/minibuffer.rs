@@ -97,18 +97,31 @@ impl MinibufferState {
         }
     }
 
-    pub fn delete_prompt_grapheme_backward(&mut self) {
+    pub fn delete_prompt_grapheme_backward(&mut self) -> bool {
         let Some(prompt) = &mut self.prompt else {
-            return;
+            return false;
         };
         let Some((byte, _)) = prompt.input[..prompt.cursor_byte]
             .grapheme_indices(true)
             .next_back()
         else {
-            return;
+            return false;
         };
         prompt.input.drain(byte..prompt.cursor_byte);
         prompt.cursor_byte = byte;
+        true
+    }
+
+    pub fn delete_prompt_grapheme_forward(&mut self) -> bool {
+        let Some(prompt) = &mut self.prompt else {
+            return false;
+        };
+        let Some(grapheme) = prompt.input[prompt.cursor_byte..].graphemes(true).next() else {
+            return false;
+        };
+        let end = prompt.cursor_byte + grapheme.len();
+        prompt.input.drain(prompt.cursor_byte..end);
+        true
     }
 
     pub fn move_prompt_grapheme_forward(&mut self) {
@@ -144,6 +157,46 @@ impl MinibufferState {
         if let Some(prompt) = &mut self.prompt {
             prompt.cursor_byte = move_word_backward_byte(&prompt.input, prompt.cursor_byte);
         }
+    }
+
+    pub fn move_prompt_start(&mut self) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.cursor_byte = 0;
+        }
+    }
+
+    pub fn move_prompt_end(&mut self) {
+        if let Some(prompt) = &mut self.prompt {
+            prompt.cursor_byte = prompt.input.len();
+        }
+    }
+
+    pub fn delete_prompt_to_end(&mut self) -> Option<String> {
+        let prompt = self.prompt.as_mut()?;
+        if prompt.cursor_byte >= prompt.input.len() {
+            return None;
+        }
+        Some(prompt.input.drain(prompt.cursor_byte..).collect())
+    }
+
+    pub fn delete_prompt_word_forward(&mut self) -> Option<String> {
+        let prompt = self.prompt.as_mut()?;
+        let end = move_word_forward_byte(&prompt.input, prompt.cursor_byte);
+        if end == prompt.cursor_byte {
+            return None;
+        }
+        Some(prompt.input.drain(prompt.cursor_byte..end).collect())
+    }
+
+    pub fn delete_prompt_word_backward(&mut self) -> Option<String> {
+        let prompt = self.prompt.as_mut()?;
+        let start = move_word_backward_byte(&prompt.input, prompt.cursor_byte);
+        if start == prompt.cursor_byte {
+            return None;
+        }
+        let text = prompt.input.drain(start..prompt.cursor_byte).collect();
+        prompt.cursor_byte = start;
+        Some(text)
     }
 
     pub fn prompt_input_before_cursor(&self) -> Option<&str> {
@@ -275,6 +328,61 @@ mod tests {
         minibuffer.move_prompt_word_forward();
 
         assert_eq!(minibuffer.prompt_input_before_cursor(), Some("e\u{301}"));
+    }
+
+    #[test]
+    fn prompt_start_end_and_forward_delete_use_cursor() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        minibuffer.insert_prompt_text("abc");
+        minibuffer.move_prompt_start();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some(""));
+
+        assert!(minibuffer.delete_prompt_grapheme_forward());
+        assert_eq!(minibuffer.prompt_input(), Some("bc"));
+
+        minibuffer.move_prompt_end();
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("bc"));
+        assert!(!minibuffer.delete_prompt_grapheme_forward());
+    }
+
+    #[test]
+    fn prompt_forward_delete_is_grapheme_safe() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::FindFile, "Find file: ");
+        minibuffer.insert_prompt_text("e\u{301}x");
+        minibuffer.move_prompt_start();
+
+        assert!(minibuffer.delete_prompt_grapheme_forward());
+        assert_eq!(minibuffer.prompt_input(), Some("x"));
+    }
+
+    #[test]
+    fn prompt_kill_methods_return_deleted_text() {
+        let mut minibuffer = MinibufferState::default();
+
+        minibuffer.start_prompt(PromptKind::ShellCommand, "Shell command: ");
+        minibuffer.insert_prompt_text("one two three");
+        minibuffer.move_prompt_word_backward();
+        assert_eq!(
+            minibuffer.delete_prompt_word_backward(),
+            Some("two ".to_owned())
+        );
+        assert_eq!(minibuffer.prompt_input(), Some("one three"));
+        assert_eq!(minibuffer.prompt_input_before_cursor(), Some("one "));
+
+        assert_eq!(
+            minibuffer.delete_prompt_word_forward(),
+            Some("three".to_owned())
+        );
+        assert_eq!(minibuffer.prompt_input(), Some("one "));
+
+        minibuffer.move_prompt_start();
+        assert_eq!(minibuffer.delete_prompt_to_end(), Some("one ".to_owned()));
+        assert_eq!(minibuffer.prompt_input(), Some(""));
+        assert_eq!(minibuffer.delete_prompt_to_end(), None);
     }
 
     #[test]

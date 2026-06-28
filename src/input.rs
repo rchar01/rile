@@ -8,6 +8,7 @@ use crate::{Result, RileError};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum KeyEvent {
     Ctrl(char),
+    CtrlSpecial(SpecialKey),
     Meta(char),
     MetaSpecial(SpecialKey),
     Text(String),
@@ -216,6 +217,8 @@ fn csi_u_key_event(key_code: u32, has_alt: bool, has_ctrl: bool) -> Option<KeyEv
     if let Some(special) = csi_u_special_key(key_code) {
         return Some(if has_alt {
             KeyEvent::MetaSpecial(special)
+        } else if has_ctrl {
+            KeyEvent::CtrlSpecial(special)
         } else {
             KeyEvent::Special(special)
         });
@@ -233,7 +236,7 @@ fn csi_u_key_event(key_code: u32, has_alt: bool, has_ctrl: bool) -> Option<KeyEv
 
 fn csi_u_special_key(key_code: u32) -> Option<SpecialKey> {
     match key_code {
-        8 | 127 => Some(SpecialKey::Backspace),
+        127 => Some(SpecialKey::Backspace),
         9 => Some(SpecialKey::Tab),
         10 | 13 => Some(SpecialKey::Enter),
         27 => Some(SpecialKey::Escape),
@@ -244,6 +247,7 @@ fn csi_u_special_key(key_code: u32) -> Option<SpecialKey> {
 fn csi_u_ctrl_key(key_code: u32) -> Option<char> {
     match char::from_u32(key_code)? {
         '@' | ' ' => Some('@'),
+        '\u{8}' => Some('h'),
         '_' => Some('_'),
         character if character.is_ascii_alphabetic() => Some(character.to_ascii_lowercase()),
         _ => None,
@@ -285,6 +289,12 @@ fn parse_tilde_sequence(bytes: &[u8], key: SpecialKey) -> Result<Option<(KeyEven
         return Ok(None);
     }
     if bytes[3] != b'~' {
+        if bytes[3..]
+            .iter()
+            .all(|byte| byte.is_ascii_digit() || *byte == b';')
+        {
+            return Ok(None);
+        }
         return Ok(Some((KeyEvent::Special(SpecialKey::Escape), 1)));
     }
     Ok(Some((KeyEvent::Special(key), 4)))
@@ -387,6 +397,11 @@ mod tests {
             parse(b"\x1b[13;3u").event,
             KeyEvent::MetaSpecial(SpecialKey::Enter)
         );
+        assert_eq!(
+            parse(b"\x1b[127;5u").event,
+            KeyEvent::CtrlSpecial(SpecialKey::Backspace)
+        );
+        assert_eq!(parse(b"\x1b[8;5u").event, KeyEvent::Ctrl('h'));
         assert_eq!(parse(b"\x1b[102;3u").event, KeyEvent::Meta('f'));
         assert_eq!(parse(b"\x1b[65;5u").event, KeyEvent::Ctrl('a'));
         let fallback = parse(b"\x1b[x;5u");
