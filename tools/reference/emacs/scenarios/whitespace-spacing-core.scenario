@@ -1,0 +1,57 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=whitespace-spacing-core
+SCENARIO_DESCRIPTION='Observe base Emacs horizontal spacing cleanup commands.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=whitespace-spacing-core.txt
+FIXTURE_CONTENT=$'alpha     beta\nleft     right\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-before-delete-horizontal-space.png
+Sleep 500ms
+Escape
+Type "x"
+Type "delete-horizontal-space"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-delete-horizontal-space.png
+Sleep 500ms
+Ctrl+N
+Ctrl+A
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-before-just-one-space.png
+Sleep 500ms
+Escape
+Type "x"
+Type "just-one-space"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-just-one-space.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

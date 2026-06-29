@@ -386,8 +386,9 @@ Rile target: implement the small Emacs-compatible subset for ASCII space and tab
 characters first. Do not treat newlines as horizontal space.
 
 Evidence: GNU Emacs `describe-function` output for `delete-horizontal-space`;
-current GNU Emacs key binding for `M-\`; Rile command registry currently has no
-`delete-horizontal-space` entry.
+current GNU Emacs key binding for `M-\`; Emacs scenario
+`tools/reference/emacs/scenarios/whitespace-spacing-core.scenario`; Rile command
+registry currently has no `delete-horizontal-space` entry.
 
 Notes: This command is a good unit-test target because it does not depend on
 terminal-visible prompts or mode-specific indentation rules.
@@ -396,8 +397,8 @@ terminal-visible prompts or mode-specific indentation rules.
 
 Status: `missing`.
 
-Default binding: none in current GNU Emacs; `M-SPC` is currently bound to
-`cycle-spacing`.
+Default binding: no active default binding in current GNU Emacs; active key lookup
+resolves `M-SPC` to `cycle-spacing`.
 
 Purpose: collapse spaces and tabs around point to a requested number of spaces.
 
@@ -425,13 +426,16 @@ negative-argument newline joining unless a focused scenario confirms it is worth
 the extra behavior.
 
 Evidence: GNU Emacs `describe-function` output for `just-one-space`; current GNU
-Emacs key binding for `M-SPC` resolves to `cycle-spacing`; Rile command registry
-currently has no `just-one-space` entry.
+Emacs key binding for `M-SPC` resolves to `cycle-spacing`; `M-x just-one-space`
+advertises `M-SPC` after execution; Emacs scenario
+`tools/reference/emacs/scenarios/whitespace-spacing-core.scenario`; Rile command
+registry currently has no `just-one-space` entry.
 
-Notes: The plan names this underlying command, but user muscle memory for `M-SPC`
-may expect `cycle-spacing` in newer Emacs. Decide whether Rile should expose
-`just-one-space` unbound first or bind `M-SPC` to a documented subset of
-`cycle-spacing` in a later slice.
+Notes: The plan names this underlying command, but `M-SPC` has subtle current
+Emacs behavior because `cycle-spacing` is the active binding while `M-x
+just-one-space` still advertises `M-SPC`. Decide whether Rile should expose
+`just-one-space` first or bind `M-SPC` to a documented subset of `cycle-spacing`
+in a later slice.
 
 ### `delete-blank-lines`
 
@@ -463,8 +467,9 @@ existing definition of blank lines as lines containing only spaces or tabs unles
 later evidence requires a broader whitespace definition.
 
 Evidence: GNU Emacs manual, Blank Lines, `C-x C-o`; GNU Emacs
-`describe-function` output for `delete-blank-lines`; Rile command registry
-currently has no `delete-blank-lines` entry.
+`describe-function` output for `delete-blank-lines`; Emacs scenario
+`tools/reference/emacs/scenarios/whitespace-cleanup-core.scenario`; Rile command
+registry currently has no `delete-blank-lines` entry.
 
 Notes: Unit tests should cover point on a nonblank line before blank lines, point
 inside a multi-blank-line run, and point on a single blank line.
@@ -504,8 +509,9 @@ line ends within the active region bounds or whole buffer. Defer Emacs's
 corresponding customization surface.
 
 Evidence: GNU Emacs manual, Useless Whitespace, `delete-trailing-whitespace`; GNU
-Emacs `describe-function` output; Rile command registry currently has no
-`delete-trailing-whitespace` entry.
+Emacs `describe-function` output; Emacs scenario
+`tools/reference/emacs/scenarios/whitespace-cleanup-core.scenario`; Rile command
+registry currently has no `delete-trailing-whitespace` entry.
 
 Notes: This command is likely useful before full whitespace visualization support
 because it can be implemented and tested independently of rendering faces.

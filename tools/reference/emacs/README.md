@@ -100,6 +100,10 @@ Initial inspection scenarios:
 - `read-only-open-core`: base Emacs `C-x C-r` read-only file open behavior.
 - `toggle-read-only-core`: base Emacs `C-x C-q` toggle-read-only behavior.
 - `universal-argument-core`: base Emacs `C-u` universal-argument behavior.
+- `whitespace-cleanup-core`: base Emacs `C-x C-o` and
+  `delete-trailing-whitespace` cleanup behavior.
+- `whitespace-spacing-core`: base Emacs `delete-horizontal-space` and
+  `just-one-space` horizontal spacing behavior.
 
 Scenario files may define `setup_reference_files CAPTURE_DIR CAPTURE_REL` when a
 capture needs extra files inside its ignored artifact directory.

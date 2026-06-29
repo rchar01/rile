@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=whitespace-cleanup-core
+SCENARIO_DESCRIPTION='Observe base Emacs blank-line and trailing-whitespace cleanup commands.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=whitespace-cleanup-core.txt
+FIXTURE_CONTENT=$'header\n\n\nbody    \ntrailing tabs\t\t\n\n\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /header/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-before-delete-blank-lines.png
+Sleep 500ms
+Ctrl+X
+Ctrl+O
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-delete-blank-lines.png
+Sleep 500ms
+Ctrl+S
+Type "body"
+Enter
+Ctrl+E
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-before-delete-trailing-whitespace.png
+Sleep 500ms
+Escape
+Type "x"
+Type "delete-trailing-whitespace"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-delete-trailing-whitespace.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

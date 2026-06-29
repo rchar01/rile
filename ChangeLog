@@ -1,5 +1,17 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs whitespace reference captures.
+
+	* tools/reference/emacs/scenarios/whitespace-spacing-core.scenario: New file.
+	* tools/reference/emacs/scenarios/whitespace-cleanup-core.scenario: New file.
+	* docs/emacs-function-reference.md: Cite the new scenarios in whitespace
+	command reference entries.
+	* tools/reference/emacs/README.md: List the new scenarios.
+	* docs/emacs-behavior-reference-plan.md: Mark the whitespace capture task
+	complete and record targeted capture validation.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs case-conversion reference captures.
 
 	* tools/reference/emacs/scenarios/case-word-core.scenario: New file.
