@@ -1,5 +1,15 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Complete the Emacs reference backlog comparison.
+
+	* docs/emacs-behavior-reference-plan.md: Mark Phase 4 tasks and
+	validation complete.  Add the Rile compatibility backlog, ranked missing
+	work, Rile 1.0 non-goals, concrete first implementation slice, progress
+	log entry, and decisions for reference-batch scope and region case
+	conversion.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs fill and comment reference captures.
 
 	* tools/reference/emacs/scenarios/fill-paragraph-core.scenario: New file.

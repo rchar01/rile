@@ -63,9 +63,9 @@ than memory or source-porting.
 
 ## Open Questions
 
-- [ ] Should the first reference batch include only commands we expect to
+- [x] Should the first reference batch include only commands we expect to
   implement soon, or should it include a broader Rile 1.0 compatibility matrix?
-- [ ] Should region case conversion be implemented in the same slice as word
+- [x] Should region case conversion be implemented in the same slice as word
   case conversion?
 - [x] Should `comment-dwim` depend only on Rile's existing syntax modes, or
   should it introduce a separate comment-syntax table first?
@@ -150,18 +150,85 @@ Goal: turn the reference into a concrete implementation backlog.
 
 Tasks:
 
-- [ ] Add or update a Rile gap table that maps Emacs commands to Rile command
+- [x] Add or update a Rile gap table that maps Emacs commands to Rile command
   names, key bindings, implementation status, and priority.
-- [ ] Rank missing features by usefulness, implementation size, and testability.
-- [ ] Identify commands that should remain out of scope for Rile 1.0.
+- [x] Rank missing features by usefulness, implementation size, and testability.
+- [x] Identify commands that should remain out of scope for Rile 1.0.
 
 Validation gate:
 
-- [ ] The backlog has a clear first implementation slice and explicit non-goals.
+- [x] The backlog has a clear first implementation slice and explicit non-goals.
 
-## Likely First Implementation Slice
+## Rile Compatibility Backlog
 
-Start with case conversion after the reference is written:
+This table covers the curated command entries in
+`docs/emacs-function-reference.md`. It intentionally does not claim to be a full
+Emacs compatibility matrix.
+
+Priority key: P0 is the next implementation slice, P1 is high-value follow-up, P2
+is useful but larger or less urgent, and P3 is deferred for later Rile releases.
+
+| Emacs command | Rile command name | Default binding target | Rile status | Priority | Implementation note |
+| --- | --- | --- | --- | --- | --- |
+| `join-line` / `delete-indentation` | `join-line` | `M-^` | Implemented subset | Done | Keep current no-prefix line-local behavior; defer prefix and region variants. |
+| `query-replace` | `query-replace` | `M-%` | Implemented subset | Done | Keep current choice-key subset; broader Emacs query-replace keys are not part of this backlog. |
+| `downcase-word` | `downcase-word` | `M-l` | Missing | P0 | Start the case-conversion slice; use Rile word boundaries, UTF-8-safe edits, arguments, and single-command undo. |
+| `upcase-word` | `upcase-word` | `M-u` | Missing | P0 | Share the same word-span machinery as `downcase-word`. |
+| `capitalize-word` | `capitalize-word` | `M-c` | Missing | P0 | Share the case-word implementation and test mixed ASCII/UTF-8 input. |
+| `downcase-region` | `downcase-region` | `C-x C-l` | Missing | P0 | Include in the first slice; intentionally skip Emacs disabled-command confirmation. |
+| `upcase-region` | `upcase-region` | `C-x C-u` | Missing | P0 | Include in the first slice with point/mark preservation and region undo tests. |
+| `delete-horizontal-space` | `delete-horizontal-space` | `M-\` | Missing | P1 | Small, useful, and unit-testable; implement ASCII space/tab behavior before broader whitespace rules. |
+| `just-one-space` | `just-one-space` | No active binding | Missing | P2 | Implement after deciding whether `M-SPC` should eventually map to `cycle-spacing` instead. |
+| `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Missing | P1 | Useful and bounded; test point on blank runs, isolated blank lines, and nonblank lines before blanks. |
+| `delete-trailing-whitespace` | `delete-trailing-whitespace` | None | Missing | P1 | Useful for source/config files; implement region-or-buffer ASCII space/tab cleanup first. |
+| `transpose-chars` | `transpose-chars` | `C-t` | Missing | P1 | High familiarity and small scope; verify terminal input and UTF-8 character boundaries. |
+| `transpose-words` | `transpose-words` | `M-t` | Missing | P2 | Depends on consistent word-span logic; defer mark-based zero-argument behavior. |
+| `transpose-lines` | `transpose-lines` | `C-x C-t` | Missing | P2 | Useful, but line-range replacement and point restoration need careful tests. |
+| `fill-paragraph` | `fill-paragraph` | `M-q` | Missing | P2 | Implement plain-text reflow only after paragraph-boundary helpers exist. |
+| `comment-dwim` | `comment-dwim` | `M-;` | Missing | P2 | Add reusable comment-syntax metadata first; target line comments before full Emacs DWIM behavior. |
+| `comment-region` | `comment-region` | None globally | Missing | P2 | Build as a line-comment subset for known modes; avoid C-mode block-comment parity in the first version. |
+| `uncomment-region` | `uncomment-region` | None | Missing | P2 | Implement as the inverse of the line-comment subset. |
+| `forward-paragraph` | `forward-paragraph` | `M-}` | Missing | P1 | Useful movement command and prerequisite for later fill behavior. |
+| `backward-paragraph` | `backward-paragraph` | `M-{` | Missing | P1 | Implement with shared paragraph-boundary code. |
+| `forward-sentence` | `forward-sentence` | `M-e` | Missing | P3 | Useful but edge rules are subtler than paragraph movement. |
+| `backward-sentence` | `backward-sentence` | `M-a` | Missing | P3 | Defer until the sentence-boundary subset is clearly worth the complexity. |
+
+## Ranked Missing Work
+
+1. Case conversion: `downcase-word`, `upcase-word`, `capitalize-word`,
+   `downcase-region`, and `upcase-region`. This is the first slice because it is
+   familiar, bounded, directly useful, and mostly unit-testable.
+2. Whitespace cleanup and paragraph movement: `delete-horizontal-space`,
+   `delete-blank-lines`, `delete-trailing-whitespace`, `forward-paragraph`, and
+   `backward-paragraph`. These are high-value editing conveniences and establish
+   reusable range/boundary helpers.
+3. Transpose basics: start with `transpose-chars`, then evaluate
+   `transpose-words` and `transpose-lines` after the first two groups are stable.
+4. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
+   `uncomment-region`. These are useful but need paragraph wrapping and reusable
+   comment-syntax metadata to avoid coupling editing behavior to rendering.
+5. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
+   deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
+
+## Rile 1.0 Non-Goals From This Batch
+
+- Full Emacs disabled-command confirmation for `upcase-region` and
+  `downcase-region`.
+- Exact Unicode, locale, and syntax-table parity for Emacs case conversion.
+- `cycle-spacing` parity or binding `M-SPC` before Rile has a documented spacing
+  command decision.
+- Zero-argument mark-based transpose variants.
+- Full Emacs fill machinery, including justification, fill prefixes,
+  sentence-end-double-space customization, CJK/kinsoku behavior, and mode hooks.
+- Full Emacs comment machinery, including block comments, `comment-column`
+  alignment, `comment-style`, delimiter-count prefix behavior, and mode-specific
+  C-mode `C-c C-c` parity.
+- Customizable `paragraph-start`, `paragraph-separate`, `sentence-end`, and
+  mode-specific paragraph or sentence functions.
+
+## First Implementation Slice
+
+Start with case conversion:
 
 - `upcase-word`
 - `downcase-word`
@@ -170,7 +237,13 @@ Start with case conversion after the reference is written:
 - `downcase-region`
 
 This slice is useful, bounded, easy to test without terminal I/O, and close to
-the user's example gap.
+the user's example gap. It should add command registry entries, default Emacs
+bindings, unit tests for word and region spans, UTF-8 tests, argument tests,
+read-only tests, and enough PTY coverage to confirm key bindings and visible
+editing behavior.
+
+The first slice explicitly excludes Emacs disabled-command confirmation for the
+region commands and exact Emacs syntax-table or locale behavior.
 
 ## Validation
 
@@ -183,6 +256,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Completed Phase 4 Rile comparison and backlog ranking. | `src/command.rs` and `src/keymap.rs` show that only `join-line` and `query-replace` from the curated reference are implemented; the new backlog ranks the remaining documented command families and defines case conversion as the first slice. |
 | 2026-06-29 | Added Phase 3 Emacs fill/comment captures. | `tools/reference/emacs/scenarios/fill-paragraph-core.scenario` covers `M-q` fill and undo; `comment-commands-core.scenario` covers `M-;`, `comment-region`, and `uncomment-region` prompts/results in C mode. |
 | 2026-06-29 | Added Phase 3 Emacs transpose captures. | `tools/reference/emacs/scenarios/transpose-core.scenario` covers `C-t`, `M-t`, `C-x C-t`, point placement, and undo frames. |
 | 2026-06-29 | Added Phase 3 Emacs whitespace captures. | `tools/reference/emacs/scenarios/whitespace-spacing-core.scenario` covers `delete-horizontal-space` and `just-one-space`; `whitespace-cleanup-core.scenario` covers `delete-blank-lines` and `delete-trailing-whitespace`. |
@@ -199,6 +273,8 @@ the user's example gap.
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-06-29 | Keep the first reference batch focused instead of expanding it into a full Rile 1.0 compatibility matrix. | The documented batch is already enough to drive implementation work; broader gaps such as revert, save-all, and window resizing should get their own evidence before entering the backlog. |
+| 2026-06-29 | Implement word and region case conversion in the same first slice. | The commands share transformation, undo, read-only, and UTF-8 concerns, and the region variants are small when disabled-command confirmation is out of scope. |
 | 2026-06-29 | Target a documented plain-text subset for the first `fill-paragraph` implementation. | Full Emacs filling includes justification, language-specific breaking, fill prefixes, mode hooks, and comment filling that would be too large for the first Rile slice. |
 | 2026-06-29 | Add reusable comment-syntax metadata before implementing comment editing commands. | Existing Rile comment markers are embedded in syntax highlighting and should not become the editing API by accident. |
 | 2026-06-29 | Build a curated Emacs behavior reference before adding missing compatibility commands. | Avoid guessing from memory and avoid source-porting while preserving small-editor scope. |
