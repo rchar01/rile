@@ -14,6 +14,7 @@ pub enum Command {
     BeginningOfLine,
     BufferListSelect,
     CallLastKeyboardMacro,
+    CapitalizeWord,
     ClearRectangle,
     CopyRegionAsKill,
     CopyRectangleAsKill,
@@ -31,6 +32,8 @@ pub enum Command {
     DescribeKeyBriefly,
     DescribeMode,
     DescribeVariable,
+    DowncaseRegion,
+    DowncaseWord,
     EndKeyboardMacro,
     EndOfBuffer,
     EndOfLine,
@@ -90,6 +93,8 @@ pub enum Command {
     ToggleSyntaxHighlighting,
     Undo,
     UniversalArgument,
+    UpcaseRegion,
+    UpcaseWord,
     ViewEchoAreaMessages,
     WriteFile,
     Yank,
@@ -169,10 +174,12 @@ impl CommandCategory {
             | NextLine | PreviousLine | Recenter | ScrollPageBackward | ScrollPageForward => {
                 Self::Movement
             }
-            BackwardKillWord | CopyRegionAsKill | DeleteBackwardChar | DeleteChar
-            | ExchangePointAndMark | JoinLine | KillLine | KillRegion | KillWord
-            | MarkWholeBuffer | NewlineAndIndent | OpenLine | QuotedInsert | SetMarkCommand
-            | Undo | Yank | YankPop => Self::Editing,
+            BackwardKillWord | CapitalizeWord | CopyRegionAsKill | DeleteBackwardChar
+            | DeleteChar | DowncaseRegion | DowncaseWord | ExchangePointAndMark | JoinLine
+            | KillLine | KillRegion | KillWord | MarkWholeBuffer | NewlineAndIndent | OpenLine
+            | QuotedInsert | SetMarkCommand | Undo | UpcaseRegion | UpcaseWord | Yank | YankPop => {
+                Self::Editing
+            }
             FindFile | FindFileReadOnly | InsertFile | SaveBuffer | WriteFile => Self::Files,
             BufferListSelect | KillBuffer | ListBuffers | QuitBufferList | SwitchToBuffer => {
                 Self::Buffers
@@ -220,6 +227,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         BeginningOfLine => "Move point to the beginning of the current line.",
         BufferListSelect => "Visit the buffer named on the current buffer-list row.",
         CallLastKeyboardMacro => "Replay the most recently recorded keyboard macro.",
+        CapitalizeWord => "Capitalize the following word or words.",
         ClearRectangle => "Replace the active rectangle contents with spaces.",
         CopyRegionAsKill => "Copy the active region to the kill ring without deleting it.",
         CopyRectangleAsKill => "Copy the active rectangle to the rectangle kill ring.",
@@ -237,6 +245,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DescribeKeyBriefly => "Read a key sequence and echo the command bound to it.",
         DescribeMode => "Show the active major, minor, and special-buffer modes.",
         DescribeVariable => "Prompt for a configuration option and show its help buffer.",
+        DowncaseRegion => "Convert the active region to lower case.",
+        DowncaseWord => "Convert the following word or words to lower case.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
         EndOfBuffer => "Move point to the end of the current buffer.",
         EndOfLine => "Move point to the end of the current line.",
@@ -300,6 +310,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ToggleSyntaxHighlighting => "Toggle syntax highlighting for supported modes.",
         Undo => "Undo the latest edit recorded for the current buffer.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
+        UpcaseRegion => "Convert the active region to upper case.",
+        UpcaseWord => "Convert the following word or words to upper case.",
         ViewEchoAreaMessages => "Open the read-only message history buffer.",
         WriteFile => "Prompt for a path and write the current buffer there.",
         Yank => "Insert the latest kill-ring entry at point.",
@@ -504,6 +516,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_call_last_keyboard_macro),
         CommandSpec::new(
+            "capitalize-word",
+            "Capitalize word after cursor",
+            true,
+            CapitalizeWord,
+        )
+        .with_handler(crate::editor::Editor::command_capitalize_word),
+        CommandSpec::new(
             "clear-rectangle",
             "Replace rectangle contents with spaces",
             true,
@@ -568,6 +587,20 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_delete_other_windows),
         CommandSpec::new("delete-window", "Delete current window", true, DeleteWindow)
             .with_handler(crate::editor::Editor::command_delete_window),
+        CommandSpec::new(
+            "downcase-region",
+            "Convert region to lower case",
+            true,
+            DowncaseRegion,
+        )
+        .with_handler(crate::editor::Editor::command_downcase_region),
+        CommandSpec::new(
+            "downcase-word",
+            "Convert word after cursor to lower case",
+            true,
+            DowncaseWord,
+        )
+        .with_handler(crate::editor::Editor::command_downcase_word),
         CommandSpec::new(
             "describe-buffer",
             "Describe current buffer",
@@ -941,6 +974,20 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_universal_argument),
         CommandSpec::new(
+            "upcase-region",
+            "Convert region to upper case",
+            true,
+            UpcaseRegion,
+        )
+        .with_handler(crate::editor::Editor::command_upcase_region),
+        CommandSpec::new(
+            "upcase-word",
+            "Convert word after cursor to upper case",
+            true,
+            UpcaseWord,
+        )
+        .with_handler(crate::editor::Editor::command_upcase_word),
+        CommandSpec::new(
             "view-echo-area-messages",
             "Show the message history",
             true,
@@ -982,6 +1029,7 @@ mod tests {
         assert!(registry.contains("backward-word"));
         assert!(registry.contains("buffer-list-select"));
         assert!(registry.contains("call-last-kbd-macro"));
+        assert!(registry.contains("capitalize-word"));
         assert!(registry.contains("clear-rectangle"));
         assert!(registry.contains("copy-rectangle-as-kill"));
         assert!(registry.contains("copy-rectangle-to-register"));
@@ -1040,12 +1088,16 @@ mod tests {
         assert!(registry.contains("toggle-read-only"));
         assert!(registry.contains("toggle-search-highlighting"));
         assert!(registry.contains("toggle-syntax-highlighting"));
+        assert!(registry.contains("upcase-region"));
+        assert!(registry.contains("upcase-word"));
         assert!(registry.contains("write-file"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
         assert!(registry.contains("delete-rectangle"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
+        assert!(registry.contains("downcase-region"));
+        assert!(registry.contains("downcase-word"));
         assert!(registry.contains("describe-buffer"));
         assert!(registry.contains("describe-bindings"));
         assert!(registry.contains("describe-function"));
@@ -1251,9 +1303,12 @@ mod tests {
         let registry = CommandRegistry::default();
         let commands = [
             Command::BackwardKillWord,
+            Command::CapitalizeWord,
             Command::CopyRegionAsKill,
             Command::DeleteBackwardChar,
             Command::DeleteChar,
+            Command::DowncaseRegion,
+            Command::DowncaseWord,
             Command::ExchangePointAndMark,
             Command::JoinLine,
             Command::KillLine,
@@ -1265,6 +1320,8 @@ mod tests {
             Command::QuotedInsert,
             Command::SetMarkCommand,
             Command::Undo,
+            Command::UpcaseRegion,
+            Command::UpcaseWord,
             Command::Yank,
             Command::YankPop,
         ];

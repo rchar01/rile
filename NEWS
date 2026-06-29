@@ -33,6 +33,8 @@ Editing features:
 * Record keyboard macros with C-x (, finish them with C-x ), and replay them
   with C-x e, including C-u repeat counts for macro execution.
 * Join the current line to the previous line with M-^.
+* Convert word case with M-l, M-u, and M-c, and convert active-region case with
+  C-x C-l and C-x C-u.
 * Insert a newline with C-j through the newline-and-indent command.  In the
   current plain-text mode, point is left at the start of the new line.
 * Quote the next key with C-q to insert printable text, Tab, or Enter

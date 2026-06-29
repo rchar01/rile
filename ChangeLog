@@ -1,5 +1,30 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Implement Emacs-style case conversion commands.
+
+	* src/command.rs (Command): Add CapitalizeWord, DowncaseRegion,
+	DowncaseWord, UpcaseRegion, and UpcaseWord.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-c, M-l, M-u, C-x C-l, and
+	C-x C-u.
+	* src/editor.rs (CaseTransform): New enum.
+	(Editor::command_capitalize_word, Editor::command_downcase_region)
+	(Editor::command_downcase_word, Editor::command_upcase_region)
+	(Editor::command_upcase_word, Editor::case_word)
+	(Editor::word_case_range, Editor::case_region)
+	(Editor::replace_text_range, case_transform_text, capitalize_words): New
+	case-conversion implementation.
+	* tests/pty_insert.rs (case_conversion_commands_update_visible_buffer): New
+	test.
+	* README.md: Document the new bindings.
+	* NEWS: Mention the new user-visible case-conversion commands.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark case commands implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+	* Cargo.lock: Update anyhow to 1.0.103 for RUSTSEC-2026-0190.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Complete the Emacs reference backlog comparison.
 
 	* docs/emacs-behavior-reference-plan.md: Mark Phase 4 tasks and

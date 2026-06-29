@@ -279,7 +279,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('f')], ForwardChar),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], ForwardChar),
         KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
+        KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
+        KeyBinding::new([KeyEvent::Meta('l')], DowncaseWord),
+        KeyBinding::new([KeyEvent::Meta('u')], UpcaseWord),
         KeyBinding::new([KeyEvent::Meta('^')], JoinLine),
         KeyBinding::new([KeyEvent::Meta('d')], KillWord),
         KeyBinding::new([KeyEvent::Meta('m')], BackToIndentation),
@@ -384,8 +387,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], FindFile),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('b')], ListBuffers),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('l')], DowncaseRegion),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')], ToggleReadOnly),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')], FindFileReadOnly),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')], UpcaseRegion),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], WriteFile),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
@@ -626,12 +631,24 @@ mod tests {
             KeyResolution::Command(BackwardWord)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('c')]),
+            KeyResolution::Command(CapitalizeWord)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('d')]),
             KeyResolution::Command(KillWord)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('l')]),
+            KeyResolution::Command(DowncaseWord)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('m')]),
             KeyResolution::Command(BackToIndentation)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('u')]),
+            KeyResolution::Command(UpcaseWord)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::MetaSpecial(SpecialKey::Backspace)]),
@@ -792,8 +809,16 @@ mod tests {
             KeyResolution::Command(ListBuffers)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('l')]),
+            KeyResolution::Command(DowncaseRegion)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),
             KeyResolution::Command(FindFileReadOnly)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')]),
+            KeyResolution::Command(UpcaseRegion)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')]),

@@ -219,6 +219,14 @@ kill-ring entry: forward kills append text and backward kills prepend text so
 `C-y` restores the killed text in buffer order. A non-kill command or failed kill
 breaks the coalescing chain.
 
+Post-Milestone 14 case-conversion polish adds `downcase-word` on `M-l`,
+`upcase-word` on `M-u`, `capitalize-word` on `M-c`, `downcase-region` on
+`C-x C-l`, and `upcase-region` on `C-x C-u`. Word commands use Rile's existing
+Unicode-aware word boundaries, support positive and negative numeric arguments,
+and record one undo entry per command. Region commands preserve point and mark,
+keep the adjusted active region, respect read-only buffers, and intentionally do
+not implement Emacs disabled-command confirmation.
+
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.

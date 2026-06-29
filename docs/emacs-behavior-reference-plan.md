@@ -46,8 +46,8 @@ than memory or source-porting.
 - Rile's current command surface is defined in `src/command.rs` and default
   bindings are defined in `src/keymap.rs`.
 - The current gap analysis shows Rile lacks common Emacs command families such
-  as case conversion, transpose, whitespace cleanup, fill/reflow, commenting,
-  paragraph/sentence movement, revert, save-all, and window resizing.
+  as transpose, whitespace cleanup, fill/reflow, commenting, paragraph/sentence
+  movement, revert, save-all, and window resizing.
 
 ## Assumptions
 
@@ -172,11 +172,11 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | --- | --- | --- | --- | --- | --- |
 | `join-line` / `delete-indentation` | `join-line` | `M-^` | Implemented subset | Done | Keep current no-prefix line-local behavior; defer prefix and region variants. |
 | `query-replace` | `query-replace` | `M-%` | Implemented subset | Done | Keep current choice-key subset; broader Emacs query-replace keys are not part of this backlog. |
-| `downcase-word` | `downcase-word` | `M-l` | Missing | P0 | Start the case-conversion slice; use Rile word boundaries, UTF-8-safe edits, arguments, and single-command undo. |
-| `upcase-word` | `upcase-word` | `M-u` | Missing | P0 | Share the same word-span machinery as `downcase-word`. |
-| `capitalize-word` | `capitalize-word` | `M-c` | Missing | P0 | Share the case-word implementation and test mixed ASCII/UTF-8 input. |
-| `downcase-region` | `downcase-region` | `C-x C-l` | Missing | P0 | Include in the first slice; intentionally skip Emacs disabled-command confirmation. |
-| `upcase-region` | `upcase-region` | `C-x C-u` | Missing | P0 | Include in the first slice with point/mark preservation and region undo tests. |
+| `downcase-word` | `downcase-word` | `M-l` | Implemented subset | Done | Uses Rile word boundaries, UTF-8-safe edits, arguments, and single-command undo. |
+| `upcase-word` | `upcase-word` | `M-u` | Implemented subset | Done | Shares the same word-span machinery as `downcase-word`. |
+| `capitalize-word` | `capitalize-word` | `M-c` | Implemented subset | Done | Shares the case-word implementation and covers mixed ASCII/UTF-8 input in tests. |
+| `downcase-region` | `downcase-region` | `C-x C-l` | Implemented subset | Done | Intentionally skips Emacs disabled-command confirmation. |
+| `upcase-region` | `upcase-region` | `C-x C-u` | Implemented subset | Done | Preserves point/mark, keeps the active region adjusted, and has region undo tests. |
 | `delete-horizontal-space` | `delete-horizontal-space` | `M-\` | Missing | P1 | Small, useful, and unit-testable; implement ASCII space/tab behavior before broader whitespace rules. |
 | `just-one-space` | `just-one-space` | No active binding | Missing | P2 | Implement after deciding whether `M-SPC` should eventually map to `cycle-spacing` instead. |
 | `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Missing | P1 | Useful and bounded; test point on blank runs, isolated blank lines, and nonblank lines before blanks. |
@@ -195,20 +195,20 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## Ranked Missing Work
 
-1. Case conversion: `downcase-word`, `upcase-word`, `capitalize-word`,
-   `downcase-region`, and `upcase-region`. This is the first slice because it is
-   familiar, bounded, directly useful, and mostly unit-testable.
-2. Whitespace cleanup and paragraph movement: `delete-horizontal-space`,
+1. Whitespace cleanup and paragraph movement: `delete-horizontal-space`,
    `delete-blank-lines`, `delete-trailing-whitespace`, `forward-paragraph`, and
    `backward-paragraph`. These are high-value editing conveniences and establish
    reusable range/boundary helpers.
-3. Transpose basics: start with `transpose-chars`, then evaluate
+2. Transpose basics: start with `transpose-chars`, then evaluate
    `transpose-words` and `transpose-lines` after the first two groups are stable.
-4. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
+3. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
    `uncomment-region`. These are useful but need paragraph wrapping and reusable
    comment-syntax metadata to avoid coupling editing behavior to rendering.
-5. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
+4. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
    deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
+
+Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
+`downcase-region`, and `upcase-region` are implemented as documented subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -228,7 +228,7 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## First Implementation Slice
 
-Start with case conversion:
+Case conversion is implemented:
 
 - `upcase-word`
 - `downcase-word`
@@ -236,11 +236,9 @@ Start with case conversion:
 - `upcase-region`
 - `downcase-region`
 
-This slice is useful, bounded, easy to test without terminal I/O, and close to
-the user's example gap. It should add command registry entries, default Emacs
-bindings, unit tests for word and region spans, UTF-8 tests, argument tests,
-read-only tests, and enough PTY coverage to confirm key bindings and visible
-editing behavior.
+This slice added command registry entries, default Emacs bindings, unit tests for
+word and region spans, UTF-8 tests, argument tests, read-only tests, and PTY
+coverage for key bindings and visible editing behavior.
 
 The first slice explicitly excludes Emacs disabled-command confirmation for the
 region commands and exact Emacs syntax-table or locale behavior.
@@ -256,6 +254,7 @@ region commands and exact Emacs syntax-table or locale behavior.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Implemented the Phase 4 case-conversion slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `downcase-word`, `upcase-word`, `capitalize-word`, `downcase-region`, and `upcase-region`; unit tests cover word arguments, UTF-8, region preservation, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior. |
 | 2026-06-29 | Completed Phase 4 Rile comparison and backlog ranking. | `src/command.rs` and `src/keymap.rs` show that only `join-line` and `query-replace` from the curated reference are implemented; the new backlog ranks the remaining documented command families and defines case conversion as the first slice. |
 | 2026-06-29 | Added Phase 3 Emacs fill/comment captures. | `tools/reference/emacs/scenarios/fill-paragraph-core.scenario` covers `M-q` fill and undo; `comment-commands-core.scenario` covers `M-;`, `comment-region`, and `uncomment-region` prompts/results in C mode. |
 | 2026-06-29 | Added Phase 3 Emacs transpose captures. | `tools/reference/emacs/scenarios/transpose-core.scenario` covers `C-t`, `M-t`, `C-x C-t`, point placement, and undo frames. |

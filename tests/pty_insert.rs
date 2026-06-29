@@ -93,6 +93,40 @@ fn universal_argument_repeats_visible_movement_and_insert() -> Result<()> {
 }
 
 #[test]
+fn case_conversion_commands_update_visible_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha BETA\nMiXeD region\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha BETA")?;
+    rile.send("M-u", keys::meta('u'))?;
+    rile.wait_for_screen_contains("ALPHA BETA")?;
+    rile.assert_cursor(0, 5)?;
+
+    rile.send("M-l", keys::meta('l'))?;
+    rile.wait_for_screen_contains("ALPHA beta")?;
+    rile.assert_cursor(0, 10)?;
+
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("M-c", keys::meta('c'))?;
+    rile.wait_for_screen_contains("Alpha beta")?;
+    rile.assert_cursor(0, 5)?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-@", b"\0")?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("C-x C-l", keys::control_sequence("xl"))?;
+    rile.wait_for_screen_contains("mixed region")?;
+
+    rile.send("C-x C-u", keys::control_sequence("xu"))?;
+    rile.wait_for_screen_contains("MIXED REGION")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn keyboard_macro_replays_visible_editing_with_repeat_count() -> Result<()> {
     let file = fixtures::named_temp_file("one\ntwo\nthree\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

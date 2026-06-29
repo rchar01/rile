@@ -147,11 +147,11 @@ Notes: Emacs supports many additional choice keys such as comma, period, undo,
 recursive edit, replacement editing, and help. Those are out of scope for the
 current Rile command unless a concrete user need appears.
 
-## Missing Reference Entries
+## First-Batch Reference Entries
 
 ### `downcase-word`
 
-Status: `missing`.
+Status: `implemented` in Rile as `downcase-word`.
 
 Default binding: `M-l`.
 
@@ -181,15 +181,15 @@ Messages: no success message is required for the normal edit. Missing text to
 convert should be a no-op or use Rile's existing command-status style if a later
 implementation needs feedback.
 
-Rile target: implement a small compatible subset first: positive arguments,
+Rile target: implemented as a small compatible subset: positive arguments,
 negative arguments, middle-of-word spans, UTF-8-safe edits, point placement, and
-single-command undo. Exact Emacs Unicode case-mapping edge cases can be deferred
+single-command undo. Exact Emacs Unicode case-mapping edge cases remain deferred
 until behavior evidence requires them.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-l` and grouped word
 case-conversion behavior; Emacs scenario
 `tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
-currently has no `downcase-word` entry.
+entry `downcase-word`; Rile unit and PTY tests for case conversion.
 
 Notes: Rile already has word movement and word-kill boundaries. The case commands
 should reuse or deliberately refine those boundaries rather than invent a third
@@ -197,7 +197,7 @@ word model.
 
 ### `upcase-word`
 
-Status: `missing`.
+Status: `implemented` in Rile as `upcase-word`.
 
 Default binding: `M-u`.
 
@@ -225,20 +225,20 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement the same first-slice semantics as `downcase-word`, with
-case conversion changed to upper case.
+Rile target: implemented with the same first-slice semantics as `downcase-word`,
+with case conversion changed to upper case.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-u` and grouped word
 case-conversion behavior; Emacs scenario
 `tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
-currently has no `upcase-word` entry.
+entry `upcase-word`; Rile unit and PTY tests for case conversion.
 
 Notes: Case conversion may expand some Unicode characters. Preserve valid UTF-8
 and make point movement deterministic if converted text changes byte length.
 
 ### `capitalize-word`
 
-Status: `missing`.
+Status: `implemented` in Rile as `capitalize-word`.
 
 Default binding: `M-c`.
 
@@ -266,14 +266,14 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement a small compatible subset with first cased character upper
-case and remaining cased characters lower case for each affected word. Exact Emacs
-syntax-table and locale edge cases can be deferred.
+Rile target: implemented as a small compatible subset with first cased character
+upper case and remaining cased characters lower case for each affected word. Exact
+Emacs syntax-table and locale edge cases remain deferred.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-c` and grouped word
 case-conversion behavior; Emacs scenario
 `tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
-currently has no `capitalize-word` entry.
+entry `capitalize-word`; Rile unit and PTY tests for case conversion.
 
 Notes: The implementation should define capitalization in terms of Unicode scalar
 values and documented Rile word boundaries, then cover mixed ASCII and UTF-8 text
@@ -281,7 +281,7 @@ in unit tests.
 
 ### `downcase-region`
 
-Status: `missing`.
+Status: `implemented` in Rile as `downcase-region`.
 
 Default binding: `C-x C-l`.
 
@@ -306,20 +306,21 @@ Rile read-only guard.
 Messages: no success message is required. Missing or inactive region should use
 the same no-region behavior as other Rile region commands.
 
-Rile target: intentionally differ from base Emacs by not adding disabled-command
-confirmation for this one command family. Match the region transformation,
-point/mark preservation, read-only behavior, and undo granularity.
+Rile target: implemented with an intentional difference from base Emacs: Rile does
+not add disabled-command confirmation for this command family. It matches the
+region transformation, point/mark preservation, read-only behavior, and undo
+granularity subset.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-l`; Emacs scenario
-`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command registry
-currently has no `downcase-region` entry.
+`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command
+registry entry `downcase-region`; Rile unit and PTY tests for case conversion.
 
 Notes: This should share the same region-range and read-only validation path as
 `kill-region` and `copy-region-as-kill` where practical.
 
 ### `upcase-region`
 
-Status: `missing`.
+Status: `implemented` in Rile as `upcase-region`.
 
 Default binding: `C-x C-u`.
 
@@ -344,13 +345,14 @@ Rile read-only guard.
 Messages: no success message is required. Missing or inactive region should use
 the same no-region behavior as other Rile region commands.
 
-Rile target: intentionally differ from base Emacs by not adding disabled-command
-confirmation for this one command family. Match the region transformation,
-point/mark preservation, read-only behavior, and undo granularity.
+Rile target: implemented with an intentional difference from base Emacs: Rile does
+not add disabled-command confirmation for this command family. It matches the
+region transformation, point/mark preservation, read-only behavior, and undo
+granularity subset.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-u`; Emacs scenario
-`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command registry
-currently has no `upcase-region` entry.
+`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command
+registry entry `upcase-region`; Rile unit and PTY tests for case conversion.
 
 Notes: Case conversion may change byte length for some Unicode text, so region
 restoration and undo tests should cover non-ASCII input.

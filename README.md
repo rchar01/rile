@@ -70,6 +70,8 @@ Basic editor keys:
   replays the latest macro. `C-u` before `C-x e` repeats macro execution.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
+- `M-l`, `M-u`, and `M-c` downcase, upcase, and capitalize words. `C-x C-l`
+  and `C-x C-u` downcase and upcase the active region.
 - `M-^` joins the current line to the previous line, trimming indentation around
   the join.
 - `C-j` inserts a newline and leaves point at the start of the new line in the

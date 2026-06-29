@@ -24,6 +24,7 @@ use crate::option::{OptionId, OptionRegistry, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
+use crate::text::is_word_character;
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
 
@@ -188,6 +189,13 @@ impl DescribeKeyMode {
 enum RegionShape {
     Linear,
     Rectangle,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CaseTransform {
+    Lower,
+    Upper,
+    Capitalize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1611,6 +1619,14 @@ impl Editor {
             .map(command_outcome_for_editor_outcome)
     }
 
+    pub(crate) fn command_capitalize_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.case_word(context.argument, CaseTransform::Capitalize)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_clear_rectangle(
         &mut self,
         _context: CommandContext,
@@ -1688,6 +1704,22 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.delete_window()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_downcase_region(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.case_region(CaseTransform::Lower)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_downcase_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.case_word(context.argument, CaseTransform::Lower)?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2213,6 +2245,22 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.extend_universal_argument()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_upcase_region(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.case_region(CaseTransform::Upper)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_upcase_word(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.case_word(context.argument, CaseTransform::Upper)?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2772,6 +2820,116 @@ impl Editor {
         self.goal_display_column = None;
         self.sync_current_window();
         Ok(())
+    }
+
+    fn case_word(&mut self, argument: Option<i32>, transform: CaseTransform) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let range = self.word_case_range(argument.unwrap_or(1))?;
+        if range.start == range.end {
+            return Ok(());
+        }
+
+        let cursor_before = self.cursor;
+        let old_text = self.document().buffer().text_in_range(range)?;
+        let new_text = case_transform_text(&old_text, transform);
+        let cursor_after = if old_text == new_text {
+            range.end
+        } else {
+            self.replace_text_range(range, &new_text, cursor_before)?
+        };
+
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn word_case_range(&self, argument: i32) -> Result<TextRange> {
+        let count = argument.unsigned_abs() as usize;
+        if count == 0 {
+            return Ok(TextRange::new(self.cursor, self.cursor));
+        }
+
+        let buffer = self.document().buffer();
+        if argument >= 0 {
+            let mut end = self.cursor;
+            for _ in 0..count {
+                end = buffer.move_word_forward(end)?;
+            }
+            Ok(TextRange::new(self.cursor, end))
+        } else {
+            let mut start = self.cursor;
+            for _ in 0..count {
+                start = buffer.move_word_backward(start)?;
+            }
+            Ok(TextRange::new(start, self.cursor))
+        }
+    }
+
+    fn case_region(&mut self, transform: CaseTransform) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let Some(range) = self.active_region_range() else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        let cursor_before = self.cursor;
+        let cursor_at_start = self.cursor == range.start;
+        let old_text = self.document().buffer().text_in_range(range)?;
+        let new_text = case_transform_text(&old_text, transform);
+        let replacement_end = if old_text == new_text {
+            range.end
+        } else {
+            self.replace_text_range(range, &new_text, cursor_before)?
+        };
+
+        if cursor_at_start {
+            self.cursor = range.start;
+            if let Some(region) = &mut self.region {
+                region.mark = replacement_end;
+                region.active = true;
+            }
+        } else {
+            self.cursor = replacement_end;
+            if let Some(region) = &mut self.region {
+                region.mark = range.start;
+                region.active = true;
+            }
+        }
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn replace_text_range(
+        &mut self,
+        range: TextRange,
+        replacement: &str,
+        cursor_before: Position,
+    ) -> Result<Position> {
+        let old_text = self.document_mut().buffer_mut().delete_range(range)?;
+        let cursor_after = self
+            .document_mut()
+            .buffer_mut()
+            .insert(range.start, replacement)?;
+        self.record_replace(
+            TextRange::new(range.start, cursor_after),
+            old_text,
+            replacement.to_owned(),
+            cursor_before,
+            cursor_after,
+        );
+        Ok(cursor_after)
     }
 
     fn delete_backward_char(&mut self) -> Result<()> {
@@ -5489,6 +5647,39 @@ fn is_keyboard_macro_control_command(command: Command) -> bool {
 
 fn positive_argument_count(argument: Option<i32>) -> usize {
     argument.unwrap_or(1).max(0) as usize
+}
+
+fn case_transform_text(text: &str, transform: CaseTransform) -> String {
+    match transform {
+        CaseTransform::Lower => text.chars().flat_map(char::to_lowercase).collect(),
+        CaseTransform::Upper => text.chars().flat_map(char::to_uppercase).collect(),
+        CaseTransform::Capitalize => capitalize_words(text),
+    }
+}
+
+fn capitalize_words(text: &str) -> String {
+    let mut output = String::new();
+    let mut cased_in_word = false;
+
+    for character in text.chars() {
+        if is_word_character(character) {
+            if character.is_alphabetic() {
+                if cased_in_word {
+                    output.extend(character.to_lowercase());
+                } else {
+                    output.extend(character.to_uppercase());
+                    cased_in_word = true;
+                }
+            } else {
+                output.push(character);
+            }
+        } else {
+            cased_in_word = false;
+            output.push(character);
+        }
+    }
+
+    output
 }
 
 fn register_key_from_event(key: &KeyEvent) -> Option<char> {
@@ -12909,6 +13100,154 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should restore backward kill");
         assert_eq!(editor.document().buffer().serialize(), " two three");
+    }
+
+    #[test]
+    fn case_word_commands_transform_utf8_words_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "déjà_vu mixed")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('u'))
+            .expect("M-u should upcase word");
+        assert_eq!(editor.document().buffer().serialize(), "DÉJÀ_VU mixed");
+        assert_eq!(editor.cursor(), Position::new(0, "DÉJÀ_VU".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore upcase-word");
+        assert_eq!(editor.document().buffer().serialize(), "déjà_vu mixed");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Meta('c'))
+            .expect("M-c should capitalize word");
+        assert_eq!(editor.document().buffer().serialize(), "Déjà_vu mixed");
+        assert_eq!(editor.cursor(), Position::new(0, "Déjà_vu".len()));
+
+        editor
+            .handle_key(KeyEvent::Meta('l'))
+            .expect("M-l should downcase next word");
+        assert_eq!(editor.document().buffer().serialize(), "Déjà_vu mixed");
+        assert_eq!(editor.cursor(), Position::new(0, "Déjà_vu mixed".len()));
+    }
+
+    #[test]
+    fn case_word_commands_honor_positive_and_negative_arguments() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one TWO THREE")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Meta('c'))
+            .expect("C-u 2 M-c should capitalize two words");
+        assert_eq!(editor.document().buffer().serialize(), "One Two THREE");
+        assert_eq!(editor.cursor(), Position::new(0, "One Two".len()));
+
+        editor.cursor = editor.document().buffer().end_position();
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("negative prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("negative prefix sign should be recorded");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("negative prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Meta('l'))
+            .expect("C-u -2 M-l should downcase two words backward");
+        assert_eq!(editor.document().buffer().serialize(), "One two three");
+        assert_eq!(editor.cursor(), Position::new(0, "One two three".len()));
+    }
+
+    #[test]
+    fn case_region_commands_preserve_region_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha βeta\nGamma")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("whole buffer should be marked");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-x C-u should upcase region");
+        assert_eq!(editor.document().buffer().serialize(), "ALPHA ΒETA\nGAMMA");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.active_region_range(),
+            Some(TextRange::new(
+                Position::new(0, 0),
+                Position::new(1, "GAMMA".len())
+            ))
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('l'))
+            .expect("C-x C-l should downcase region");
+        assert_eq!(editor.document().buffer().serialize(), "alpha βeta\ngamma");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore downcase-region");
+        assert_eq!(editor.document().buffer().serialize(), "ALPHA ΒETA\nGAMMA");
+    }
+
+    #[test]
+    fn case_region_reports_missing_region_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("upcase-region")
+            .expect("missing region should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: no active region")
+        );
+
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("whole buffer should be marked");
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .execute_command_by_name("upcase-region")
+            .expect("read-only region case should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
     }
 
     #[test]
