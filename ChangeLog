@@ -1,5 +1,13 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs function reference template.
+
+	* docs/emacs-function-reference.md: New file.
+	* docs/emacs-behavior-reference-plan.md: Mark Phase 1 complete.
+	* docs/README.md: List the new guide.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Reorganize planning documentation.
 
 	* docs/architecture.md: New file.

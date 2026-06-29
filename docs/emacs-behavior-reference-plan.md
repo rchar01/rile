@@ -78,17 +78,17 @@ Goal: make every future command note consistent and easy to turn into tests.
 
 Tasks:
 
-- [ ] Create `docs/emacs-function-reference.md` with a compact command-entry
+- [x] Create `docs/emacs-function-reference.md` with a compact command-entry
   template.
-- [ ] Include fields for command name, default binding, purpose, prompt flow,
+- [x] Include fields for command name, default binding, purpose, prompt flow,
   prefix-argument behavior, region behavior, point-after-command behavior, undo
   behavior, read-only behavior, messages, Rile status, and evidence.
-- [ ] Document how to cite evidence from Emacs manual pages, `describe-function`,
+- [x] Document how to cite evidence from Emacs manual pages, `describe-function`,
   and `tools/reference/emacs/scenarios/` captures.
 
 Validation gate:
 
-- [ ] Review the template against at least two already implemented commands such
+- [x] Review the template against at least two already implemented commands such
   as `join-line` and `query-replace`.
 
 ## Phase 2: Inventory The First Command Batch
@@ -173,6 +173,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Completed Phase 1 reference-format work. | `docs/emacs-function-reference.md` defines the entry template and validates it with `join-line` and `query-replace` entries. |
 | 2026-06-29 | Plan created to pause implementation and write down the Emacs behavior-reference goal. | User requested writing down what we are trying to do before continuing. |
 
 ## Decision Log
