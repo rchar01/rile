@@ -44,6 +44,10 @@ Initial inspection scenarios:
 - `modeline-state-core`: core Emacs mode-line clean, modified, saved,
   read-only, and writable states.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
+- `case-region-core`: base Emacs `C-x C-l` and `C-x C-u` region case-conversion
+  behavior and disabled-command prompts.
+- `case-word-core`: base Emacs `M-l`, `M-u`, and `M-c` word case-conversion
+  behavior.
 - `consecutive-kills-core`: base Emacs consecutive kill and yank behavior.
 - `dirty-buffer-quit-clean-core`: base Emacs `C-x C-c` behavior with a clean
   buffer.

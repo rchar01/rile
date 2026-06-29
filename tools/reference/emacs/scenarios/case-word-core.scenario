@@ -1,0 +1,41 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=case-word-core
+SCENARIO_DESCRIPTION='Observe base Emacs word case-conversion commands.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=case-word-core.txt
+FIXTURE_CONTENT=$'LOUD quiet mIxEd\nfinal line\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /LOUD quiet mIxEd/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "l"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-downcase-word.png
+Sleep 500ms
+Escape
+Type "u"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-upcase-word.png
+Sleep 500ms
+Escape
+Type "c"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-capitalize-word.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

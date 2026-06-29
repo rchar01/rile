@@ -187,8 +187,9 @@ single-command undo. Exact Emacs Unicode case-mapping edge cases can be deferred
 until behavior evidence requires them.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-l` and grouped word
-case-conversion behavior; Rile command registry currently has no `downcase-word`
-entry.
+case-conversion behavior; Emacs scenario
+`tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
+currently has no `downcase-word` entry.
 
 Notes: Rile already has word movement and word-kill boundaries. The case commands
 should reuse or deliberately refine those boundaries rather than invent a third
@@ -228,8 +229,9 @@ Rile target: implement the same first-slice semantics as `downcase-word`, with
 case conversion changed to upper case.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-u` and grouped word
-case-conversion behavior; Rile command registry currently has no `upcase-word`
-entry.
+case-conversion behavior; Emacs scenario
+`tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
+currently has no `upcase-word` entry.
 
 Notes: Case conversion may expand some Unicode characters. Preserve valid UTF-8
 and make point movement deterministic if converted text changes byte length.
@@ -269,8 +271,9 @@ case and remaining cased characters lower case for each affected word. Exact Ema
 syntax-table and locale edge cases can be deferred.
 
 Evidence: GNU Emacs manual, Case Conversion Commands, `M-c` and grouped word
-case-conversion behavior; Rile command registry currently has no
-`capitalize-word` entry.
+case-conversion behavior; Emacs scenario
+`tools/reference/emacs/scenarios/case-word-core.scenario`; Rile command registry
+currently has no `capitalize-word` entry.
 
 Notes: The implementation should define capitalization in terms of Unicode scalar
 values and documented Rile word boundaries, then cover mixed ASCII and UTF-8 text
@@ -307,8 +310,9 @@ Rile target: intentionally differ from base Emacs by not adding disabled-command
 confirmation for this one command family. Match the region transformation,
 point/mark preservation, read-only behavior, and undo granularity.
 
-Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-l`; Rile command
-registry currently has no `downcase-region` entry.
+Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-l`; Emacs scenario
+`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command registry
+currently has no `downcase-region` entry.
 
 Notes: This should share the same region-range and read-only validation path as
 `kill-region` and `copy-region-as-kill` where practical.
@@ -344,8 +348,9 @@ Rile target: intentionally differ from base Emacs by not adding disabled-command
 confirmation for this one command family. Match the region transformation,
 point/mark preservation, read-only behavior, and undo granularity.
 
-Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-u`; Rile command
-registry currently has no `upcase-region` entry.
+Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-u`; Emacs scenario
+`tools/reference/emacs/scenarios/case-region-core.scenario`; Rile command registry
+currently has no `upcase-region` entry.
 
 Notes: Case conversion may change byte length for some Unicode text, so region
 restoration and undo tests should cover non-ASCII input.
