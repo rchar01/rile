@@ -349,3 +349,158 @@ registry currently has no `upcase-region` entry.
 
 Notes: Case conversion may change byte length for some Unicode text, so region
 restoration and undo tests should cover non-ASCII input.
+
+### `delete-horizontal-space`
+
+Status: `missing`.
+
+Default binding: `M-\`.
+
+Purpose: delete spaces and tabs around point.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: with a prefix argument, delete only spaces and tabs
+before point. Without a prefix argument, delete adjacent spaces and tabs on both
+sides of point.
+
+Region behavior: not a region command.
+
+Point after command: point stays at the boundary where the surrounding horizontal
+space was removed. In the backward-only form, point moves left by the number of
+deleted characters before point.
+
+Undo behavior: the command should be one undoable edit for the deleted span.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement the small Emacs-compatible subset for ASCII space and tab
+characters first. Do not treat newlines as horizontal space.
+
+Evidence: GNU Emacs `describe-function` output for `delete-horizontal-space`;
+current GNU Emacs key binding for `M-\`; Rile command registry currently has no
+`delete-horizontal-space` entry.
+
+Notes: This command is a good unit-test target because it does not depend on
+terminal-visible prompts or mode-specific indentation rules.
+
+### `just-one-space`
+
+Status: `missing`.
+
+Default binding: none in current GNU Emacs; `M-SPC` is currently bound to
+`cycle-spacing`.
+
+Purpose: collapse spaces and tabs around point to a requested number of spaces.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: without a numeric argument, leave one space. With a
+numeric argument `N`, leave `N` spaces. With a negative numeric argument, delete
+newlines as well and leave `-N` spaces.
+
+Region behavior: not a region command.
+
+Point after command: point lands after the inserted replacement spaces, matching
+the normal insertion point for the collapsed spacing.
+
+Undo behavior: the collapse and replacement insertion should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement a small subset before `cycle-spacing`: no-argument
+one-space collapse and positive numeric arguments for horizontal space. Defer
+negative-argument newline joining unless a focused scenario confirms it is worth
+the extra behavior.
+
+Evidence: GNU Emacs `describe-function` output for `just-one-space`; current GNU
+Emacs key binding for `M-SPC` resolves to `cycle-spacing`; Rile command registry
+currently has no `just-one-space` entry.
+
+Notes: The plan names this underlying command, but user muscle memory for `M-SPC`
+may expect `cycle-spacing` in newer Emacs. Decide whether Rile should expose
+`just-one-space` unbound first or bind `M-SPC` to a documented subset of
+`cycle-spacing` in a later slice.
+
+### `delete-blank-lines`
+
+Status: `missing`.
+
+Default binding: `C-x C-o`.
+
+Purpose: remove redundant blank lines around point.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: not meaningful for the first Rile implementation.
+
+Region behavior: not a region command.
+
+Point after command: on a run of multiple blank lines, point remains on the single
+remaining blank line. On an isolated blank line, that line is deleted. On a
+nonblank line, immediately following blank lines are deleted.
+
+Undo behavior: the whole blank-line deletion should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: match the base Emacs line-local behavior for blank lines. Use Rile's
+existing definition of blank lines as lines containing only spaces or tabs unless
+later evidence requires a broader whitespace definition.
+
+Evidence: GNU Emacs manual, Blank Lines, `C-x C-o`; GNU Emacs
+`describe-function` output for `delete-blank-lines`; Rile command registry
+currently has no `delete-blank-lines` entry.
+
+Notes: Unit tests should cover point on a nonblank line before blank lines, point
+inside a multi-blank-line run, and point on a single blank line.
+
+### `delete-trailing-whitespace`
+
+Status: `missing`.
+
+Default binding: none.
+
+Purpose: delete trailing whitespace at line ends, and optionally trailing blank
+lines at the end of the buffer.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: not meaningful for the first Rile implementation.
+
+Region behavior: if the region is active, base Emacs uses the region bounds as
+the cleanup range. Without an active region, it operates on the whole accessible
+buffer.
+
+Point after command: point should remain stable when possible. If deleted text is
+before point or includes point, Rile should use its normal edit-adjustment rules
+and cover the result with tests.
+
+Undo behavior: the whole cleanup should be one undoable command result, even when
+multiple lines are changed.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement a small compatible subset: delete ASCII spaces and tabs at
+line ends within the active region bounds or whole buffer. Defer Emacs's
+`delete-trailing-lines` customization and formfeed exception unless Rile gains the
+corresponding customization surface.
+
+Evidence: GNU Emacs manual, Useless Whitespace, `delete-trailing-whitespace`; GNU
+Emacs `describe-function` output; Rile command registry currently has no
+`delete-trailing-whitespace` entry.
+
+Notes: This command is likely useful before full whitespace visualization support
+because it can be implemented and tested independently of rendering faces.
