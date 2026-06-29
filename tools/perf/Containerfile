@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+ARG RUST_VERSION=1.96.0
+FROM docker.io/library/rust:${RUST_VERSION}-bookworm
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    autoconf \
+    automake \
+    bash \
+    build-essential \
+    ca-certificates \
+    curl \
+    elpa-marginalia \
+    elpa-orderless \
+    elpa-vertico \
+    emacs-nox \
+    gettext \
+    git \
+    help2man \
+    libgee-0.8-dev \
+    libglib2.0-dev \
+    libncurses-dev \
+    make \
+    perl \
+    pkg-config \
+    python3 \
+    tar \
+    time \
+    valac \
+    vim-tiny \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN chmod -R a+rwX /usr/local/cargo /usr/local/rustup \
+ && mkdir -p /workspace \
+ && chmod 777 /workspace
+
+WORKDIR /workspace

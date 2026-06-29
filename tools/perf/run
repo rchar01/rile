@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
+image=${PERF_IMAGE:-rile-perf}
+podman=${PODMAN:-podman}
+user_flags=(--user "$(id -u):$(id -g)")
+
+if [[ $("$podman" info --format '{{.Host.Security.Rootless}}') == true ]]; then
+  user_flags=(--userns=keep-id)
+fi
+
+"$podman" build \
+  -f "$root/tools/perf/Containerfile" \
+  -t "$image" \
+  "$root"
+
+"$podman" run --rm \
+  "${user_flags[@]}" \
+  -e CARGO_TERM_COLOR=always \
+  -e HOME=/tmp \
+  -e PERF_EDITORS \
+  -e PERF_LEVEL \
+  -e PERF_REPETITIONS \
+  -e PERF_SKIP_REFERENCE_BUILD \
+  -v "$root":/workspace:z \
+  -w /workspace \
+  "$image" \
+  tools/perf/run-in-container "$@"

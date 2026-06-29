@@ -6,13 +6,14 @@ SHELL := /bin/sh
 
 IMAGE ?= rile-dev
 VISUAL_IMAGE ?= rile-visual
+PERF_IMAGE ?= rile-perf
 REFERENCE_EDITORS ?= emacs zile kg rile
 REF_EDITOR ?=
 REF_SCENARIO ?=
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run reference-capture reference-capture-all visual-demos visual-frames clean
+.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run perf-smoke reference-capture reference-capture-all visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -80,6 +81,10 @@ verify:
 ## Run the Rile binary in the dev container; pass ARGS='--help'
 run:
 	$(IN_CONTAINER) ./scripts/run $(ARGS)
+
+## Run optional large-file and long-line performance smoke tests
+perf-smoke:
+	PERF_IMAGE=$(PERF_IMAGE) tools/perf/run $(ARGS)
 
 ## Capture one reference scenario; set REF_EDITOR=zile REF_SCENARIO=smoke-open
 reference-capture:

@@ -21,11 +21,12 @@ Common targeted commands:
 make test
 make test-cargo
 make snapshot-test
+make perf-smoke
 make visual-demos
 make visual-frames
 ```
 
-`make verify` runs inside the dev container and covers build, tests, parsed-screen snapshot checks, formatting/lints, advisory/license/dependency policy checks, and unused dependency checks. It intentionally does not run VHS visual tooling.
+`make verify` runs inside the dev container and covers build, tests, parsed-screen snapshot checks, formatting/lints, advisory/license/dependency policy checks, and unused dependency checks. It intentionally does not run VHS visual tooling or optional performance smoke tests.
 
 ## Test Layers
 
@@ -36,6 +37,11 @@ PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile
 Parsed-screen snapshots live under `tests/snapshots/`. They are generated from normalized VT100 screen state, not raw ANSI bytes. Snapshots include terminal size, cursor position, visible rows, and a caret marker.
 
 Optional visual demos live under `demos/*.tape`. They run Rile through VHS and write ignored GIF and PNG artifacts under `artifacts/` for human or multimodal review.
+
+Optional performance smoke tests run through `make perf-smoke`. They compare
+Rile, GNU Emacs, GNU Zile, kg, and Debian `vi` on generated large-file and
+long-line fixtures. They write ignored timing evidence under `artifacts/perf/`
+and are documented in `docs/performance.md`.
 
 ## Metadata And Help Tests
 

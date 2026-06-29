@@ -254,9 +254,15 @@ make test
 make lint
 make audit
 make verify
+make perf-smoke
 ```
 
 For direct host development, install the same Rust tools locally and run the scripts under `scripts/` directly.
+
+`make perf-smoke` is optional and runs generated large-file and long-line
+performance smoke comparisons against Rile, GNU Emacs, GNU Zile, kg, and Debian
+`vi`. Results are ignored local artifacts under `artifacts/perf/`; see
+`docs/performance.md`.
 
 Release notes are maintained in [NEWS](NEWS). GNU-style file-level maintenance history is maintained in [ChangeLog](ChangeLog); Git remains the detailed development history.
 

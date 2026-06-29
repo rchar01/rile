@@ -11,6 +11,21 @@
 
 2026-06-28  Robert Charusta  <rch-public@posteo.net>
 
+	Add optional performance smoke tooling.
+
+	* tools/perf/Containerfile: New file.
+	* tools/perf/run: New file.
+	* tools/perf/run-in-container: New file.
+	* tools/perf/bench.py: New file.  Validate page-burst movement.
+	* docs/performance.md: New file.
+	* Makefile (PERF_IMAGE): New variable.
+	(perf-smoke): New target.
+	* docs/testing.md: Document optional performance smoke tests.
+	* docs/README.md: List the performance guide.
+	* README.md: List the perf-smoke command.
+
+2026-06-28  Robert Charusta  <rch-public@posteo.net>
+
 	Show file prompt base directories.
 
 	* src/editor.rs (start_find_file, start_find_file_read_only,

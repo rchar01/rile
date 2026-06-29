@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if [[ ${PERF_SKIP_REFERENCE_BUILD:-0} != 1 ]]; then
+  tools/reference/emacs/build-in-container
+  tools/reference/zile/build-in-container
+  tools/reference/kg/build-in-container
+fi
+
+cargo build --release --locked
+
+python3 tools/perf/bench.py "$@"
