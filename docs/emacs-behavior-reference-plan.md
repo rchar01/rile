@@ -102,7 +102,7 @@ Tasks:
   `capitalize-word`, `upcase-region`, and `downcase-region`.
 - [x] Document whitespace commands: `delete-horizontal-space`,
   `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace`.
-- [ ] Document transpose commands: `transpose-chars`, `transpose-words`, and
+- [x] Document transpose commands: `transpose-chars`, `transpose-words`, and
   `transpose-lines`.
 - [ ] Document fill/comment commands: `fill-paragraph`, `comment-dwim`,
   `comment-region`, and `uncomment-region`.
@@ -173,6 +173,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Documented Phase 2 transpose commands. | `docs/emacs-function-reference.md` now covers `transpose-chars`, `transpose-words`, and `transpose-lines` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 whitespace commands. | `docs/emacs-function-reference.md` now covers `delete-horizontal-space`, `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace` with Rile targets and Emacs manual or `describe-function` evidence. |
 | 2026-06-29 | Documented Phase 2 case-conversion commands. | `docs/emacs-function-reference.md` now covers `upcase-word`, `downcase-word`, `capitalize-word`, `upcase-region`, and `downcase-region` with Rile targets and Emacs manual evidence. |
 | 2026-06-29 | Completed Phase 1 reference-format work. | `docs/emacs-function-reference.md` defines the entry template and validates it with `join-line` and `query-replace` entries. |

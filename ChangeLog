@@ -1,5 +1,13 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Document Emacs transpose behavior.
+
+	* docs/emacs-function-reference.md: Add transpose command entries.
+	* docs/emacs-behavior-reference-plan.md: Mark the transpose inventory task
+	complete.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Document Emacs whitespace behavior.
 
 	* docs/emacs-function-reference.md: Add whitespace command entries.

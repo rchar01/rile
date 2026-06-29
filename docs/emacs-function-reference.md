@@ -504,3 +504,137 @@ Emacs `describe-function` output; Rile command registry currently has no
 
 Notes: This command is likely useful before full whitespace visualization support
 because it can be implemented and tested independently of rendering faces.
+
+### `transpose-chars`
+
+Status: `missing`.
+
+Default binding: `C-t`.
+
+Purpose: transpose adjacent characters around point.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: a numeric argument is a repeat count. Positive
+arguments drag the character before point forward across that many following
+characters; negative arguments drag it backward. A zero argument has special
+Emacs mark-based behavior and transposes the character ending after point with the
+one ending after mark.
+
+Region behavior: not a region command. The zero-argument form depends on mark,
+but does not transform the active region as a region command.
+
+Point after command: without a prefix argument, point moves forward one character.
+At end of line, Emacs transposes the previous two characters instead of swapping a
+character with the newline. At beginning of buffer or without enough text, Emacs
+signals an error.
+
+Undo behavior: the transposition should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Boundary failures should use Rile's
+normal command-status style for failed edit commands.
+
+Rile target: implement a small compatible subset first: no-prefix transposition,
+positive and negative repeat counts, end-of-line special case, point movement,
+UTF-8-safe character boundaries, and single-command undo. Defer zero-argument
+mark-based transposition unless a later capture shows it is needed.
+
+Evidence: GNU Emacs manual, Transposing Text, `C-t`; GNU Emacs
+`describe-function` output for `transpose-chars`; local batch probes for ordinary,
+end-of-line, zero-argument, and beginning-of-buffer behavior; Rile command
+registry currently has no `transpose-chars` entry.
+
+Notes: Terminal `C-t` should be checked against Rile's input layer before binding
+because control-key availability can vary by terminal mode.
+
+### `transpose-words`
+
+Status: `missing`.
+
+Default binding: `M-t`.
+
+Purpose: transpose the word before or containing point with the next word.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: a numeric argument is a repeat count. Positive
+arguments drag the word before or containing point forward across that many words;
+negative arguments drag it backward. A zero argument transposes words around or
+after point and mark.
+
+Region behavior: not a region command. The zero-argument form depends on mark,
+but does not transform the active region as a region command.
+
+Point after command: after a successful positive transposition, point lands at the
+end of the transposed words. Punctuation between words stays in place; for
+example, `FOO, BAR` becomes `BAR, FOO`. At end of line, Emacs can transpose the
+word before point with the first word on the next line. Without two words to
+transpose, Emacs signals an error.
+
+Undo behavior: the transposition should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Boundary failures should use Rile's
+normal command-status style for failed edit commands.
+
+Rile target: implement a small compatible subset using Rile's documented word
+boundaries: no-prefix behavior, positive and negative repeat counts, punctuation
+preservation between swapped words, point placement, and undo. Defer zero-argument
+mark-based behavior and exact Emacs syntax-table edge cases.
+
+Evidence: GNU Emacs manual, Transposing Text, `M-t`; GNU Emacs
+`describe-function` output for `transpose-words`; local batch probes for
+punctuation, zero-argument, and missing-word behavior; Rile command registry
+currently has no `transpose-words` entry.
+
+Notes: This should reuse the same word-boundary model selected for case
+conversion and word movement so Rile does not grow inconsistent command-specific
+word rules.
+
+### `transpose-lines`
+
+Status: `missing`.
+
+Default binding: `C-x C-t`.
+
+Purpose: exchange the current line with the previous line.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: with a numeric argument, Emacs moves the previous line
+past that many lines. Negative arguments move it backward. With argument zero,
+Emacs interchanges the line containing point with the line containing mark.
+
+Region behavior: not a region command. The zero-argument form depends on mark,
+but does not transform the active region as a region command.
+
+Point after command: without a prefix argument, point is left after both exchanged
+lines. Local probes show `one\ntwo\n` with point on `two` becomes `two\none\n` and
+point lands at the end of the exchanged pair.
+
+Undo behavior: the line exchange should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Boundary failures should use Rile's
+normal command-status style for failed edit commands.
+
+Rile target: implement a small compatible subset: no-prefix current/previous line
+exchange, numeric repeat counts, point placement, final-newline-safe editing, and
+undo. Defer zero-argument mark-line exchange unless a later capture shows it is
+important for Rile's scope.
+
+Evidence: GNU Emacs manual, Transposing Text, `C-x C-t`; GNU Emacs
+`describe-function` output for `transpose-lines`; local batch probes for ordinary,
+negative-argument, and zero-argument behavior; Rile command registry currently has
+no `transpose-lines` entry.
+
+Notes: Tests should cover files without a trailing newline, the first line, the
+last line, and multi-byte UTF-8 text so line-range replacement does not corrupt
+buffer storage.
