@@ -820,3 +820,172 @@ entry.
 Notes: Keep this command's parser strict enough that uncommenting a region does
 not delete comment-like text in strings or later code columns unless it is at the
 configured indentation position.
+
+### `forward-paragraph`
+
+Status: `missing`.
+
+Default binding: `M-}`.
+
+Purpose: move point forward to the end of the current or next paragraph.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: numeric arguments repeat the movement. Negative
+arguments move backward by paragraphs.
+
+Region behavior: not a region command. If the region is active, movement should
+deactivate it unless Rile's general movement-command policy says otherwise.
+
+Point after command: base Emacs moves to the end of the current paragraph, or the
+next paragraph when point is between paragraphs. In Fundamental and Text modes,
+blank lines made of spaces, tabs, or formfeed characters separate paragraphs.
+Local probes show point moving from the beginning of `one\ntwo\n\n` to the blank
+line after `two`.
+
+Undo behavior: movement only; no undo entry.
+
+Read-only behavior: movement should work in read-only buffers.
+
+Messages: no success message is required. Boundary cases should follow Rile's
+normal movement-command style.
+
+Rile target: implement a small compatible subset first: blank-line-separated
+paragraphs, positive and negative repeat counts, point visibility, and no buffer
+mutation. Defer Emacs's `paragraph-start`, `paragraph-separate`, fill-prefix, and
+mode-specific paragraph customizations.
+
+Evidence: GNU Emacs manual, Paragraphs, `M-}`; GNU Emacs `describe-function`
+output for `forward-paragraph`; local batch probes for blank-line boundaries and
+repeat counts; Rile command registry currently has no `forward-paragraph` entry.
+
+Notes: The first implementation should share paragraph-boundary code with
+`backward-paragraph` and, later, `fill-paragraph`.
+
+### `backward-paragraph`
+
+Status: `missing`.
+
+Default binding: `M-{`.
+
+Purpose: move point backward to the beginning of the current or previous
+paragraph.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: numeric arguments repeat the movement. Negative
+arguments move forward by paragraphs.
+
+Region behavior: not a region command. If the region is active, movement should
+deactivate it unless Rile's general movement-command policy says otherwise.
+
+Point after command: base Emacs moves to the beginning of the current or previous
+paragraph. If a blank line precedes the paragraph, Emacs can place point on that
+blank line. Local probes show moving backward from a paragraph boundary to the
+beginning of the preceding paragraph.
+
+Undo behavior: movement only; no undo entry.
+
+Read-only behavior: movement should work in read-only buffers.
+
+Messages: no success message is required. Boundary cases should follow Rile's
+normal movement-command style.
+
+Rile target: implement the inverse of the first `forward-paragraph` subset:
+blank-line-separated paragraphs, positive and negative repeat counts, point
+visibility, and no buffer mutation. Defer customizable paragraph regex behavior
+and fill-prefix interactions.
+
+Evidence: GNU Emacs manual, Paragraphs, `M-{`; GNU Emacs `describe-function`
+output for `backward-paragraph`; local batch probes for blank-line boundaries and
+negative arguments; Rile command registry currently has no `backward-paragraph`
+entry.
+
+Notes: Tests should cover beginning of buffer, consecutive blank lines, indented
+nonblank lines, and buffers without a final newline.
+
+### `forward-sentence`
+
+Status: `missing`.
+
+Default binding: `M-e`.
+
+Purpose: move point forward to the end of the current or next sentence.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: numeric arguments repeat the movement. Negative
+arguments move backward to sentence starts.
+
+Region behavior: not a region command. If the region is active, movement should
+deactivate it unless Rile's general movement-command policy says otherwise.
+
+Point after command: base Emacs places point just after the punctuation ending the
+sentence and before following whitespace. With default settings, Emacs treats `.`,
+`?`, or `!` as ending a sentence only when followed by end of line or two spaces,
+with closing delimiters allowed between punctuation and whitespace. Sentence
+movement also stops at paragraph boundaries.
+
+Undo behavior: movement only; no undo entry.
+
+Read-only behavior: movement should work in read-only buffers.
+
+Messages: no success message is required. Emacs signals end-of-buffer when a
+forward sentence movement cannot complete; Rile can use its normal movement-error
+status.
+
+Rile target: implement a documented subset first: ASCII `.`, `?`, and `!`
+sentence terminators, optional closing quotes/brackets, Emacs's default two-space
+or end-of-line boundary rule, paragraph-boundary stops, positive and negative
+repeat counts, and no buffer mutation. Defer customizable `sentence-end`,
+`sentence-end-double-space`, language-specific sentence rules, and mode-specific
+sentence functions.
+
+Evidence: GNU Emacs manual, Sentences, `M-e`; GNU Emacs `describe-function`
+output for `forward-sentence`; local batch probes for two-space boundaries,
+single-space non-boundaries, paragraph stops, negative arguments, and
+end-of-buffer behavior; Rile command registry currently has no `forward-sentence`
+entry.
+
+Notes: This command should not rely on word movement boundaries. Sentence
+recognition has different punctuation and whitespace rules.
+
+### `backward-sentence`
+
+Status: `missing`.
+
+Default binding: `M-a`.
+
+Purpose: move point backward to the beginning of the current or previous sentence.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: numeric arguments repeat the movement. Negative
+arguments move forward to sentence ends.
+
+Region behavior: not a region command. If the region is active, movement should
+deactivate it unless Rile's general movement-command policy says otherwise.
+
+Point after command: base Emacs places point just before the first character of
+the sentence. It does not move over the whitespace at the sentence boundary.
+Sentence starts and ends are also recognized at paragraph boundaries.
+
+Undo behavior: movement only; no undo entry.
+
+Read-only behavior: movement should work in read-only buffers.
+
+Messages: no success message is required. Boundary cases should follow Rile's
+normal movement-command style.
+
+Rile target: implement the inverse of the first `forward-sentence` subset:
+default two-space sentence boundaries, paragraph-boundary stops, positive and
+negative repeat counts, point visibility, and no buffer mutation. Defer
+customizable sentence variables and mode-specific sentence functions.
+
+Evidence: GNU Emacs manual, Sentences, `M-a`; GNU Emacs `describe-function`
+output for `backward-sentence`; local batch probes for backward movement and
+negative arguments; Rile command registry currently has no `backward-sentence`
+entry.
+
+Notes: Tests should cover punctuation followed by one space, two spaces, newline,
+closing quotes, and paragraph boundaries.

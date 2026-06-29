@@ -106,14 +106,14 @@ Tasks:
   `transpose-lines`.
 - [x] Document fill/comment commands: `fill-paragraph`, `comment-dwim`,
   `comment-region`, and `uncomment-region`.
-- [ ] Document navigation commands: `forward-paragraph`, `backward-paragraph`,
+- [x] Document navigation commands: `forward-paragraph`, `backward-paragraph`,
   `forward-sentence`, and `backward-sentence`.
 
 Validation gate:
 
-- [ ] Each entry states whether Rile should match Emacs exactly, match a smaller
+- [x] Each entry states whether Rile should match Emacs exactly, match a smaller
   subset, or intentionally differ.
-- [ ] Each entry has at least one evidence source.
+- [x] Each entry has at least one evidence source.
 
 ## Phase 3: Add Focused Emacs Captures
 
@@ -173,6 +173,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Completed Phase 2 first-batch inventory with navigation commands. | `docs/emacs-function-reference.md` now covers `forward-paragraph`, `backward-paragraph`, `forward-sentence`, and `backward-sentence` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 fill/comment commands. | `docs/emacs-function-reference.md` now covers `fill-paragraph`, `comment-dwim`, `comment-region`, and `uncomment-region` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 transpose commands. | `docs/emacs-function-reference.md` now covers `transpose-chars`, `transpose-words`, and `transpose-lines` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 whitespace commands. | `docs/emacs-function-reference.md` now covers `delete-horizontal-space`, `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace` with Rile targets and Emacs manual or `describe-function` evidence. |

@@ -1,5 +1,13 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Document Emacs paragraph and sentence movement.
+
+	* docs/emacs-function-reference.md: Add navigation command entries.
+	* docs/emacs-behavior-reference-plan.md: Mark the navigation inventory task
+	and Phase 2 validation gate complete.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Document Emacs fill and comment behavior.
 
 	* docs/emacs-function-reference.md: Add fill and comment command entries.
