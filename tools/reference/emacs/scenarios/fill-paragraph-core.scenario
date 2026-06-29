@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=fill-paragraph-core
+SCENARIO_DESCRIPTION='Observe base Emacs M-q fill-paragraph behavior in text mode.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=fill-paragraph-core.txt
+FIXTURE_CONTENT=$'Alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega.\n\nShort paragraph.\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /Alpha beta gamma/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "q"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-fill-paragraph.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-undo-fill-paragraph.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

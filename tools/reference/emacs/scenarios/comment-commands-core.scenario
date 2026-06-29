@@ -1,0 +1,69 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=comment-commands-core
+SCENARIO_DESCRIPTION='Observe base Emacs comment insertion, region commenting, and uncommenting in C mode.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=comment-commands-core.c
+FIXTURE_CONTENT=$'int alpha;\nint beta;\nint gamma;\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /int alpha;/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+E
+Escape
+Type ";"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-comment-dwim-current-line.png
+Sleep 500ms
+Ctrl+S
+Type "int beta"
+Enter
+Ctrl+A
+Ctrl+Space
+Ctrl+N
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-region-before-comment-region.png
+Sleep 500ms
+Escape
+Type "x"
+Type "comment-region"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-comment-region-prompt.png
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-comment-region.png
+Sleep 500ms
+Escape
+Type "<"
+Ctrl+N
+Ctrl+Space
+Ctrl+N
+Ctrl+N
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-region-before-uncomment-region.png
+Sleep 500ms
+Escape
+Type "x"
+Type "uncomment-region"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-uncomment-region-prompt.png
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-uncomment-region.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

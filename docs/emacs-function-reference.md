@@ -694,8 +694,9 @@ specific comment filling, and programmable fill hooks.
 
 Evidence: GNU Emacs manual, Explicit Fill Commands, `M-q`; GNU Emacs
 `describe-function` output for `fill-paragraph`; local batch probes for text-mode
-paragraph and active-region filling; Rile command registry currently has no
-`fill-paragraph` entry.
+paragraph and active-region filling; Emacs scenario
+`tools/reference/emacs/scenarios/fill-paragraph-core.scenario`; Rile command
+registry currently has no `fill-paragraph` entry.
 
 Notes: This should probably share wrapping code with help-buffer prose wrapping,
 but editor-buffer filling needs separate undo, point-adjustment, region, and
@@ -742,8 +743,10 @@ killing, numeric delimiter-count behavior, and mode-specific indentation rules.
 
 Evidence: GNU Emacs manual, Comment Commands, `M-;`; GNU Emacs
 `describe-function` output for `comment-dwim`; local key-binding checks for
-`M-;`; Rile command registry currently has no `comment-dwim` entry and Rile syntax
-highlighting currently stores comment markers only inside highlighter logic.
+`M-;`; Emacs scenario
+`tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
+registry currently has no `comment-dwim` entry and Rile syntax highlighting
+currently stores comment markers only inside highlighter logic.
 
 Notes: Before implementation, Rile should expose reusable comment syntax metadata
 rather than deriving editing behavior from rendering-only highlighter internals.
@@ -787,7 +790,9 @@ mode-specific comment styles.
 
 Evidence: GNU Emacs manual, Comment Commands, `comment-region`; GNU Emacs
 `describe-function` output; local C-mode probes for `C-c C-c` and block-comment
-behavior; Rile command registry currently has no `comment-region` entry.
+behavior; Emacs scenario
+`tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
+registry currently has no `comment-region` entry.
 
 Notes: Rile may still bind a future line-comment subset differently from C mode's
 `C-c C-c` if that prefix is reserved for mode-specific keymaps later.
@@ -828,8 +833,9 @@ comment syntax.
 
 Evidence: GNU Emacs manual, Comment Commands, `uncomment-region`; GNU Emacs
 `describe-function` output; local C-mode probes for `comment-region` followed by
-`uncomment-region`; Rile command registry currently has no `uncomment-region`
-entry.
+`uncomment-region`; Emacs scenario
+`tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
+registry currently has no `uncomment-region` entry.
 
 Notes: Keep this command's parser strict enough that uncommenting a region does
 not delete comment-like text in strings or later code columns unless it is at the

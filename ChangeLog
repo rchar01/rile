@@ -1,5 +1,17 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs fill and comment reference captures.
+
+	* tools/reference/emacs/scenarios/fill-paragraph-core.scenario: New file.
+	* tools/reference/emacs/scenarios/comment-commands-core.scenario: New file.
+	* docs/emacs-function-reference.md: Cite the new scenarios in fill and comment
+	command reference entries.
+	* tools/reference/emacs/README.md: List the new scenarios.
+	* docs/emacs-behavior-reference-plan.md: Mark the fill/comment capture task
+	complete and record targeted capture validation.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs transpose reference captures.
 
 	* tools/reference/emacs/scenarios/transpose-core.scenario: New file.

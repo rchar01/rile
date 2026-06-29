@@ -48,6 +48,8 @@ Initial inspection scenarios:
   behavior and disabled-command prompts.
 - `case-word-core`: base Emacs `M-l`, `M-u`, and `M-c` word case-conversion
   behavior.
+- `comment-commands-core`: base Emacs `M-;`, `comment-region`, and
+  `uncomment-region` behavior in C mode.
 - `consecutive-kills-core`: base Emacs consecutive kill and yank behavior.
 - `dirty-buffer-quit-clean-core`: base Emacs `C-x C-c` behavior with a clean
   buffer.
@@ -88,6 +90,7 @@ Initial inspection scenarios:
 - `find-file-completion-modern`: Vertico/Marginalia file completion behavior.
 - `find-file-long-path-core`: base Emacs `C-x C-f` prompt display with a long
   current directory.
+- `fill-paragraph-core`: base Emacs `M-q` fill-paragraph behavior in text mode.
 - `incremental-search-wrap-core`: base Emacs incremental search wrapping behavior.
 - `insert-file-core`: base Emacs `C-x i` insert-file behavior.
 - `buffer-completion-modern`: Vertico/Marginalia buffer completion behavior.
