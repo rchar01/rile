@@ -1,3 +1,14 @@
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
+	Reorganize planning documentation.
+
+	* docs/architecture.md: New file.
+	* docs/architecture-improvement-ideas.md: New file.
+	* docs/architecture-improvement-plan.md: Remove mixed completed roadmap.
+	* docs/emacs-behavior-reference-plan.md: New file.
+	* docs/completion-regex-removal-plan.md: Remove completed plan.
+	* docs/README.md: List current architecture and planning documents.
+
 2026-06-28  Robert Charusta  <rch-public@posteo.net>
 
 	Show file prompt base directories.
