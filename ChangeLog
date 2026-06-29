@@ -1,5 +1,13 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Document Emacs case-conversion behavior.
+
+	* docs/emacs-function-reference.md: Add case-conversion command entries.
+	* docs/emacs-behavior-reference-plan.md: Mark the case-conversion inventory
+	task complete.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs function reference template.
 
 	* docs/emacs-function-reference.md: New file.

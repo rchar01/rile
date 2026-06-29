@@ -98,7 +98,7 @@ implementation.
 
 Tasks:
 
-- [ ] Document case commands: `upcase-word`, `downcase-word`,
+- [x] Document case commands: `upcase-word`, `downcase-word`,
   `capitalize-word`, `upcase-region`, and `downcase-region`.
 - [ ] Document whitespace commands: `delete-horizontal-space`,
   `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace`.
@@ -173,6 +173,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Documented Phase 2 case-conversion commands. | `docs/emacs-function-reference.md` now covers `upcase-word`, `downcase-word`, `capitalize-word`, `upcase-region`, and `downcase-region` with Rile targets and Emacs manual evidence. |
 | 2026-06-29 | Completed Phase 1 reference-format work. | `docs/emacs-function-reference.md` defines the entry template and validates it with `join-line` and `query-replace` entries. |
 | 2026-06-29 | Plan created to pause implementation and write down the Emacs behavior-reference goal. | User requested writing down what we are trying to do before continuing. |
 

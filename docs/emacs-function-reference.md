@@ -146,3 +146,206 @@ registry entry `query-replace`; Rile PTY and unit tests for query replace.
 Notes: Emacs supports many additional choice keys such as comma, period, undo,
 recursive edit, replacement editing, and help. Those are out of scope for the
 current Rile command unless a concrete user need appears.
+
+## Missing Reference Entries
+
+### `downcase-word`
+
+Status: `missing`.
+
+Default binding: `M-l`.
+
+Purpose: convert the following word, or words selected by a numeric argument, to
+lower case.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: positive numeric arguments convert that many following
+words and move point past the converted text. Negative arguments convert words
+before point and leave point where it started. `M-- M-l` is the common one-word
+backward form.
+
+Region behavior: not a region command. If point is in the middle of a word, only
+the part of the word after point is converted; with a negative argument, only the
+part before point is converted.
+
+Point after command: positive forms move point to the end of the converted text.
+Negative forms keep point at its original position.
+
+Undo behavior: the command should be one undoable edit for the converted span.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit. Missing text to
+convert should be a no-op or use Rile's existing command-status style if a later
+implementation needs feedback.
+
+Rile target: implement a small compatible subset first: positive arguments,
+negative arguments, middle-of-word spans, UTF-8-safe edits, point placement, and
+single-command undo. Exact Emacs Unicode case-mapping edge cases can be deferred
+until behavior evidence requires them.
+
+Evidence: GNU Emacs manual, Case Conversion Commands, `M-l` and grouped word
+case-conversion behavior; Rile command registry currently has no `downcase-word`
+entry.
+
+Notes: Rile already has word movement and word-kill boundaries. The case commands
+should reuse or deliberately refine those boundaries rather than invent a third
+word model.
+
+### `upcase-word`
+
+Status: `missing`.
+
+Default binding: `M-u`.
+
+Purpose: convert the following word, or words selected by a numeric argument, to
+upper case.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: positive numeric arguments convert that many following
+words and move point past the converted text. Negative arguments convert words
+before point and leave point where it started. `M-- M-u` is the common one-word
+backward form.
+
+Region behavior: not a region command. If point is in the middle of a word, only
+the part of the word after point is converted; with a negative argument, only the
+part before point is converted.
+
+Point after command: positive forms move point to the end of the converted text.
+Negative forms keep point at its original position.
+
+Undo behavior: the command should be one undoable edit for the converted span.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement the same first-slice semantics as `downcase-word`, with
+case conversion changed to upper case.
+
+Evidence: GNU Emacs manual, Case Conversion Commands, `M-u` and grouped word
+case-conversion behavior; Rile command registry currently has no `upcase-word`
+entry.
+
+Notes: Case conversion may expand some Unicode characters. Preserve valid UTF-8
+and make point movement deterministic if converted text changes byte length.
+
+### `capitalize-word`
+
+Status: `missing`.
+
+Default binding: `M-c`.
+
+Purpose: convert the following word, or words selected by a numeric argument, to
+capitalized form.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: positive numeric arguments capitalize that many
+following words and move point past the converted text. Negative arguments
+capitalize words before point and leave point where it started. `M-- M-c` is the
+common one-word backward form.
+
+Region behavior: not a region command. If point is in the middle of a word, only
+the part of the word after point is converted; with a negative argument, only the
+part before point is converted.
+
+Point after command: positive forms move point to the end of the converted text.
+Negative forms keep point at its original position.
+
+Undo behavior: the command should be one undoable edit for the converted span.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement a small compatible subset with first cased character upper
+case and remaining cased characters lower case for each affected word. Exact Emacs
+syntax-table and locale edge cases can be deferred.
+
+Evidence: GNU Emacs manual, Case Conversion Commands, `M-c` and grouped word
+case-conversion behavior; Rile command registry currently has no
+`capitalize-word` entry.
+
+Notes: The implementation should define capitalization in terms of Unicode scalar
+values and documented Rile word boundaries, then cover mixed ASCII and UTF-8 text
+in unit tests.
+
+### `downcase-region`
+
+Status: `missing`.
+
+Default binding: `C-x C-l`.
+
+Purpose: convert the active region to lower case without moving point or mark.
+
+Prompt flow: base Emacs normally treats this command as disabled and asks for
+confirmation the first time it is used. Rile does not currently have a disabled
+command system.
+
+Prefix argument behavior: not meaningful for the first Rile implementation.
+
+Region behavior: converts the text between point and mark. Point and mark remain
+in place.
+
+Point after command: point and mark remain where they were before the command.
+
+Undo behavior: the whole region conversion should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Missing or inactive region should use
+the same no-region behavior as other Rile region commands.
+
+Rile target: intentionally differ from base Emacs by not adding disabled-command
+confirmation for this one command family. Match the region transformation,
+point/mark preservation, read-only behavior, and undo granularity.
+
+Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-l`; Rile command
+registry currently has no `downcase-region` entry.
+
+Notes: This should share the same region-range and read-only validation path as
+`kill-region` and `copy-region-as-kill` where practical.
+
+### `upcase-region`
+
+Status: `missing`.
+
+Default binding: `C-x C-u`.
+
+Purpose: convert the active region to upper case without moving point or mark.
+
+Prompt flow: base Emacs normally treats this command as disabled and asks for
+confirmation the first time it is used. Rile does not currently have a disabled
+command system.
+
+Prefix argument behavior: not meaningful for the first Rile implementation.
+
+Region behavior: converts the text between point and mark. Point and mark remain
+in place.
+
+Point after command: point and mark remain where they were before the command.
+
+Undo behavior: the whole region conversion should be one undoable edit.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Missing or inactive region should use
+the same no-region behavior as other Rile region commands.
+
+Rile target: intentionally differ from base Emacs by not adding disabled-command
+confirmation for this one command family. Match the region transformation,
+point/mark preservation, read-only behavior, and undo granularity.
+
+Evidence: GNU Emacs manual, Case Conversion Commands, `C-x C-u`; Rile command
+registry currently has no `upcase-region` entry.
+
+Notes: Case conversion may change byte length for some Unicode text, so region
+restoration and undo tests should cover non-ASCII input.
