@@ -638,3 +638,185 @@ no `transpose-lines` entry.
 Notes: Tests should cover files without a trailing newline, the first line, the
 last line, and multi-byte UTF-8 text so line-range replacement does not corrupt
 buffer storage.
+
+### `fill-paragraph`
+
+Status: `missing`.
+
+Default binding: `M-q` globally and in text buffers. Current GNU Emacs
+programming modes can remap `M-q` to mode-specific fill commands such as
+`prog-fill-reindent-defun` or `c-fill-paragraph`.
+
+Purpose: reflow the current paragraph, or paragraphs in the active region, to fit
+within the fill column.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: a numeric argument tells Emacs to justify the filled
+text as well as reflow it. The first Rile implementation should not implement
+justification.
+
+Region behavior: when called interactively with an active region, base Emacs fills
+each paragraph in the region. Otherwise, it fills the paragraph at point, or the
+paragraph after point when point is between paragraphs.
+
+Point after command: base behavior generally preserves point relative to the
+filled text when possible. Local text-mode probes show point at paragraph start
+remaining at the start after a simple fill.
+
+Undo behavior: filling the affected paragraph or region should be one undoable
+command result.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required for the normal edit.
+
+Rile target: implement a documented plain-text subset first: fill paragraphs by
+collapsing internal spaces and line breaks, wrapping at a fixed fill column, and
+preserving blank-line paragraph boundaries. Defer justification,
+sentence-end-double-space rules, CJK/kinsoku behavior, fill prefixes, mode-
+specific comment filling, and programmable fill hooks.
+
+Evidence: GNU Emacs manual, Explicit Fill Commands, `M-q`; GNU Emacs
+`describe-function` output for `fill-paragraph`; local batch probes for text-mode
+paragraph and active-region filling; Rile command registry currently has no
+`fill-paragraph` entry.
+
+Notes: This should probably share wrapping code with help-buffer prose wrapping,
+but editor-buffer filling needs separate undo, point-adjustment, region, and
+read-only tests.
+
+### `comment-dwim`
+
+Status: `missing`.
+
+Default binding: `M-;`.
+
+Purpose: insert, align, comment, uncomment, or kill comments depending on point,
+region, mode, and prefix argument.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: active-region numeric behavior is delegated through
+Emacs comment-region logic; current GNU Emacs documentation describes numeric
+`ARG` as controlling how many characters are removed from each comment delimiter.
+Without an active region, a prefix argument kills comments on the current line, or
+on multiple lines for numeric arguments.
+
+Region behavior: with an active region, base Emacs comments the region unless all
+lines are already comments, in which case it uncomments the region.
+
+Point after command: without a region, adding or realigning a comment places point
+after the comment start delimiter so the user can type comment text. Region
+commenting should preserve useful point/mark positions, but Rile can define and
+test a simpler deterministic result for its first subset.
+
+Undo behavior: the chosen comment action should be one undoable command result.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. If the current mode has no comment
+syntax, Rile should report a normal command error rather than guessing.
+
+Rile target: implement a smaller line-comment subset first for modes with known
+line comment markers, such as Rust/C `//` and shell/TOML `#`. Support active-
+region comment/uncomment toggling and simple current-line comment insertion.
+Defer alignment to `comment-column`, block comments, `comment-style`, comment
+killing, numeric delimiter-count behavior, and mode-specific indentation rules.
+
+Evidence: GNU Emacs manual, Comment Commands, `M-;`; GNU Emacs
+`describe-function` output for `comment-dwim`; local key-binding checks for
+`M-;`; Rile command registry currently has no `comment-dwim` entry and Rile syntax
+highlighting currently stores comment markers only inside highlighter logic.
+
+Notes: Before implementation, Rile should expose reusable comment syntax metadata
+rather than deriving editing behavior from rendering-only highlighter internals.
+
+### `comment-region`
+
+Status: `missing`.
+
+Default binding: none globally. In C mode and related modes, GNU Emacs binds
+`C-c C-c` to `comment-region`.
+
+Purpose: add comment delimiters to each line in a region.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: plain `C-u` uncomments each line in the region. Numeric
+arguments specify how many comment characters to add; negative numeric arguments
+remove that many comment characters.
+
+Region behavior: operates on the supplied region even if the mark is inactive.
+Base Emacs uses mode-specific `comment-start`, `comment-padding`, `comment-end`,
+and `comment-style` settings; in C mode, local probes show default block-comment
+wrapping such as `/* int x; */` for each line.
+
+Point after command: point should remain stable when possible, adjusted through
+normal edit rules if inserted delimiters occur before point.
+
+Undo behavior: commenting the whole region should be one undoable command result.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Missing comment syntax should use
+Rile's normal command-error status.
+
+Rile target: intentionally differ from full Emacs and implement a line-comment
+subset first. Add or remove one configured line-comment marker at each non-empty
+line's indentation within the region. Defer block comments, configurable padding,
+blank-line style variants, inactive-mark operation from `M-x`, and exact Emacs
+mode-specific comment styles.
+
+Evidence: GNU Emacs manual, Comment Commands, `comment-region`; GNU Emacs
+`describe-function` output; local C-mode probes for `C-c C-c` and block-comment
+behavior; Rile command registry currently has no `comment-region` entry.
+
+Notes: Rile may still bind a future line-comment subset differently from C mode's
+`C-c C-c` if that prefix is reserved for mode-specific keymaps later.
+
+### `uncomment-region`
+
+Status: `missing`.
+
+Default binding: none.
+
+Purpose: remove comment delimiters from each line in a region.
+
+Prompt flow: no prompt.
+
+Prefix argument behavior: a numeric argument can specify how many characters to
+remove from comment delimiters.
+
+Region behavior: operates on the supplied region. Base Emacs follows the current
+mode's comment syntax; the first Rile subset should operate only on configured
+line-comment markers.
+
+Point after command: point should remain stable when possible, adjusted through
+normal edit rules if removed delimiters occur before point.
+
+Undo behavior: uncommenting the whole region should be one undoable command
+result.
+
+Read-only behavior: should refuse to edit a read-only buffer through the normal
+Rile read-only guard.
+
+Messages: no success message is required. Missing comment syntax should use
+Rile's normal command-error status.
+
+Rile target: implement as the inverse of Rile's first `comment-region` subset:
+remove one configured line-comment marker and one optional following space at each
+commented line's indentation. Defer numeric delimiter-count behavior and block
+comment syntax.
+
+Evidence: GNU Emacs manual, Comment Commands, `uncomment-region`; GNU Emacs
+`describe-function` output; local C-mode probes for `comment-region` followed by
+`uncomment-region`; Rile command registry currently has no `uncomment-region`
+entry.
+
+Notes: Keep this command's parser strict enough that uncommenting a region does
+not delete comment-like text in strings or later code columns unless it is at the
+configured indentation position.

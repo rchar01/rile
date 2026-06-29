@@ -67,9 +67,9 @@ than memory or source-porting.
   implement soon, or should it include a broader Rile 1.0 compatibility matrix?
 - [ ] Should region case conversion be implemented in the same slice as word
   case conversion?
-- [ ] Should `comment-dwim` depend only on Rile's existing syntax modes, or
+- [x] Should `comment-dwim` depend only on Rile's existing syntax modes, or
   should it introduce a separate comment-syntax table first?
-- [ ] Should `fill-paragraph` target exact Emacs defaults or a documented small
+- [x] Should `fill-paragraph` target exact Emacs defaults or a documented small
   subset suitable for plain text and comments?
 
 ## Phase 1: Define The Reference Format
@@ -104,7 +104,7 @@ Tasks:
   `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace`.
 - [x] Document transpose commands: `transpose-chars`, `transpose-words`, and
   `transpose-lines`.
-- [ ] Document fill/comment commands: `fill-paragraph`, `comment-dwim`,
+- [x] Document fill/comment commands: `fill-paragraph`, `comment-dwim`,
   `comment-region`, and `uncomment-region`.
 - [ ] Document navigation commands: `forward-paragraph`, `backward-paragraph`,
   `forward-sentence`, and `backward-sentence`.
@@ -173,6 +173,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Documented Phase 2 fill/comment commands. | `docs/emacs-function-reference.md` now covers `fill-paragraph`, `comment-dwim`, `comment-region`, and `uncomment-region` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 transpose commands. | `docs/emacs-function-reference.md` now covers `transpose-chars`, `transpose-words`, and `transpose-lines` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |
 | 2026-06-29 | Documented Phase 2 whitespace commands. | `docs/emacs-function-reference.md` now covers `delete-horizontal-space`, `just-one-space`, `delete-blank-lines`, and `delete-trailing-whitespace` with Rile targets and Emacs manual or `describe-function` evidence. |
 | 2026-06-29 | Documented Phase 2 case-conversion commands. | `docs/emacs-function-reference.md` now covers `upcase-word`, `downcase-word`, `capitalize-word`, `upcase-region`, and `downcase-region` with Rile targets and Emacs manual evidence. |
@@ -183,4 +184,6 @@ the user's example gap.
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-06-29 | Target a documented plain-text subset for the first `fill-paragraph` implementation. | Full Emacs filling includes justification, language-specific breaking, fill prefixes, mode hooks, and comment filling that would be too large for the first Rile slice. |
+| 2026-06-29 | Add reusable comment-syntax metadata before implementing comment editing commands. | Existing Rile comment markers are embedded in syntax highlighting and should not become the editing API by accident. |
 | 2026-06-29 | Build a curated Emacs behavior reference before adding missing compatibility commands. | Avoid guessing from memory and avoid source-porting while preserving small-editor scope. |
