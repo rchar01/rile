@@ -124,11 +124,12 @@ Tasks:
 
 - [x] Add Emacs `core` scenarios for word and region case conversion.
 - [x] Add Emacs `core` scenarios for whitespace cleanup and spacing behavior.
-- [ ] Add Emacs `core` scenarios for transpose point movement and undo behavior.
+- [x] Add Emacs `core` scenarios for transpose point movement and undo behavior.
 - [ ] Add Emacs `core` scenarios for fill/comment prompts and resulting text.
 - [x] Update `tools/reference/emacs/README.md` with the case-conversion scenario
   names.
 - [x] Update `tools/reference/emacs/README.md` with the whitespace scenario names.
+- [x] Update `tools/reference/emacs/README.md` with the transpose scenario name.
 - [ ] Update `tools/reference/emacs/README.md` with later Phase 3 scenario names.
 
 Validation gate:
@@ -138,6 +139,8 @@ Validation gate:
 - [x] Run targeted captures for `whitespace-spacing-core` and
   `whitespace-cleanup-core`, then inspect generated frames under
   `artifacts/reference/emacs/`.
+- [x] Run targeted captures for `transpose-core`, then inspect generated frames
+  under `artifacts/reference/emacs/`.
 - [ ] Run targeted captures for later Phase 3 scenarios with `make
   reference-capture REF_EDITOR=emacs REF_SCENARIO=<scenario>` and inspect
   generated frames under `artifacts/reference/emacs/`.
@@ -181,6 +184,7 @@ the user's example gap.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Added Phase 3 Emacs transpose captures. | `tools/reference/emacs/scenarios/transpose-core.scenario` covers `C-t`, `M-t`, `C-x C-t`, point placement, and undo frames. |
 | 2026-06-29 | Added Phase 3 Emacs whitespace captures. | `tools/reference/emacs/scenarios/whitespace-spacing-core.scenario` covers `delete-horizontal-space` and `just-one-space`; `whitespace-cleanup-core.scenario` covers `delete-blank-lines` and `delete-trailing-whitespace`. |
 | 2026-06-29 | Added Phase 3 Emacs case-conversion captures. | `tools/reference/emacs/scenarios/case-word-core.scenario` covers `M-l`, `M-u`, and `M-c`; `case-region-core.scenario` covers `C-x C-l`, `C-x C-u`, and disabled-command prompts. |
 | 2026-06-29 | Completed Phase 2 first-batch inventory with navigation commands. | `docs/emacs-function-reference.md` now covers `forward-paragraph`, `backward-paragraph`, `forward-sentence`, and `backward-sentence` with Rile targets, Emacs manual evidence, `describe-function` output, and local batch probes. |

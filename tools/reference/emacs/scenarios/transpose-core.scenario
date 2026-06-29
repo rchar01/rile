@@ -1,0 +1,78 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=transpose-core
+SCENARIO_DESCRIPTION='Observe base Emacs character, word, and line transpose behavior with undo.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=transpose-core.txt
+FIXTURE_CONTENT=$'abcd\nFOO, BAR\none\ntwo\nthree\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /abcd/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Ctrl+F
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-before-transpose-chars.png
+Sleep 500ms
+Ctrl+T
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-transpose-chars.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-undo-transpose-chars.png
+Sleep 500ms
+Ctrl+S
+Type "FOO"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-before-transpose-words.png
+Sleep 500ms
+Escape
+Type "t"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-transpose-words.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-undo-transpose-words.png
+Sleep 500ms
+Ctrl+S
+Type "two"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-before-transpose-lines.png
+Sleep 500ms
+Ctrl+X
+Ctrl+T
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-transpose-lines.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-after-undo-transpose-lines.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

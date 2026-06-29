@@ -99,6 +99,8 @@ Initial inspection scenarios:
 - `help-describe-core`: base Emacs `C-h k` and `C-h f` help behavior.
 - `read-only-open-core`: base Emacs `C-x C-r` read-only file open behavior.
 - `toggle-read-only-core`: base Emacs `C-x C-q` toggle-read-only behavior.
+- `transpose-core`: base Emacs `C-t`, `M-t`, and `C-x C-t` transpose behavior
+  with undo.
 - `universal-argument-core`: base Emacs `C-u` universal-argument behavior.
 - `whitespace-cleanup-core`: base Emacs `C-x C-o` and
   `delete-trailing-whitespace` cleanup behavior.

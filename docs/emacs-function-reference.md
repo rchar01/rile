@@ -555,8 +555,9 @@ mark-based transposition unless a later capture shows it is needed.
 
 Evidence: GNU Emacs manual, Transposing Text, `C-t`; GNU Emacs
 `describe-function` output for `transpose-chars`; local batch probes for ordinary,
-end-of-line, zero-argument, and beginning-of-buffer behavior; Rile command
-registry currently has no `transpose-chars` entry.
+end-of-line, zero-argument, and beginning-of-buffer behavior; Emacs scenario
+`tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
+currently has no `transpose-chars` entry.
 
 Notes: Terminal `C-t` should be checked against Rile's input layer before binding
 because control-key availability can vary by terminal mode.
@@ -600,7 +601,8 @@ mark-based behavior and exact Emacs syntax-table edge cases.
 
 Evidence: GNU Emacs manual, Transposing Text, `M-t`; GNU Emacs
 `describe-function` output for `transpose-words`; local batch probes for
-punctuation, zero-argument, and missing-word behavior; Rile command registry
+punctuation, zero-argument, and missing-word behavior; Emacs scenario
+`tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
 currently has no `transpose-words` entry.
 
 Notes: This should reuse the same word-boundary model selected for case
@@ -643,8 +645,9 @@ important for Rile's scope.
 
 Evidence: GNU Emacs manual, Transposing Text, `C-x C-t`; GNU Emacs
 `describe-function` output for `transpose-lines`; local batch probes for ordinary,
-negative-argument, and zero-argument behavior; Rile command registry currently has
-no `transpose-lines` entry.
+negative-argument, and zero-argument behavior; Emacs scenario
+`tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
+currently has no `transpose-lines` entry.
 
 Notes: Tests should cover files without a trailing newline, the first line, the
 last line, and multi-byte UTF-8 text so line-range replacement does not corrupt
