@@ -279,7 +279,9 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('f')], ForwardChar),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], ForwardChar),
         KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
+        KeyBinding::new([KeyEvent::Meta('a')], BackwardSentence),
         KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
+        KeyBinding::new([KeyEvent::Meta('e')], ForwardSentence),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
         KeyBinding::new([KeyEvent::Meta('q')], FillParagraph),
         KeyBinding::new([KeyEvent::Meta(';')], CommentDwim),
@@ -644,8 +646,16 @@ mod tests {
             KeyResolution::Command(BackwardWord)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('a')]),
+            KeyResolution::Command(BackwardSentence)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('c')]),
             KeyResolution::Command(CapitalizeWord)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('e')]),
+            KeyResolution::Command(ForwardSentence)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('d')]),

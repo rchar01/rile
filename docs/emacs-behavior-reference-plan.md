@@ -190,13 +190,14 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `uncomment-region` | `uncomment-region` | None | Implemented subset | Done | Removes one configured line-comment marker and one optional following space at each commented region line's indentation. |
 | `forward-paragraph` | `forward-paragraph` | `M-}` | Implemented subset | Done | Uses blank-line-separated paragraph movement with spaces/tabs/formfeed separators. |
 | `backward-paragraph` | `backward-paragraph` | `M-{` | Implemented subset | Done | Shares paragraph-boundary code with `forward-paragraph`; supports positive and negative arguments. |
-| `forward-sentence` | `forward-sentence` | `M-e` | Missing | P3 | Useful but edge rules are subtler than paragraph movement. |
-| `backward-sentence` | `backward-sentence` | `M-a` | Missing | P3 | Defer until the sentence-boundary subset is clearly worth the complexity. |
+| `forward-sentence` | `forward-sentence` | `M-e` | Implemented subset | Done | Uses ASCII `.?!`, optional closing delimiters, default two-space/newline/EOF boundaries, and paragraph stops. |
+| `backward-sentence` | `backward-sentence` | `M-a` | Implemented subset | Done | Shares sentence-boundary code with `forward-sentence`; supports positive and negative arguments. |
 
 ## Ranked Missing Work
 
-1. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
-   deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
+No missing commands remain in this curated backlog. Future Emacs-compatibility
+work should add a new evidence-backed backlog instead of expanding this one by
+memory.
 
 Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
 `downcase-region`, and `upcase-region` are implemented as documented subsets.
@@ -220,6 +221,9 @@ Completed seventh slice: `comment-dwim`, `comment-region`, and
 
 Completed eighth slice: `just-one-space` is implemented as an unbound documented
 subset.
+
+Completed ninth slice: `forward-sentence` and `backward-sentence` are implemented
+as documented movement subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -282,6 +286,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the sentence movement slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `forward-sentence` and `backward-sentence`; unit tests cover default two-space boundaries, single-space non-boundaries, closing delimiters, paragraph stops, numeric arguments, and read-only behavior; `tests/pty_movement.rs` covers visible `M-e` and `M-a` behavior. |
 | 2026-06-30 | Implemented the `just-one-space` slice. | `src/command.rs` and `src/editor.rs` now implement `just-one-space` as an unbound `M-x` command; unit tests cover horizontal whitespace, numeric arguments, negative newline collapse, undo, and read-only behavior. |
 | 2026-06-30 | Implemented the comment command slice. | `src/syntax.rs` now exposes reusable line-comment metadata; `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `comment-dwim`, `comment-region`, and `uncomment-region`; unit tests cover current-line insertion, active-region toggling, Rust/TOML markers, no-syntax errors, read-only behavior, and undo; `tests/pty_insert.rs` covers visible `M-;` behavior. |
 | 2026-06-30 | Implemented the `fill-paragraph` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `fill-paragraph`; unit tests cover wrapping, active-region paragraph filling, blank-line behavior, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `M-q` wrapping. |

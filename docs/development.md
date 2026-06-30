@@ -227,6 +227,16 @@ and does not mutate buffer text or create undo entries. It intentionally defers
 customizable Emacs paragraph regexes, fill prefixes, and mode-specific paragraph
 movement functions.
 
+Post-Milestone 14 sentence movement polish adds `forward-sentence` on `M-e` and
+`backward-sentence` on `M-a`. The first subset recognizes ASCII `.`, `?`, and
+`!` terminators, optional closing quotes or brackets, Emacs's default two-space,
+newline, or end-of-buffer sentence boundary rule with optional horizontal space
+before newline or end of buffer, and paragraph-boundary stops.
+It supports positive and negative numeric arguments, works in read-only buffers,
+and does not mutate buffer text or create undo entries. It intentionally defers
+customizable sentence variables, language-specific rules, and mode-specific
+sentence functions.
+
 Post-Milestone 14 fill polish adds `fill-paragraph` on `M-q`. The first subset
 fills plain-text paragraphs by collapsing internal whitespace and wrapping words
 at a fixed fill column while preserving blank-line paragraph boundaries. It also

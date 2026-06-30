@@ -946,7 +946,7 @@ nonblank lines, and buffers without a final newline.
 
 ### `forward-sentence`
 
-Status: `missing`.
+Status: `implemented subset`.
 
 Default binding: `M-e`.
 
@@ -974,25 +974,27 @@ Messages: no success message is required. Emacs signals end-of-buffer when a
 forward sentence movement cannot complete; Rile can use its normal movement-error
 status.
 
-Rile target: implement a documented subset first: ASCII `.`, `?`, and `!`
+Rile implementation: implements a documented subset: ASCII `.`, `?`, and `!`
 sentence terminators, optional closing quotes/brackets, Emacs's default two-space
-or end-of-line boundary rule, paragraph-boundary stops, positive and negative
-repeat counts, and no buffer mutation. Defer customizable `sentence-end`,
+or end-of-line boundary rule with optional horizontal space before newline or end
+of buffer, paragraph-boundary stops, positive and negative repeat counts, and no
+buffer mutation. Defer customizable `sentence-end`,
 `sentence-end-double-space`, language-specific sentence rules, and mode-specific
 sentence functions.
 
 Evidence: GNU Emacs manual, Sentences, `M-e`; GNU Emacs `describe-function`
 output for `forward-sentence`; local batch probes for two-space boundaries,
 single-space non-boundaries, paragraph stops, negative arguments, and
-end-of-buffer behavior; Rile command registry currently has no `forward-sentence`
-entry.
+end-of-buffer behavior; Rile command registry entry `forward-sentence`; Rile unit
+and PTY tests for default sentence movement, closing delimiters, paragraph stops,
+numeric arguments, and read-only buffers.
 
 Notes: This command should not rely on word movement boundaries. Sentence
 recognition has different punctuation and whitespace rules.
 
 ### `backward-sentence`
 
-Status: `missing`.
+Status: `implemented subset`.
 
 Default binding: `M-a`.
 
@@ -1017,15 +1019,16 @@ Read-only behavior: movement should work in read-only buffers.
 Messages: no success message is required. Boundary cases should follow Rile's
 normal movement-command style.
 
-Rile target: implement the inverse of the first `forward-sentence` subset:
-default two-space sentence boundaries, paragraph-boundary stops, positive and
-negative repeat counts, point visibility, and no buffer mutation. Defer
-customizable sentence variables and mode-specific sentence functions.
+Rile implementation: implements the inverse of the first `forward-sentence`
+subset: default two-space sentence boundaries, paragraph-boundary stops,
+positive and negative repeat counts, point visibility, and no buffer mutation.
+Defer customizable sentence variables and mode-specific sentence functions.
 
 Evidence: GNU Emacs manual, Sentences, `M-a`; GNU Emacs `describe-function`
 output for `backward-sentence`; local batch probes for backward movement and
-negative arguments; Rile command registry currently has no `backward-sentence`
-entry.
+negative arguments; Rile command registry entry `backward-sentence`; Rile unit
+and PTY tests for default sentence movement, closing delimiters, paragraph stops,
+numeric arguments, and read-only buffers.
 
 Notes: Tests should cover punctuation followed by one space, two spaces, newline,
 closing quotes, and paragraph boundaries.

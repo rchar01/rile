@@ -142,6 +142,8 @@ Basic editor keys:
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
+- `M-e` and `M-a` move forward and backward by sentence using Rile's documented
+  default sentence-boundary subset.
 - `M-q` fills the current plain-text paragraph, or paragraphs in the active
   region, by collapsing whitespace and wrapping at Rile's fixed fill column.
 - `M-;` inserts a line comment for supported modes, or toggles line comments in

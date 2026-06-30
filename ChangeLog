@@ -1,5 +1,26 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement sentence movement commands.
+
+	* src/command.rs (Command): Add BackwardSentence and ForwardSentence.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-a and M-e.
+	* src/editor.rs (Editor::command_backward_sentence)
+	(Editor::command_forward_sentence, Editor::move_sentence_backward)
+	(Editor::move_sentence_forward, sentence_forward_position)
+	(sentence_backward_position, next_sentence_end)
+	(previous_sentence_start, sentence_boundary_after, paragraph_boundaries): New
+	sentence movement implementation.
+	* tests/pty_movement.rs (sentence_movement_commands_update_cursor_and_status):
+	New test.
+	* README.md: Document the new bindings.
+	* NEWS: Mention sentence movement.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark sentence movement implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement just-one-space.
 
 	* src/command.rs (Command): Add JustOneSpace.

@@ -10,6 +10,7 @@ pub enum Command {
     BackwardChar,
     BackwardKillWord,
     BackwardParagraph,
+    BackwardSentence,
     BackwardWord,
     BeginningOfBuffer,
     BeginningOfLine,
@@ -50,6 +51,7 @@ pub enum Command {
     FillParagraph,
     ForwardChar,
     ForwardParagraph,
+    ForwardSentence,
     ForwardWord,
     GotoLine,
     IncrementalSearchBackward,
@@ -182,10 +184,12 @@ impl CommandCategory {
         use Command::*;
 
         match command {
-            BackToIndentation | BackwardChar | BackwardParagraph | BackwardWord
-            | BeginningOfBuffer | BeginningOfLine | EndOfBuffer | EndOfLine | ForwardChar
-            | ForwardParagraph | ForwardWord | GotoLine | NextLine | PreviousLine | Recenter
-            | ScrollPageBackward | ScrollPageForward => Self::Movement,
+            BackToIndentation | BackwardChar | BackwardParagraph | BackwardSentence
+            | BackwardWord | BeginningOfBuffer | BeginningOfLine | EndOfBuffer | EndOfLine
+            | ForwardChar | ForwardParagraph | ForwardSentence | ForwardWord | GotoLine
+            | NextLine | PreviousLine | Recenter | ScrollPageBackward | ScrollPageForward => {
+                Self::Movement
+            }
             BackwardKillWord
             | CapitalizeWord
             | CommentDwim
@@ -262,6 +266,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         BackwardChar => "Move point one character toward the beginning of the buffer.",
         BackwardKillWord => "Kill the word before point and save the killed text in the kill ring.",
         BackwardParagraph => "Move point backward to the beginning of a paragraph.",
+        BackwardSentence => "Move point backward to the beginning of a sentence.",
         BackwardWord => "Move point backward by one word.",
         BeginningOfBuffer => "Move point to the beginning of the current buffer.",
         BeginningOfLine => "Move point to the beginning of the current line.",
@@ -302,6 +307,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         FillParagraph => "Reflow the current plain-text paragraph.",
         ForwardChar => "Move point one character toward the end of the buffer.",
         ForwardParagraph => "Move point forward to the end of a paragraph.",
+        ForwardSentence => "Move point forward to the end of a sentence.",
         ForwardWord => "Move point forward by one word.",
         GotoLine => "Prompt for a line or line:column location and move point there.",
         IncrementalSearchBackward => "Start backward incremental search from point.",
@@ -539,6 +545,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             BackwardParagraph,
         )
         .with_handler(crate::editor::Editor::command_backward_paragraph),
+        CommandSpec::new(
+            "backward-sentence",
+            "Move cursor backward by sentence",
+            true,
+            BackwardSentence,
+        )
+        .with_handler(crate::editor::Editor::command_backward_sentence),
         CommandSpec::new(
             "backward-word",
             "Move cursor backward by word",
@@ -796,6 +809,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ForwardParagraph,
         )
         .with_handler(crate::editor::Editor::command_forward_paragraph),
+        CommandSpec::new(
+            "forward-sentence",
+            "Move cursor forward by sentence",
+            true,
+            ForwardSentence,
+        )
+        .with_handler(crate::editor::Editor::command_forward_sentence),
         CommandSpec::new("goto-line", "Go to line or line:column", true, GotoLine)
             .with_handler(crate::editor::Editor::command_goto_line),
         CommandSpec::new(
@@ -1169,6 +1189,7 @@ mod tests {
         assert!(registry.contains("back-to-indentation"));
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));
+        assert!(registry.contains("backward-sentence"));
         assert!(registry.contains("backward-word"));
         assert!(registry.contains("buffer-list-select"));
         assert!(registry.contains("call-last-kbd-macro"));
@@ -1186,6 +1207,7 @@ mod tests {
         assert!(registry.contains("find-file"));
         assert!(registry.contains("find-file-read-only"));
         assert!(registry.contains("fill-paragraph"));
+        assert!(registry.contains("forward-sentence"));
         assert!(registry.contains("forward-word"));
         assert!(registry.contains("goto-line"));
         assert!(registry.contains("isearch-forward"));

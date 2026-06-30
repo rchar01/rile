@@ -125,6 +125,31 @@ fn paragraph_movement_commands_update_cursor_and_status() -> Result<()> {
 }
 
 #[test]
+fn sentence_movement_commands_update_cursor_and_status() -> Result<()> {
+    let file = fixtures::named_temp_file("One. Two?  Three!\nFour.\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("One. Two?")?;
+    rile.send("M-e", keys::meta('e'))?;
+    rile.assert_cursor(0, "One. Two?".len().try_into()?)?;
+    rile.assert_status_contains("Ln 001 Col 009")?;
+
+    rile.send("M-e", keys::meta('e'))?;
+    rile.assert_cursor(0, "One. Two?  Three!".len().try_into()?)?;
+
+    rile.send("M-e", keys::meta('e'))?;
+    rile.assert_cursor(1, "Four.".len().try_into()?)?;
+    rile.assert_status_contains("Ln 002 Col 005")?;
+
+    rile.send("M-a", keys::meta('a'))?;
+    rile.assert_cursor(1, 0)?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn back_to_indentation_moves_to_first_non_whitespace() -> Result<()> {
     let file = fixtures::named_temp_file("    alpha\n  beta\n    \nplain\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
