@@ -9,6 +9,7 @@ pub enum Command {
     BackToIndentation,
     BackwardChar,
     BackwardKillWord,
+    BackwardParagraph,
     BackwardWord,
     BeginningOfBuffer,
     BeginningOfLine,
@@ -45,6 +46,7 @@ pub enum Command {
     FindFile,
     FindFileReadOnly,
     ForwardChar,
+    ForwardParagraph,
     ForwardWord,
     GotoLine,
     IncrementalSearchBackward,
@@ -172,11 +174,10 @@ impl CommandCategory {
         use Command::*;
 
         match command {
-            BackToIndentation | BackwardChar | BackwardWord | BeginningOfBuffer
-            | BeginningOfLine | EndOfBuffer | EndOfLine | ForwardChar | ForwardWord | GotoLine
-            | NextLine | PreviousLine | Recenter | ScrollPageBackward | ScrollPageForward => {
-                Self::Movement
-            }
+            BackToIndentation | BackwardChar | BackwardParagraph | BackwardWord
+            | BeginningOfBuffer | BeginningOfLine | EndOfBuffer | EndOfLine | ForwardChar
+            | ForwardParagraph | ForwardWord | GotoLine | NextLine | PreviousLine | Recenter
+            | ScrollPageBackward | ScrollPageForward => Self::Movement,
             BackwardKillWord
             | CapitalizeWord
             | CopyRegionAsKill
@@ -244,6 +245,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         }
         BackwardChar => "Move point one character toward the beginning of the buffer.",
         BackwardKillWord => "Kill the word before point and save the killed text in the kill ring.",
+        BackwardParagraph => "Move point backward to the beginning of a paragraph.",
         BackwardWord => "Move point backward by one word.",
         BeginningOfBuffer => "Move point to the beginning of the current buffer.",
         BeginningOfLine => "Move point to the beginning of the current line.",
@@ -280,6 +282,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         FindFile => "Prompt for a file path and open it for editing.",
         FindFileReadOnly => "Prompt for a file path and open it read-only.",
         ForwardChar => "Move point one character toward the end of the buffer.",
+        ForwardParagraph => "Move point forward to the end of a paragraph.",
         ForwardWord => "Move point forward by one word.",
         GotoLine => "Prompt for a line or line:column location and move point there.",
         IncrementalSearchBackward => "Start backward incremental search from point.",
@@ -505,6 +508,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             BackwardKillWord,
         )
         .with_handler(crate::editor::Editor::command_backward_kill_word),
+        CommandSpec::new(
+            "backward-paragraph",
+            "Move cursor backward by paragraph",
+            true,
+            BackwardParagraph,
+        )
+        .with_handler(crate::editor::Editor::command_backward_paragraph),
         CommandSpec::new(
             "backward-word",
             "Move cursor backward by word",
@@ -734,6 +744,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ForwardWord,
         )
         .with_handler(crate::editor::Editor::command_forward_word),
+        CommandSpec::new(
+            "forward-paragraph",
+            "Move cursor forward by paragraph",
+            true,
+            ForwardParagraph,
+        )
+        .with_handler(crate::editor::Editor::command_forward_paragraph),
         CommandSpec::new("goto-line", "Go to line or line:column", true, GotoLine)
             .with_handler(crate::editor::Editor::command_goto_line),
         CommandSpec::new(

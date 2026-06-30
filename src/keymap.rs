@@ -293,6 +293,8 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         ),
         KeyBinding::new([KeyEvent::Meta('<')], BeginningOfBuffer),
         KeyBinding::new([KeyEvent::Meta('>')], EndOfBuffer),
+        KeyBinding::new([KeyEvent::Meta('{')], BackwardParagraph),
+        KeyBinding::new([KeyEvent::Meta('}')], ForwardParagraph),
         KeyBinding::new([KeyEvent::Ctrl('p')], PreviousLine),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], PreviousLine),
         KeyBinding::new([KeyEvent::Ctrl('n')], NextLine),
@@ -667,6 +669,14 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('>')]),
             KeyResolution::Command(EndOfBuffer)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('{')]),
+            KeyResolution::Command(BackwardParagraph)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('}')]),
+            KeyResolution::Command(ForwardParagraph)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('s')]),

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use crate::buffer::undo::UndoRecord;
-use crate::buffer::{BufferId, Position, RectangleEdit, TextRange};
+use crate::buffer::{Buffer, BufferId, Position, RectangleEdit, TextRange};
 use crate::buffers::BufferManager;
 use crate::command::{
     Command, CommandContext, CommandOutcome, CommandRegistry, CommandSpec, Invocation,
@@ -1575,6 +1575,18 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_backward_paragraph(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::move_paragraph_backward,
+            Self::move_paragraph_forward,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_backward_word(
         &mut self,
         context: CommandContext,
@@ -1887,6 +1899,18 @@ impl Editor {
             context.argument,
             Self::move_word_forward,
             Self::move_word_backward,
+        )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_forward_paragraph(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.repeat_signed(
+            context.argument,
+            Self::move_paragraph_forward,
+            Self::move_paragraph_backward,
         )?;
         Ok(CommandOutcome::Continue)
     }
@@ -2714,6 +2738,22 @@ impl Editor {
     fn move_word_forward(&mut self) -> Result<()> {
         self.clear_insert_group();
         self.cursor = self.document().buffer().move_word_forward(self.cursor)?;
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_paragraph_backward(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = paragraph_backward_position(self.document().buffer(), self.cursor)?;
+        self.goal_display_column = None;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn move_paragraph_forward(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.cursor = paragraph_forward_position(self.document().buffer(), self.cursor)?;
         self.goal_display_column = None;
         self.sync_current_window();
         Ok(())
@@ -5878,6 +5918,75 @@ fn is_blank_line(line: &str) -> bool {
     line.bytes().all(is_horizontal_space_byte)
 }
 
+fn is_paragraph_separator_line(line: &str) -> bool {
+    line.bytes()
+        .all(|byte| matches!(byte, b' ' | b'\t' | b'\x0c'))
+}
+
+fn paragraph_forward_position(buffer: &Buffer, position: Position) -> Result<Position> {
+    buffer.validate_position(position)?;
+    let lines = buffer.lines();
+    let mut line = position.line;
+
+    if is_paragraph_separator_line(&lines[line]) {
+        while line < lines.len() && is_paragraph_separator_line(&lines[line]) {
+            line += 1;
+        }
+    }
+
+    while line < lines.len() && !is_paragraph_separator_line(&lines[line]) {
+        line += 1;
+    }
+
+    if line < lines.len() {
+        Ok(Position::new(line, 0))
+    } else {
+        Ok(buffer.end_position())
+    }
+}
+
+fn paragraph_backward_position(buffer: &Buffer, position: Position) -> Result<Position> {
+    buffer.validate_position(position)?;
+    let lines = buffer.lines();
+    let mut line = position.line;
+
+    if is_paragraph_separator_line(&lines[line]) {
+        while line > 0 && is_paragraph_separator_line(&lines[line]) {
+            line -= 1;
+        }
+        if is_paragraph_separator_line(&lines[line]) {
+            return Ok(Position::new(0, 0));
+        }
+        while line > 0 && !is_paragraph_separator_line(&lines[line - 1]) {
+            line -= 1;
+        }
+        return Ok(Position::new(line, 0));
+    }
+
+    if position.byte > 0 || (line > 0 && !is_paragraph_separator_line(&lines[line - 1])) {
+        while line > 0 && !is_paragraph_separator_line(&lines[line - 1]) {
+            line -= 1;
+        }
+        return Ok(Position::new(line, 0));
+    }
+
+    if line == 0 {
+        return Ok(Position::new(0, 0));
+    }
+
+    line -= 1;
+    while line > 0 && is_paragraph_separator_line(&lines[line]) {
+        line -= 1;
+    }
+    if is_paragraph_separator_line(&lines[line]) {
+        return Ok(Position::new(0, 0));
+    }
+    while line > 0 && !is_paragraph_separator_line(&lines[line - 1]) {
+        line -= 1;
+    }
+    Ok(Position::new(line, 0))
+}
+
 fn blank_line_run(lines: &[String], line_index: usize) -> (usize, usize) {
     let mut start = line_index;
     while start > 0 && is_blank_line(&lines[start - 1]) {
@@ -6714,6 +6823,113 @@ mod tests {
             .handle_key(KeyEvent::Meta('b'))
             .expect("M-b should move backward by previous word");
         assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn moves_by_paragraphs_with_meta_bindings() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(
+                Position::new(0, 0),
+                "one\ntwo\n\nthree\nfour\n \t\x0c\nfive",
+            )
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} should move to paragraph boundary");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} should skip separators and move to next boundary");
+        assert_eq!(editor.cursor(), Position::new(5, 0));
+
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} should move to end of final paragraph");
+        assert_eq!(editor.cursor(), Position::new(6, "five".len()));
+
+        editor.cursor = Position::new(5, 0);
+        editor
+            .handle_key(KeyEvent::Meta('{'))
+            .expect("M-{ should move to previous paragraph start");
+        assert_eq!(editor.cursor(), Position::new(3, 0));
+
+        editor
+            .handle_key(KeyEvent::Meta('{'))
+            .expect("M-{ at paragraph start should move to previous paragraph");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn paragraph_movement_supports_prefix_arguments() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\n\ntwo\n\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("argument digit should be accepted");
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} should repeat by argument");
+        assert_eq!(editor.cursor(), Position::new(3, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("negative argument should be accepted");
+        editor
+            .handle_key(KeyEvent::Text("1".to_owned()))
+            .expect("argument digit should be accepted");
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("negative M-} should move backward");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+    }
+
+    #[test]
+    fn paragraph_movement_clamps_at_buffer_edges_and_separator_runs() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "  \n\t\x0c\ntext\n\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('{'))
+            .expect("M-{ at buffer start should stay at start");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor.cursor = Position::new(0, 1);
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} should skip leading separators");
+        assert_eq!(editor.cursor(), Position::new(3, 0));
+
+        editor.cursor = Position::new(4, 0);
+        editor
+            .handle_key(KeyEvent::Meta('{'))
+            .expect("M-{ should cross trailing separators");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+
+        editor.cursor = editor.document().buffer().end_position();
+        editor
+            .handle_key(KeyEvent::Meta('}'))
+            .expect("M-} at buffer end should stay at end");
+        assert_eq!(editor.cursor(), Position::new(4, 0));
     }
 
     #[test]

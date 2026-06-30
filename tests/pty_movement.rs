@@ -101,6 +101,30 @@ fn movement_commands_cover_backward_arrows_and_words() -> Result<()> {
 }
 
 #[test]
+fn paragraph_movement_commands_update_cursor_and_status() -> Result<()> {
+    let file = fixtures::named_temp_file("one\ntwo\n\nthree\nfour\n\nfive\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.send("M-}", keys::meta('}'))?;
+    rile.assert_cursor(2, 0)?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+
+    rile.send("M-}", keys::meta('}'))?;
+    rile.assert_cursor(5, 0)?;
+    rile.assert_status_contains("Ln 006 Col 000")?;
+
+    rile.send("M-{", keys::meta('{'))?;
+    rile.assert_cursor(3, 0)?;
+    rile.assert_status_contains("Ln 004 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn back_to_indentation_moves_to_first_non_whitespace() -> Result<()> {
     let file = fixtures::named_temp_file("    alpha\n  beta\n    \nplain\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

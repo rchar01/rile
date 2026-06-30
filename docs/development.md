@@ -219,6 +219,14 @@ kill-ring entry: forward kills append text and backward kills prepend text so
 `C-y` restores the killed text in buffer order. A non-kill command or failed kill
 breaks the coalescing chain.
 
+Post-Milestone 14 paragraph movement polish adds `forward-paragraph` on `M-}`
+and `backward-paragraph` on `M-{`. The first subset treats empty lines and lines
+containing only spaces, tabs, or formfeed characters as paragraph separators,
+supports positive and negative numeric arguments, works in read-only buffers,
+and does not mutate buffer text or create undo entries. It intentionally defers
+customizable Emacs paragraph regexes, fill prefixes, and mode-specific paragraph
+movement functions.
+
 Post-Milestone 14 case-conversion polish adds `downcase-word` on `M-l`,
 `upcase-word` on `M-u`, `capitalize-word` on `M-c`, `downcase-region` on
 `C-x C-l`, and `upcase-region` on `C-x C-u`. Word commands use Rile's existing

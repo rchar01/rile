@@ -1,3 +1,23 @@
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
+	Implement paragraph movement commands.
+
+	* src/command.rs (Command): Add BackwardParagraph and ForwardParagraph.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-{ and M-}.
+	* src/editor.rs (Editor::command_backward_paragraph)
+	(Editor::command_forward_paragraph, Editor::move_paragraph_backward)
+	(Editor::move_paragraph_forward, is_paragraph_separator_line)
+	(paragraph_forward_position, paragraph_backward_position): New paragraph
+	movement implementation.
+	* tests/pty_movement.rs (paragraph_movement_commands_update_cursor_and_status):
+	New test.
+	* README.md: Document the new bindings.
+	* NEWS: Mention paragraph movement.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark paragraph movement implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
 	Implement whitespace cleanup commands.

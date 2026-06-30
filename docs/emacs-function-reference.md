@@ -849,7 +849,7 @@ configured indentation position.
 
 ### `forward-paragraph`
 
-Status: `missing`.
+Status: `implemented` in Rile as `forward-paragraph`.
 
 Default binding: `M-}`.
 
@@ -876,21 +876,23 @@ Read-only behavior: movement should work in read-only buffers.
 Messages: no success message is required. Boundary cases should follow Rile's
 normal movement-command style.
 
-Rile target: implement a small compatible subset first: blank-line-separated
-paragraphs, positive and negative repeat counts, point visibility, and no buffer
-mutation. Defer Emacs's `paragraph-start`, `paragraph-separate`, fill-prefix, and
-mode-specific paragraph customizations.
+Rile implementation: implements the first compatible subset: blank-line-
+separated paragraphs, positive and negative repeat counts, point visibility, and
+no buffer mutation. Empty lines and lines containing only spaces, tabs, or
+formfeed characters separate paragraphs. It defers Emacs's `paragraph-start`,
+`paragraph-separate`, fill-prefix, and mode-specific paragraph customizations.
 
 Evidence: GNU Emacs manual, Paragraphs, `M-}`; GNU Emacs `describe-function`
 output for `forward-paragraph`; local batch probes for blank-line boundaries and
-repeat counts; Rile command registry currently has no `forward-paragraph` entry.
+repeat counts; Rile command registry entry `forward-paragraph`; Rile unit and PTY
+tests for blank-line-separated paragraph movement and numeric arguments.
 
 Notes: The first implementation should share paragraph-boundary code with
 `backward-paragraph` and, later, `fill-paragraph`.
 
 ### `backward-paragraph`
 
-Status: `missing`.
+Status: `implemented` in Rile as `backward-paragraph`.
 
 Default binding: `M-{`.
 
@@ -917,15 +919,16 @@ Read-only behavior: movement should work in read-only buffers.
 Messages: no success message is required. Boundary cases should follow Rile's
 normal movement-command style.
 
-Rile target: implement the inverse of the first `forward-paragraph` subset:
-blank-line-separated paragraphs, positive and negative repeat counts, point
-visibility, and no buffer mutation. Defer customizable paragraph regex behavior
-and fill-prefix interactions.
+Rile implementation: implements the inverse of the first `forward-paragraph`
+subset: blank-line-separated paragraphs, positive and negative repeat counts,
+point visibility, and no buffer mutation. Empty lines and lines containing only
+spaces, tabs, or formfeed characters separate paragraphs. It defers customizable
+paragraph regex behavior and fill-prefix interactions.
 
 Evidence: GNU Emacs manual, Paragraphs, `M-{`; GNU Emacs `describe-function`
 output for `backward-paragraph`; local batch probes for blank-line boundaries and
-negative arguments; Rile command registry currently has no `backward-paragraph`
-entry.
+negative arguments; Rile command registry entry `backward-paragraph`; Rile unit
+and PTY tests for blank-line-separated paragraph movement and numeric arguments.
 
 Notes: Tests should cover beginning of buffer, consecutive blank lines, indented
 nonblank lines, and buffers without a final newline.

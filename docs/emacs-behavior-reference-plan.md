@@ -188,21 +188,19 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `comment-dwim` | `comment-dwim` | `M-;` | Missing | P2 | Add reusable comment-syntax metadata first; target line comments before full Emacs DWIM behavior. |
 | `comment-region` | `comment-region` | None globally | Missing | P2 | Build as a line-comment subset for known modes; avoid C-mode block-comment parity in the first version. |
 | `uncomment-region` | `uncomment-region` | None | Missing | P2 | Implement as the inverse of the line-comment subset. |
-| `forward-paragraph` | `forward-paragraph` | `M-}` | Missing | P1 | Useful movement command and prerequisite for later fill behavior. |
-| `backward-paragraph` | `backward-paragraph` | `M-{` | Missing | P1 | Implement with shared paragraph-boundary code. |
+| `forward-paragraph` | `forward-paragraph` | `M-}` | Implemented subset | Done | Uses blank-line-separated paragraph movement with spaces/tabs/formfeed separators. |
+| `backward-paragraph` | `backward-paragraph` | `M-{` | Implemented subset | Done | Shares paragraph-boundary code with `forward-paragraph`; supports positive and negative arguments. |
 | `forward-sentence` | `forward-sentence` | `M-e` | Missing | P3 | Useful but edge rules are subtler than paragraph movement. |
 | `backward-sentence` | `backward-sentence` | `M-a` | Missing | P3 | Defer until the sentence-boundary subset is clearly worth the complexity. |
 
 ## Ranked Missing Work
 
-1. Paragraph movement: `forward-paragraph` and `backward-paragraph`. These are
-   high-value movement commands and establish reusable paragraph-boundary helpers.
-2. Transpose basics: start with `transpose-chars`, then evaluate
+1. Transpose basics: start with `transpose-chars`, then evaluate
    `transpose-words` and `transpose-lines` after the first two groups are stable.
-3. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
+2. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
    `uncomment-region`. These are useful but need paragraph wrapping and reusable
    comment-syntax metadata to avoid coupling editing behavior to rendering.
-4. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
+3. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
    deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
 
 Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
@@ -210,6 +208,9 @@ Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
 
 Completed second slice: `delete-horizontal-space`, `delete-blank-lines`, and
 `delete-trailing-whitespace` are implemented as documented subsets.
+
+Completed third slice: `forward-paragraph` and `backward-paragraph` are
+implemented as documented subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -272,6 +273,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the paragraph movement slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `forward-paragraph` and `backward-paragraph`; unit tests cover blank-line-separated paragraph movement, formfeed separators, and numeric arguments; `tests/pty_movement.rs` covers visible default-key behavior. |
 | 2026-06-29 | Implemented the whitespace cleanup slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `delete-horizontal-space`, `delete-blank-lines`, and `delete-trailing-whitespace`; unit tests cover spaces/tabs, prefix behavior, blank runs, isolated blank lines, trailing cleanup, active-region bounds, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior for the bound commands. |
 | 2026-06-29 | Implemented the Phase 4 case-conversion slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `downcase-word`, `upcase-word`, `capitalize-word`, `downcase-region`, and `upcase-region`; unit tests cover word arguments, UTF-8, region preservation, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior. |
 | 2026-06-29 | Completed Phase 4 Rile comparison and backlog ranking. | `src/command.rs` and `src/keymap.rs` show that only `join-line` and `query-replace` from the curated reference are implemented; the new backlog ranks the remaining documented command families and defines case conversion as the first slice. |
