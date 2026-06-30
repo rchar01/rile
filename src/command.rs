@@ -96,6 +96,7 @@ pub enum Command {
     ToggleReadOnly,
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
+    TransposeChars,
     Undo,
     UniversalArgument,
     UpcaseRegion,
@@ -198,6 +199,7 @@ impl CommandCategory {
             | OpenLine
             | QuotedInsert
             | SetMarkCommand
+            | TransposeChars
             | Undo
             | UpcaseRegion
             | UpcaseWord
@@ -336,6 +338,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ToggleReadOnly => "Toggle read-only state for the current normal buffer.",
         ToggleSearchHighlighting => "Toggle visual highlights for search and query replace.",
         ToggleSyntaxHighlighting => "Toggle syntax highlighting for supported modes.",
+        TransposeChars => "Transpose characters around point.",
         Undo => "Undo the latest edit recorded for the current buffer.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
         UpcaseRegion => "Convert the active region to upper case.",
@@ -1027,6 +1030,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ToggleSyntaxHighlighting,
         )
         .with_handler(crate::editor::Editor::command_toggle_syntax_highlighting),
+        CommandSpec::new(
+            "transpose-chars",
+            "Transpose characters around cursor",
+            true,
+            TransposeChars,
+        )
+        .with_handler(crate::editor::Editor::command_transpose_chars),
         CommandSpec::new("undo", "Undo last edit", true, Undo)
             .with_handler(crate::editor::Editor::command_undo),
         CommandSpec::new(
@@ -1388,6 +1398,7 @@ mod tests {
             Command::OpenLine,
             Command::QuotedInsert,
             Command::SetMarkCommand,
+            Command::TransposeChars,
             Command::Undo,
             Command::UpcaseRegion,
             Command::UpcaseWord,

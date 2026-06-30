@@ -4,6 +4,8 @@
 use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
+use unicode_segmentation::UnicodeSegmentation;
+
 use crate::buffer::undo::UndoRecord;
 use crate::buffer::{Buffer, BufferId, Position, RectangleEdit, TextRange};
 use crate::buffers::BufferManager;
@@ -204,6 +206,13 @@ struct RectangleBounds {
     end_line: usize,
     start_column: usize,
     end_column: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct TransposeEdit {
+    range: TextRange,
+    replacement: String,
+    cursor_after: Position,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -2283,6 +2292,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_transpose_chars(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.transpose_chars(context.argument)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_undo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.undo()?;
         Ok(CommandOutcome::Continue)
@@ -2971,6 +2988,48 @@ impl Editor {
         }
         self.goal_display_column = None;
         self.minibuffer.clear();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn transpose_chars(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let argument = argument.unwrap_or(1);
+        if argument == 0 {
+            self.minibuffer
+                .set_error("zero-argument transpose-chars is not supported");
+            return Ok(());
+        }
+
+        let Some(line) = self.document().buffer().line(self.cursor.line) else {
+            return Ok(());
+        };
+        let Some(edit) = transpose_chars_edit(line, self.cursor, argument) else {
+            self.minibuffer.set_error("Cannot transpose characters");
+            return Ok(());
+        };
+
+        let cursor_before = self.cursor;
+        let old_text = self.document_mut().buffer_mut().delete_range(edit.range)?;
+        let replacement_end = self
+            .document_mut()
+            .buffer_mut()
+            .insert(edit.range.start, &edit.replacement)?;
+        self.record_replace(
+            TextRange::new(edit.range.start, replacement_end),
+            old_text,
+            edit.replacement,
+            cursor_before,
+            edit.cursor_after,
+        );
+        self.cursor = edit.cursor_after;
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.deactivate_region();
         self.sync_current_window();
         Ok(())
     }
@@ -5985,6 +6044,101 @@ fn paragraph_backward_position(buffer: &Buffer, position: Position) -> Result<Po
         line -= 1;
     }
     Ok(Position::new(line, 0))
+}
+
+fn transpose_chars_edit(line: &str, position: Position, argument: i32) -> Option<TransposeEdit> {
+    if !line.is_char_boundary(position.byte) {
+        return None;
+    }
+
+    let graphemes = line.grapheme_indices(true).collect::<Vec<_>>();
+    if graphemes.len() < 2 {
+        return None;
+    }
+
+    let cursor_index = graphemes
+        .iter()
+        .take_while(|(byte, _)| *byte < position.byte)
+        .count();
+    if cursor_index == 0 {
+        return None;
+    }
+
+    if argument > 0 {
+        if cursor_index == graphemes.len() {
+            if argument == 1 {
+                return transpose_grapheme_range(line, position.line, graphemes.len() - 2, 1, 1);
+            }
+            return None;
+        }
+
+        let source = cursor_index - 1;
+        let distance = (argument as usize).min(graphemes.len() - 1 - source);
+        if distance == 0 {
+            return None;
+        }
+        transpose_grapheme_range(line, position.line, source, distance, 1)
+    } else {
+        let source = cursor_index - 1;
+        let distance = argument.unsigned_abs() as usize;
+        let target = source.saturating_sub(distance);
+        if target == source {
+            return None;
+        }
+        transpose_grapheme_range(line, position.line, target, source - target, -1)
+    }
+}
+
+fn transpose_grapheme_range(
+    line: &str,
+    line_index: usize,
+    range_start_index: usize,
+    distance: usize,
+    direction: i32,
+) -> Option<TransposeEdit> {
+    let graphemes = line.grapheme_indices(true).collect::<Vec<_>>();
+    let source = if direction >= 0 {
+        range_start_index
+    } else {
+        range_start_index + distance
+    };
+    let range_end_index = range_start_index + distance + 1;
+    let range_start = graphemes.get(range_start_index)?.0;
+    let range_end = if range_end_index < graphemes.len() {
+        graphemes[range_end_index].0
+    } else {
+        line.len()
+    };
+    let source_start = graphemes.get(source)?.0;
+    let source_end = if source + 1 < graphemes.len() {
+        graphemes[source + 1].0
+    } else {
+        line.len()
+    };
+    let dragged = &line[source_start..source_end];
+
+    let mut replacement = String::new();
+    let cursor_byte = if direction >= 0 {
+        replacement.push_str(&line[range_start..source_start]);
+        replacement.push_str(&line[source_end..range_end]);
+        replacement.push_str(dragged);
+        range_start + replacement.len()
+    } else {
+        replacement.push_str(dragged);
+        let cursor_byte = range_start + replacement.len();
+        replacement.push_str(&line[range_start..source_start]);
+        replacement.push_str(&line[source_end..range_end]);
+        cursor_byte
+    };
+
+    Some(TransposeEdit {
+        range: TextRange::new(
+            Position::new(line_index, range_start),
+            Position::new(line_index, range_end),
+        ),
+        replacement,
+        cursor_after: Position::new(line_index, cursor_byte),
+    })
 }
 
 fn blank_line_run(lines: &[String], line_index: usize) -> (usize, usize) {
@@ -13588,6 +13742,164 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should restore backward kill");
         assert_eq!(editor.document().buffer().serialize(), " two three");
+    }
+
+    #[test]
+    fn transpose_chars_swaps_adjacent_graphemes_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 2);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-t should transpose adjacent chars");
+        assert_eq!(editor.document().buffer().serialize(), "acbd");
+        assert_eq!(editor.cursor(), Position::new(0, 3));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore transposed chars");
+        assert_eq!(editor.document().buffer().serialize(), "abcd");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+    }
+
+    #[test]
+    fn transpose_chars_handles_end_of_line_and_utf8() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "aé界d")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "aé".len());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-t should transpose UTF-8 graphemes");
+        assert_eq!(editor.document().buffer().serialize(), "a界éd");
+        assert_eq!(editor.cursor(), Position::new(0, "a界é".len()));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = editor.document().buffer().end_position();
+        let eol_edit = super::transpose_chars_edit("abcd", Position::new(0, "abcd".len()), 1)
+            .expect("EOL transpose should be editable");
+        assert_eq!(eol_edit.replacement, "dc");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-t at EOL should swap previous two chars");
+        assert_eq!(editor.document().buffer().serialize(), "abdc");
+        assert_eq!(editor.cursor(), Position::new(0, "abdc".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("prefixed C-t at EOL should report boundary failure");
+        assert_eq!(editor.document().buffer().serialize(), "abdc");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Cannot transpose characters")
+        );
+    }
+
+    #[test]
+    fn transpose_chars_honors_positive_and_negative_arguments() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 2);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-u 2 C-t should drag char forward");
+        assert_eq!(editor.document().buffer().serialize(), "acdb");
+        assert_eq!(editor.cursor(), Position::new(0, 4));
+
+        editor.cursor = Position::new(0, 3);
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("negative prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("negative prefix sign should be recorded");
+        editor
+            .handle_key(KeyEvent::Text("1".to_owned()))
+            .expect("negative prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-u -1 C-t should drag char backward");
+        assert_eq!(editor.document().buffer().serialize(), "adcb");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+    }
+
+    #[test]
+    fn transpose_chars_reports_zero_argument_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 2);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("0".to_owned()))
+            .expect("zero prefix should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("zero C-t should be reported");
+        assert_eq!(editor.document().buffer().serialize(), "abcd");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: zero-argument transpose-chars is not supported")
+        );
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .transpose_chars(None)
+            .expect("C-t at BOL should report boundary failure");
+        assert_eq!(editor.document().buffer().serialize(), "abcd");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Cannot transpose characters")
+        );
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("read-only C-t should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "abcd");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
     }
 
     #[test]

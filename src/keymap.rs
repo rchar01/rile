@@ -312,6 +312,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('j')], NewlineAndIndent),
         KeyBinding::new([KeyEvent::Ctrl('o')], OpenLine),
         KeyBinding::new([KeyEvent::Ctrl('q')], QuotedInsert),
+        KeyBinding::new([KeyEvent::Ctrl('t')], TransposeChars),
         KeyBinding::new([KeyEvent::Ctrl('u')], UniversalArgument),
         KeyBinding::new([KeyEvent::Ctrl('@')], SetMarkCommand),
         KeyBinding::new([KeyEvent::Ctrl('h'), KeyEvent::Ctrl('a')], AboutRile),
@@ -725,6 +726,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('q')]),
             KeyResolution::Command(QuotedInsert)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('t')]),
+            KeyResolution::Command(TransposeChars)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('w')]),

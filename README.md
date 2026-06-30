@@ -139,6 +139,7 @@ Basic editor keys:
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
+- `C-t` transposes characters around point, with UTF-8-safe grapheme handling.
 - Repeating search at a buffer boundary first reports a failing search; repeating
   again wraps to the first or last match and shows a wrapped-search prompt.
 - `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit.

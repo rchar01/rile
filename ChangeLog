@@ -1,5 +1,23 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement transpose-chars.
+
+	* src/command.rs (Command): Add TransposeChars.
+	(default_doc_for_command, default_commands): Register the new command.
+	* src/keymap.rs (default_bindings): Bind C-t.
+	* src/editor.rs (TransposeEdit, Editor::command_transpose_chars)
+	(Editor::transpose_chars, transpose_chars_edit)
+	(transpose_grapheme_range): New character transposition implementation.
+	* tests/pty_insert.rs (transpose_chars_updates_visible_buffer_and_undoes): New
+	test.
+	* README.md: Document the new binding.
+	* NEWS: Mention the new user-visible transpose command.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark transpose-chars implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement paragraph movement commands.
 
 	* src/command.rs (Command): Add BackwardParagraph and ForwardParagraph.

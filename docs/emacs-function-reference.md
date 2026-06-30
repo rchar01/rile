@@ -524,7 +524,7 @@ because it can be implemented and tested independently of rendering faces.
 
 ### `transpose-chars`
 
-Status: `missing`.
+Status: `implemented` in Rile as `transpose-chars`.
 
 Default binding: `C-t`.
 
@@ -554,16 +554,18 @@ Rile read-only guard.
 Messages: no success message is required. Boundary failures should use Rile's
 normal command-status style for failed edit commands.
 
-Rile target: implement a small compatible subset first: no-prefix transposition,
-positive and negative repeat counts, end-of-line special case, point movement,
-UTF-8-safe character boundaries, and single-command undo. Defer zero-argument
-mark-based transposition unless a later capture shows it is needed.
+Rile implementation: implements the first compatible subset: no-prefix
+transposition, positive and negative repeat counts, end-of-line special case,
+point movement, UTF-8-safe grapheme boundaries, and single-command undo. It
+reports a boundary failure when a prefixed end-of-line request cannot be honored
+within the line. It defers zero-argument mark-based transposition.
 
 Evidence: GNU Emacs manual, Transposing Text, `C-t`; GNU Emacs
 `describe-function` output for `transpose-chars`; local batch probes for ordinary,
 end-of-line, zero-argument, and beginning-of-buffer behavior; Emacs scenario
 `tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
-currently has no `transpose-chars` entry.
+entry `transpose-chars`; Rile unit and PTY tests for ordinary, end-of-line,
+UTF-8, argument, undo, and read-only behavior.
 
 Notes: Terminal `C-t` should be checked against Rile's input layer before binding
 because control-key availability can vary by terminal mode.

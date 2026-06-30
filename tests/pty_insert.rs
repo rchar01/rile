@@ -127,6 +127,33 @@ fn case_conversion_commands_update_visible_buffer() -> Result<()> {
 }
 
 #[test]
+fn transpose_chars_updates_visible_buffer_and_undoes() -> Result<()> {
+    let file = fixtures::named_temp_file("abcd\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("abcd")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-t", keys::control('t'))?;
+
+    rile.wait_for_screen_contains("acbd")?;
+    rile.assert_cursor(0, 3)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-_", [0x1f])?;
+    rile.wait_for_screen_contains("abcd")?;
+    rile.assert_cursor(0, 2)?;
+
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("C-t", keys::control('t'))?;
+    rile.wait_for_screen_contains("abdc")?;
+    rile.assert_cursor(0, 4)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn whitespace_cleanup_commands_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("alpha     beta\nheader\n\n\nbody\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
