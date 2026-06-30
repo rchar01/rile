@@ -141,6 +141,9 @@ Basic editor keys:
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
 - `M-q` fills the current plain-text paragraph, or paragraphs in the active
   region, by collapsing whitespace and wrapping at Rile's fixed fill column.
+- `M-;` inserts a line comment for supported modes, or toggles line comments in
+  an active region. `M-x comment-region` and `M-x uncomment-region` operate on
+  active regions using the current mode's line-comment marker.
 - `C-t` transposes characters around point, with UTF-8-safe grapheme handling.
 - `M-t` transposes words around point and `C-x C-t` transposes lines.
 - Repeating search at a buffer boundary first reports a failing search; repeating

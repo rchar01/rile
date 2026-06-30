@@ -218,6 +218,28 @@ fn fill_paragraph_wraps_visible_text() -> Result<()> {
 }
 
 #[test]
+fn comment_dwim_updates_visible_rust_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file_with_suffix("let value = 1;\nnext();\n", ".rs")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 100)?;
+
+    rile.wait_for_screen_contains("let value = 1")?;
+    rile.send("M-;", keys::meta(';'))?;
+    rile.wait_for_screen_contains("// let value = 1")?;
+    rile.assert_cursor(0, "// ".len().try_into()?)?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-@", b"\0")?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("M-;", keys::meta(';'))?;
+    rile.wait_for_screen_contains("// next();")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn whitespace_cleanup_commands_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("alpha     beta\nheader\n\n\nbody\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

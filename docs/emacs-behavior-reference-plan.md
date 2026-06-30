@@ -185,9 +185,9 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `transpose-words` | `transpose-words` | `M-t` | Implemented subset | Done | Uses Rile word boundaries, repeat arguments, punctuation preservation, read-only checks, and undo; defers mark-based zero-argument behavior. |
 | `transpose-lines` | `transpose-lines` | `C-x C-t` | Implemented subset | Done | Moves the previous line past the current line or lines, supports repeat arguments, read-only checks, and undo; defers mark-line zero-argument behavior. |
 | `fill-paragraph` | `fill-paragraph` | `M-q` | Implemented subset | Done | Fills plain-text paragraphs at a fixed column, supports active-region paragraph filling, read-only checks, and undo; defers full Emacs fill machinery. |
-| `comment-dwim` | `comment-dwim` | `M-;` | Missing | P2 | Add reusable comment-syntax metadata first; target line comments before full Emacs DWIM behavior. |
-| `comment-region` | `comment-region` | None globally | Missing | P2 | Build as a line-comment subset for known modes; avoid C-mode block-comment parity in the first version. |
-| `uncomment-region` | `uncomment-region` | None | Missing | P2 | Implement as the inverse of the line-comment subset. |
+| `comment-dwim` | `comment-dwim` | `M-;` | Implemented subset | Done | Uses reusable major-mode line-comment metadata for Rust/C `//` and shell/TOML `#`; defers full Emacs DWIM behavior. |
+| `comment-region` | `comment-region` | None globally | Implemented subset | Done | Adds one configured line-comment marker at each non-empty region line's indentation. |
+| `uncomment-region` | `uncomment-region` | None | Implemented subset | Done | Removes one configured line-comment marker and one optional following space at each commented region line's indentation. |
 | `forward-paragraph` | `forward-paragraph` | `M-}` | Implemented subset | Done | Uses blank-line-separated paragraph movement with spaces/tabs/formfeed separators. |
 | `backward-paragraph` | `backward-paragraph` | `M-{` | Implemented subset | Done | Shares paragraph-boundary code with `forward-paragraph`; supports positive and negative arguments. |
 | `forward-sentence` | `forward-sentence` | `M-e` | Missing | P3 | Useful but edge rules are subtler than paragraph movement. |
@@ -195,10 +195,7 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## Ranked Missing Work
 
-1. Comment commands: `comment-dwim`, `comment-region`, and
-   `uncomment-region`. These need reusable comment-syntax metadata to avoid
-   coupling editing behavior to rendering.
-2. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
+1. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
    deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
 
 Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
@@ -217,6 +214,9 @@ documented subsets.
 
 Completed sixth slice: `fill-paragraph` is implemented as a documented plain-text
 subset.
+
+Completed seventh slice: `comment-dwim`, `comment-region`, and
+`uncomment-region` are implemented as documented line-comment subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -279,6 +279,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the comment command slice. | `src/syntax.rs` now exposes reusable line-comment metadata; `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `comment-dwim`, `comment-region`, and `uncomment-region`; unit tests cover current-line insertion, active-region toggling, Rust/TOML markers, no-syntax errors, read-only behavior, and undo; `tests/pty_insert.rs` covers visible `M-;` behavior. |
 | 2026-06-30 | Implemented the `fill-paragraph` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `fill-paragraph`; unit tests cover wrapping, active-region paragraph filling, blank-line behavior, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `M-q` wrapping. |
 | 2026-06-30 | Implemented the transpose follow-up slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-words` and `transpose-lines`; unit tests cover punctuation, UTF-8, numeric arguments, undo, boundary failures, and read-only behavior; `tests/pty_insert.rs` covers visible `M-t` and `C-x C-t` behavior. |
 | 2026-06-30 | Implemented the `transpose-chars` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-chars`; unit tests cover ordinary, end-of-line, UTF-8, argument, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `C-t` behavior and undo. |

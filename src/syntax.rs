@@ -17,6 +17,11 @@ pub enum MajorMode {
     Toml,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CommentSyntax {
+    pub line_start: &'static str,
+}
+
 impl MajorMode {
     pub fn for_path(path: Option<&Path>) -> Self {
         let Some(path) = path else {
@@ -57,6 +62,14 @@ impl MajorMode {
             Self::Shell => SyntaxMode::Shell,
             Self::Markdown => SyntaxMode::Markdown,
             Self::Toml => SyntaxMode::Toml,
+        }
+    }
+
+    pub const fn comment_syntax(self) -> Option<CommentSyntax> {
+        match self {
+            Self::Rust | Self::C => Some(CommentSyntax { line_start: "//" }),
+            Self::Shell | Self::Toml => Some(CommentSyntax { line_start: "#" }),
+            Self::Fundamental | Self::Text | Self::Markdown => None,
         }
     }
 }

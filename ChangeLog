@@ -1,5 +1,31 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement line-comment commands.
+
+	* src/syntax.rs (CommentSyntax, MajorMode::comment_syntax): Add reusable
+	line-comment metadata.
+	* src/command.rs (Command): Add CommentDwim, CommentRegion, and
+	UncommentRegion.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-;.
+	* src/editor.rs (CommentAction, Editor::command_comment_dwim)
+	(Editor::command_comment_region, Editor::command_uncomment_region)
+	(Editor::comment_dwim, Editor::comment_region, Editor::uncomment_region)
+	(Editor::current_comment_syntax, Editor::comment_current_line)
+	(Editor::apply_comment_region, Editor::region_lines_are_commented)
+	(region_line_bounds, line_comment_indent, line_is_commented)
+	(comment_line, uncomment_line, adjust_position_after_line_delta): New
+	line-comment editing implementation.
+	* tests/support/fixtures.rs (named_temp_file_with_suffix): New helper.
+	* tests/pty_insert.rs (comment_dwim_updates_visible_rust_buffer): New test.
+	* README.md: Document the new commands.
+	* NEWS: Mention the new user-visible comment commands.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark comment commands implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement fill-paragraph.
 
 	* src/command.rs (Command): Add FillParagraph.

@@ -718,7 +718,7 @@ read-only tests.
 
 ### `comment-dwim`
 
-Status: `missing`.
+Status: `implemented` in Rile as `comment-dwim`.
 
 Default binding: `M-;`.
 
@@ -749,25 +749,26 @@ Rile read-only guard.
 Messages: no success message is required. If the current mode has no comment
 syntax, Rile should report a normal command error rather than guessing.
 
-Rile target: implement a smaller line-comment subset first for modes with known
-line comment markers, such as Rust/C `//` and shell/TOML `#`. Support active-
-region comment/uncomment toggling and simple current-line comment insertion.
-Defer alignment to `comment-column`, block comments, `comment-style`, comment
-killing, numeric delimiter-count behavior, and mode-specific indentation rules.
+Rile implementation: implements a smaller line-comment subset for modes with
+known line comment markers: Rust/C `//` and shell/TOML `#`. It supports active-
+region comment/uncomment toggling and simple current-line comment insertion at
+indentation. It defers alignment to `comment-column`, block comments,
+`comment-style`, comment killing, numeric delimiter-count behavior, and
+mode-specific indentation rules.
 
 Evidence: GNU Emacs manual, Comment Commands, `M-;`; GNU Emacs
 `describe-function` output for `comment-dwim`; local key-binding checks for
 `M-;`; Emacs scenario
 `tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
-registry currently has no `comment-dwim` entry and Rile syntax highlighting
-currently stores comment markers only inside highlighter logic.
+registry entry `comment-dwim`; Rile unit and PTY tests for current-line insertion,
+active-region toggling, missing syntax, read-only behavior, and undo.
 
 Notes: Before implementation, Rile should expose reusable comment syntax metadata
 rather than deriving editing behavior from rendering-only highlighter internals.
 
 ### `comment-region`
 
-Status: `missing`.
+Status: `implemented` in Rile as `comment-region`.
 
 Default binding: none globally. In C mode and related modes, GNU Emacs binds
 `C-c C-c` to `comment-region`.
@@ -796,24 +797,25 @@ Rile read-only guard.
 Messages: no success message is required. Missing comment syntax should use
 Rile's normal command-error status.
 
-Rile target: intentionally differ from full Emacs and implement a line-comment
-subset first. Add or remove one configured line-comment marker at each non-empty
-line's indentation within the region. Defer block comments, configurable padding,
-blank-line style variants, inactive-mark operation from `M-x`, and exact Emacs
-mode-specific comment styles.
+Rile implementation: intentionally differs from full Emacs and implements a
+line-comment subset. It adds one configured line-comment marker plus a following
+space at each non-empty line's indentation within the active region. It defers
+block comments, configurable padding, blank-line style variants, inactive-mark
+operation from `M-x`, and exact Emacs mode-specific comment styles.
 
 Evidence: GNU Emacs manual, Comment Commands, `comment-region`; GNU Emacs
 `describe-function` output; local C-mode probes for `C-c C-c` and block-comment
 behavior; Emacs scenario
 `tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
-registry currently has no `comment-region` entry.
+registry entry `comment-region`; Rile unit tests for Rust and TOML line-comment
+markers, active-region behavior, undo, and read-only behavior.
 
 Notes: Rile may still bind a future line-comment subset differently from C mode's
 `C-c C-c` if that prefix is reserved for mode-specific keymaps later.
 
 ### `uncomment-region`
 
-Status: `missing`.
+Status: `implemented` in Rile as `uncomment-region`.
 
 Default binding: none.
 
@@ -840,16 +842,17 @@ Rile read-only guard.
 Messages: no success message is required. Missing comment syntax should use
 Rile's normal command-error status.
 
-Rile target: implement as the inverse of Rile's first `comment-region` subset:
-remove one configured line-comment marker and one optional following space at each
-commented line's indentation. Defer numeric delimiter-count behavior and block
-comment syntax.
+Rile implementation: implements the inverse of Rile's first `comment-region`
+subset: remove one configured line-comment marker and one optional following
+space at each commented line's indentation. It defers numeric delimiter-count
+behavior and block comment syntax.
 
 Evidence: GNU Emacs manual, Comment Commands, `uncomment-region`; GNU Emacs
 `describe-function` output; local C-mode probes for `comment-region` followed by
 `uncomment-region`; Emacs scenario
 `tools/reference/emacs/scenarios/comment-commands-core.scenario`; Rile command
-registry currently has no `uncomment-region` entry.
+registry entry `uncomment-region`; Rile unit tests for inverse line-comment
+behavior.
 
 Notes: Keep this command's parser strict enough that uncommenting a region does
 not delete comment-like text in strings or later code columns unless it is at the

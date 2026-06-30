@@ -26,7 +26,7 @@ use crate::mode::{ModeId, ModeRegistry};
 use crate::option::{OptionId, OptionRegistry, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::shell::{ShellCommandOutput, run_shell_command};
-use crate::syntax::{Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
+use crate::syntax::{CommentSyntax, Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::text::is_word_character;
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
 use crate::{Result, RileError};
@@ -201,6 +201,12 @@ enum CaseTransform {
     Lower,
     Upper,
     Capitalize,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CommentAction {
+    Comment,
+    Uncomment,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1665,6 +1671,22 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_comment_dwim(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.comment_dwim()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_comment_region(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.comment_region()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_copy_region_as_kill(
         &mut self,
         _context: CommandContext,
@@ -2335,6 +2357,14 @@ impl Editor {
 
     pub(crate) fn command_undo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.undo()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_uncomment_region(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.uncomment_region()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -3023,6 +3053,134 @@ impl Editor {
         self.minibuffer.clear();
         self.sync_current_window();
         Ok(())
+    }
+
+    fn comment_dwim(&mut self) -> Result<()> {
+        let Some(syntax) = self.current_comment_syntax() else {
+            self.minibuffer
+                .set_error("No comment syntax for current mode");
+            return Ok(());
+        };
+
+        if let Some(range) = self.active_region_range() {
+            if self.region_lines_are_commented(range, syntax) {
+                self.apply_comment_region(CommentAction::Uncomment, syntax, Some(range))
+            } else {
+                self.apply_comment_region(CommentAction::Comment, syntax, Some(range))
+            }
+        } else {
+            self.comment_current_line(syntax)
+        }
+    }
+
+    fn comment_region(&mut self) -> Result<()> {
+        let Some(syntax) = self.current_comment_syntax() else {
+            self.minibuffer
+                .set_error("No comment syntax for current mode");
+            return Ok(());
+        };
+        self.apply_comment_region(CommentAction::Comment, syntax, self.active_region_range())
+    }
+
+    fn uncomment_region(&mut self) -> Result<()> {
+        let Some(syntax) = self.current_comment_syntax() else {
+            self.minibuffer
+                .set_error("No comment syntax for current mode");
+            return Ok(());
+        };
+        self.apply_comment_region(CommentAction::Uncomment, syntax, self.active_region_range())
+    }
+
+    fn current_comment_syntax(&self) -> Option<CommentSyntax> {
+        self.major_mode_for_buffer(self.current_buffer_id())
+            .comment_syntax()
+    }
+
+    fn comment_current_line(&mut self, syntax: CommentSyntax) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let mut lines = self.document().buffer().lines().to_vec();
+        let line_index = self.cursor.line.min(lines.len().saturating_sub(1));
+        let indent = line_comment_indent(&lines[line_index]);
+        let insertion = format!("{} ", syntax.line_start);
+        lines[line_index].insert_str(indent, &insertion);
+        let cursor_after = Position::new(line_index, indent + insertion.len());
+        self.replace_buffer_text(lines.join("\n"), self.cursor, cursor_after)?;
+        Ok(())
+    }
+
+    fn apply_comment_region(
+        &mut self,
+        action: CommentAction,
+        syntax: CommentSyntax,
+        range: Option<TextRange>,
+    ) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let Some(range) = range else {
+            self.minibuffer.set_error("no active region");
+            return Ok(());
+        };
+        let Some((start_line, end_line)) = region_line_bounds(range) else {
+            return Ok(());
+        };
+
+        let cursor_before = self.cursor;
+        let mut cursor_after = cursor_before;
+        let mut lines = self.document().buffer().lines().to_vec();
+        let end_line = end_line.min(lines.len().saturating_sub(1));
+        for (line_index, line) in lines
+            .iter_mut()
+            .enumerate()
+            .take(end_line + 1)
+            .skip(start_line)
+        {
+            let edit = match action {
+                CommentAction::Comment => comment_line(line, syntax),
+                CommentAction::Uncomment => uncomment_line(line, syntax),
+            };
+            if let Some((byte, delta)) = edit {
+                cursor_after =
+                    adjust_position_after_line_delta(cursor_after, line_index, byte, delta);
+            }
+        }
+
+        let replacement = lines.join("\n");
+        if replacement == self.document().buffer().serialize() {
+            self.deactivate_region();
+            self.minibuffer.clear();
+            return Ok(());
+        }
+        self.replace_buffer_text(replacement, cursor_before, cursor_after)?;
+        Ok(())
+    }
+
+    fn region_lines_are_commented(&self, range: TextRange, syntax: CommentSyntax) -> bool {
+        let Some((start_line, end_line)) = region_line_bounds(range) else {
+            return false;
+        };
+        let lines = self.document().buffer().lines();
+        let mut saw_non_empty = false;
+        for line in lines
+            .iter()
+            .take(end_line.min(lines.len().saturating_sub(1)) + 1)
+            .skip(start_line)
+        {
+            if line.trim().is_empty() {
+                continue;
+            }
+            saw_non_empty = true;
+            if !line_is_commented(line, syntax) {
+                return false;
+            }
+        }
+        saw_non_empty
     }
 
     fn fill_paragraph(&mut self) -> Result<()> {
@@ -6444,6 +6602,65 @@ fn clamp_position_to_lines(lines: &[String], position: Position) -> Position {
     Position::new(line, byte)
 }
 
+fn region_line_bounds(range: TextRange) -> Option<(usize, usize)> {
+    let start = range.start.line;
+    let mut end = range.end.line;
+    if range.end.byte == 0 && end > start {
+        end -= 1;
+    }
+    (start <= end).then_some((start, end))
+}
+
+fn line_comment_indent(line: &str) -> usize {
+    line.char_indices()
+        .find_map(|(byte, character)| (!matches!(character, ' ' | '\t')).then_some(byte))
+        .unwrap_or(line.len())
+}
+
+fn line_is_commented(line: &str, syntax: CommentSyntax) -> bool {
+    let indent = line_comment_indent(line);
+    line[indent..].starts_with(syntax.line_start)
+}
+
+fn comment_line(line: &mut String, syntax: CommentSyntax) -> Option<(usize, isize)> {
+    if line.trim().is_empty() {
+        return None;
+    }
+    let indent = line_comment_indent(line);
+    let insertion = format!("{} ", syntax.line_start);
+    line.insert_str(indent, &insertion);
+    Some((indent, insertion.len() as isize))
+}
+
+fn uncomment_line(line: &mut String, syntax: CommentSyntax) -> Option<(usize, isize)> {
+    if line.trim().is_empty() {
+        return None;
+    }
+    let indent = line_comment_indent(line);
+    if !line[indent..].starts_with(syntax.line_start) {
+        return None;
+    }
+    let mut end = indent + syntax.line_start.len();
+    if line[end..].starts_with(' ') {
+        end += 1;
+    }
+    line.replace_range(indent..end, "");
+    Some((indent, -((end - indent) as isize)))
+}
+
+fn adjust_position_after_line_delta(
+    position: Position,
+    line_index: usize,
+    edit_byte: usize,
+    delta: isize,
+) -> Position {
+    if delta == 0 || position.line != line_index || position.byte < edit_byte {
+        return position;
+    }
+    let indent_adjusted = position.byte.saturating_add_signed(delta);
+    Position::new(position.line, indent_adjusted)
+}
+
 fn position_to_absolute(buffer: &Buffer, position: Position) -> Result<usize> {
     buffer.validate_position(position)?;
     let prefix_len = buffer
@@ -7838,6 +8055,158 @@ mod tests {
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn comment_dwim_inserts_current_line_comment_and_undoes() {
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        fs::write(&path, "    let value = 1;\n").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Meta(';'))
+            .expect("M-; should insert line comment");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "    // let value = 1;\n"
+        );
+        assert_eq!(editor.cursor(), Position::new(0, "    // ".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore uncommented line");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "    let value = 1;\n"
+        );
+    }
+
+    #[test]
+    fn comment_dwim_toggles_active_region_line_comments() {
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        fs::write(&path, "one\n  two\n\nthree\n").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(2, 0);
+        editor
+            .handle_key(KeyEvent::Meta(';'))
+            .expect("M-; should comment active region");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "// one\n  // two\n\nthree\n"
+        );
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set again");
+        editor.cursor = Position::new(2, 0);
+        editor
+            .handle_key(KeyEvent::Meta(';'))
+            .expect("M-; should uncomment fully commented region");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one\n  two\n\nthree\n"
+        );
+    }
+
+    #[test]
+    fn comment_region_and_uncomment_region_use_mode_markers() {
+        let directory = TestDir::new();
+        let path = directory.path().join("config.toml");
+        fs::write(&path, "title = \"demo\"\n[table]\n").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(2, 0);
+        editor
+            .execute_command_by_name("comment-region")
+            .expect("comment-region should run");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "# title = \"demo\"\n# [table]\n"
+        );
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set again");
+        editor.cursor = Position::new(2, 0);
+        editor
+            .execute_command_by_name("uncomment-region")
+            .expect("uncomment-region should run");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "title = \"demo\"\n[table]\n"
+        );
+    }
+
+    #[test]
+    fn comment_region_adds_marker_to_partially_commented_region_and_undoes() {
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        fs::write(&path, "one\n// two\nthree\n").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(3, 0);
+        editor
+            .execute_command_by_name("comment-region")
+            .expect("comment-region should run");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "// one\n// // two\n// three\n"
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore mixed region");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one\n// two\nthree\n"
+        );
+    }
+
+    #[test]
+    fn comment_commands_report_missing_syntax_and_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "plain")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta(';'))
+            .expect("M-; should report missing syntax");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: No comment syntax for current mode")
+        );
+
+        let directory = TestDir::new();
+        let path = directory.path().join("main.rs");
+        fs::write(&path, "let value = 1;\n").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .handle_key(KeyEvent::Meta(';'))
+            .expect("read-only M-; should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "let value = 1;\n");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: main.rs")
         );
     }
 

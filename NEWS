@@ -38,6 +38,9 @@ Editing features:
 * Transpose characters around point with C-t, words with M-t, and lines with
   C-x C-t.
 * Fill plain-text paragraphs with M-q, including active-region paragraph filling.
+* Insert and toggle line comments with M-; in Rust, C, shell, and TOML buffers.
+  Region line-comment commands are also available through M-x comment-region and
+  M-x uncomment-region.
 * Delete spaces and tabs around point with M-\\, or only before point with a
   prefix argument.  Delete redundant blank lines around point with C-x C-o, and
   remove trailing spaces and tabs with M-x delete-trailing-whitespace.

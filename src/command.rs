@@ -17,6 +17,8 @@ pub enum Command {
     CallLastKeyboardMacro,
     CapitalizeWord,
     ClearRectangle,
+    CommentDwim,
+    CommentRegion,
     CopyRegionAsKill,
     CopyRectangleAsKill,
     CopyRectangleToRegister,
@@ -101,6 +103,7 @@ pub enum Command {
     TransposeLines,
     TransposeWords,
     Undo,
+    UncommentRegion,
     UniversalArgument,
     UpcaseRegion,
     UpcaseWord,
@@ -184,6 +187,8 @@ impl CommandCategory {
             | ScrollPageBackward | ScrollPageForward => Self::Movement,
             BackwardKillWord
             | CapitalizeWord
+            | CommentDwim
+            | CommentRegion
             | CopyRegionAsKill
             | DeleteBackwardChar
             | DeleteBlankLines
@@ -207,6 +212,7 @@ impl CommandCategory {
             | TransposeLines
             | TransposeWords
             | Undo
+            | UncommentRegion
             | UpcaseRegion
             | UpcaseWord
             | Yank
@@ -261,6 +267,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         CallLastKeyboardMacro => "Replay the most recently recorded keyboard macro.",
         CapitalizeWord => "Capitalize the following word or words.",
         ClearRectangle => "Replace the active rectangle contents with spaces.",
+        CommentDwim => "Insert, comment, or uncomment line comments for the current mode.",
+        CommentRegion => "Add line comment markers to the active region.",
         CopyRegionAsKill => "Copy the active region to the kill ring without deleting it.",
         CopyRectangleAsKill => "Copy the active rectangle to the rectangle kill ring.",
         CopyRectangleToRegister => "Copy the active rectangle into a prompted register.",
@@ -349,6 +357,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         TransposeLines => "Transpose the previous line past the current line or lines.",
         TransposeWords => "Transpose the word before or containing point with another word.",
         Undo => "Undo the latest edit recorded for the current buffer.",
+        UncommentRegion => "Remove line comment markers from the active region.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
         UpcaseRegion => "Convert the active region to upper case.",
         UpcaseWord => "Convert the following word or words to upper case.",
@@ -576,6 +585,20 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ClearRectangle,
         )
         .with_handler(crate::editor::Editor::command_clear_rectangle),
+        CommandSpec::new(
+            "comment-dwim",
+            "Insert or toggle line comments",
+            true,
+            CommentDwim,
+        )
+        .with_handler(crate::editor::Editor::command_comment_dwim),
+        CommandSpec::new(
+            "comment-region",
+            "Comment active region",
+            true,
+            CommentRegion,
+        )
+        .with_handler(crate::editor::Editor::command_comment_region),
         CommandSpec::new(
             "copy-region-as-kill",
             "Copy active region to kill ring",
@@ -1070,6 +1093,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("undo", "Undo last edit", true, Undo)
             .with_handler(crate::editor::Editor::command_undo),
         CommandSpec::new(
+            "uncomment-region",
+            "Uncomment active region",
+            true,
+            UncommentRegion,
+        )
+        .with_handler(crate::editor::Editor::command_uncomment_region),
+        CommandSpec::new(
             "universal-argument",
             "Set a numeric argument for the next command",
             true,
@@ -1134,6 +1164,8 @@ mod tests {
         assert!(registry.contains("call-last-kbd-macro"));
         assert!(registry.contains("capitalize-word"));
         assert!(registry.contains("clear-rectangle"));
+        assert!(registry.contains("comment-dwim"));
+        assert!(registry.contains("comment-region"));
         assert!(registry.contains("copy-rectangle-as-kill"));
         assert!(registry.contains("copy-rectangle-to-register"));
         assert!(registry.contains("copy-to-register"));
@@ -1194,6 +1226,7 @@ mod tests {
         assert!(registry.contains("toggle-syntax-highlighting"));
         assert!(registry.contains("transpose-lines"));
         assert!(registry.contains("transpose-words"));
+        assert!(registry.contains("uncomment-region"));
         assert!(registry.contains("upcase-region"));
         assert!(registry.contains("upcase-word"));
         assert!(registry.contains("write-file"));
@@ -1413,6 +1446,8 @@ mod tests {
         let commands = [
             Command::BackwardKillWord,
             Command::CapitalizeWord,
+            Command::CommentDwim,
+            Command::CommentRegion,
             Command::CopyRegionAsKill,
             Command::DeleteBackwardChar,
             Command::DeleteBlankLines,
@@ -1436,6 +1471,7 @@ mod tests {
             Command::TransposeLines,
             Command::TransposeWords,
             Command::Undo,
+            Command::UncommentRegion,
             Command::UpcaseRegion,
             Command::UpcaseWord,
             Command::Yank,

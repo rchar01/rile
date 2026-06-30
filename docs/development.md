@@ -235,6 +235,15 @@ buffers and records one undo entry for each command result. It intentionally
 defers justification, fill prefixes, CJK/kinsoku handling, mode-specific comment
 filling, and programmable fill hooks.
 
+Post-Milestone 14 comment polish adds reusable line-comment metadata to major
+modes and implements `comment-dwim` on `M-;`, plus `comment-region` and
+`uncomment-region` as `M-x` commands. The first subset supports Rust and C `//`
+comments and shell/TOML `#` comments. It inserts a current-line comment at
+indentation, toggles active regions with `M-;`, skips blank lines for region
+operations, respects read-only buffers, and records one undo entry per command.
+It intentionally defers block comments, comment-column alignment, comment
+killing, delimiter-count prefix behavior, and mode-specific comment styles.
+
 Post-Milestone 14 transpose polish adds `transpose-chars` on `C-t`,
 `transpose-words` on `M-t`, and `transpose-lines` on `C-x C-t`. The first
 character subset transposes same-line UTF-8 grapheme clusters and handles the

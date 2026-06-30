@@ -282,6 +282,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
         KeyBinding::new([KeyEvent::Meta('q')], FillParagraph),
+        KeyBinding::new([KeyEvent::Meta(';')], CommentDwim),
         KeyBinding::new([KeyEvent::Meta('t')], TransposeWords),
         KeyBinding::new([KeyEvent::Meta('\\')], DeleteHorizontalSpace),
         KeyBinding::new([KeyEvent::Meta('l')], DowncaseWord),
@@ -661,6 +662,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('q')]),
             KeyResolution::Command(FillParagraph)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta(';')]),
+            KeyResolution::Command(CommentDwim)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('u')]),

@@ -25,6 +25,16 @@ pub fn named_temp_file(contents: &str) -> Result<NamedTempFile> {
     Ok(file)
 }
 
+pub fn named_temp_file_with_suffix(contents: &str, suffix: &str) -> Result<NamedTempFile> {
+    let file = tempfile::Builder::new()
+        .suffix(suffix)
+        .tempfile()
+        .context("failed to create temporary file")?;
+    fs::write(file.path(), contents)
+        .with_context(|| format!("failed to write {}", file.path().display()))?;
+    Ok(file)
+}
+
 pub fn temp_home() -> Result<TempDir> {
     tempfile::tempdir().context("failed to create temporary HOME")
 }
