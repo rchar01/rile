@@ -35,7 +35,8 @@ Editing features:
 * Join the current line to the previous line with M-^.
 * Convert word case with M-l, M-u, and M-c, and convert active-region case with
   C-x C-l and C-x C-u.
-* Transpose characters around point with C-t.
+* Transpose characters around point with C-t, words with M-t, and lines with
+  C-x C-t.
 * Delete spaces and tabs around point with M-\\, or only before point with a
   prefix argument.  Delete redundant blank lines around point with C-x C-o, and
   remove trailing spaces and tabs with M-x delete-trailing-whitespace.

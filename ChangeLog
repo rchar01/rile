@@ -1,5 +1,28 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement transpose word and line commands.
+
+	* src/command.rs (Command): Add TransposeLines and TransposeWords.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-t and C-x C-t.
+	* src/editor.rs (WordSpan, Editor::command_transpose_lines)
+	(Editor::command_transpose_words, Editor::transpose_words)
+	(Editor::transpose_lines, Editor::replace_buffer_text)
+	(position_to_absolute, absolute_to_position, transpose_words_once)
+	(transpose_word_spans, word_at_or_before, word_around)
+	(next_word_after, previous_word_before, transpose_lines_edit): New word
+	and line transposition implementation.
+	* tests/pty_insert.rs (transpose_words_and_lines_update_visible_buffer): New
+	test.
+	* README.md: Document the new bindings.
+	* NEWS: Mention the new user-visible transpose commands.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark transpose words and lines
+	implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement transpose-chars.
 
 	* src/command.rs (Command): Add TransposeChars.

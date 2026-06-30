@@ -97,6 +97,8 @@ pub enum Command {
     ToggleSearchHighlighting,
     ToggleSyntaxHighlighting,
     TransposeChars,
+    TransposeLines,
+    TransposeWords,
     Undo,
     UniversalArgument,
     UpcaseRegion,
@@ -200,6 +202,8 @@ impl CommandCategory {
             | QuotedInsert
             | SetMarkCommand
             | TransposeChars
+            | TransposeLines
+            | TransposeWords
             | Undo
             | UpcaseRegion
             | UpcaseWord
@@ -339,6 +343,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ToggleSearchHighlighting => "Toggle visual highlights for search and query replace.",
         ToggleSyntaxHighlighting => "Toggle syntax highlighting for supported modes.",
         TransposeChars => "Transpose characters around point.",
+        TransposeLines => "Transpose the previous line past the current line or lines.",
+        TransposeWords => "Transpose the word before or containing point with another word.",
         Undo => "Undo the latest edit recorded for the current buffer.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
         UpcaseRegion => "Convert the active region to upper case.",
@@ -1037,6 +1043,20 @@ pub fn default_commands() -> Vec<CommandSpec> {
             TransposeChars,
         )
         .with_handler(crate::editor::Editor::command_transpose_chars),
+        CommandSpec::new(
+            "transpose-lines",
+            "Transpose lines around cursor",
+            true,
+            TransposeLines,
+        )
+        .with_handler(crate::editor::Editor::command_transpose_lines),
+        CommandSpec::new(
+            "transpose-words",
+            "Transpose words around cursor",
+            true,
+            TransposeWords,
+        )
+        .with_handler(crate::editor::Editor::command_transpose_words),
         CommandSpec::new("undo", "Undo last edit", true, Undo)
             .with_handler(crate::editor::Editor::command_undo),
         CommandSpec::new(
@@ -1161,6 +1181,8 @@ mod tests {
         assert!(registry.contains("toggle-read-only"));
         assert!(registry.contains("toggle-search-highlighting"));
         assert!(registry.contains("toggle-syntax-highlighting"));
+        assert!(registry.contains("transpose-lines"));
+        assert!(registry.contains("transpose-words"));
         assert!(registry.contains("upcase-region"));
         assert!(registry.contains("upcase-word"));
         assert!(registry.contains("write-file"));
@@ -1399,6 +1421,8 @@ mod tests {
             Command::QuotedInsert,
             Command::SetMarkCommand,
             Command::TransposeChars,
+            Command::TransposeLines,
+            Command::TransposeWords,
             Command::Undo,
             Command::UpcaseRegion,
             Command::UpcaseWord,

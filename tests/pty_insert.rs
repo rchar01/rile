@@ -154,6 +154,39 @@ fn transpose_chars_updates_visible_buffer_and_undoes() -> Result<()> {
 }
 
 #[test]
+fn transpose_words_and_lines_update_visible_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("one two three\nalpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one two three")?;
+    for _ in 0..3 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    rile.send("M-t", keys::meta('t'))?;
+    rile.wait_for_screen_contains("two one three")?;
+    rile.assert_cursor(0, "two one".len().try_into()?)?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-x C-t", keys::control_sequence("xt"))?;
+    rile.wait_for_screen_contains("alpha")?;
+    let rows = rile.screen_rows();
+    assert!(
+        rows.first().is_some_and(|row| row.contains("alpha")),
+        "first screen row should contain moved line after transpose: {rows:?}"
+    );
+    assert!(
+        rows.get(1).is_some_and(|row| row.contains("two one three")),
+        "second screen row should contain transposed first line: {rows:?}"
+    );
+    rile.assert_cursor(1, "two one three".len().try_into()?)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn whitespace_cleanup_commands_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("alpha     beta\nheader\n\n\nbody\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

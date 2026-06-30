@@ -572,7 +572,7 @@ because control-key availability can vary by terminal mode.
 
 ### `transpose-words`
 
-Status: `missing`.
+Status: `implemented` in Rile as `transpose-words`.
 
 Default binding: `M-t`.
 
@@ -602,16 +602,18 @@ Rile read-only guard.
 Messages: no success message is required. Boundary failures should use Rile's
 normal command-status style for failed edit commands.
 
-Rile target: implement a small compatible subset using Rile's documented word
-boundaries: no-prefix behavior, positive and negative repeat counts, punctuation
-preservation between swapped words, point placement, and undo. Defer zero-argument
-mark-based behavior and exact Emacs syntax-table edge cases.
+Rile implementation: implements a small compatible subset using Rile's documented
+word boundaries: no-prefix behavior, positive and negative repeat counts,
+punctuation preservation between swapped words, point placement, read-only checks,
+and one undo entry per command. It defers zero-argument mark-based behavior and
+exact Emacs syntax-table edge cases.
 
 Evidence: GNU Emacs manual, Transposing Text, `M-t`; GNU Emacs
 `describe-function` output for `transpose-words`; local batch probes for
 punctuation, zero-argument, and missing-word behavior; Emacs scenario
 `tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
-currently has no `transpose-words` entry.
+entry `transpose-words`; Rile unit and PTY tests for punctuation, UTF-8, numeric
+arguments, undo, boundary failures, and read-only behavior.
 
 Notes: This should reuse the same word-boundary model selected for case
 conversion and word movement so Rile does not grow inconsistent command-specific
@@ -619,7 +621,7 @@ word rules.
 
 ### `transpose-lines`
 
-Status: `missing`.
+Status: `implemented` in Rile as `transpose-lines`.
 
 Default binding: `C-x C-t`.
 
@@ -646,16 +648,18 @@ Rile read-only guard.
 Messages: no success message is required. Boundary failures should use Rile's
 normal command-status style for failed edit commands.
 
-Rile target: implement a small compatible subset: no-prefix current/previous line
-exchange, numeric repeat counts, point placement, final-newline-safe editing, and
-undo. Defer zero-argument mark-line exchange unless a later capture shows it is
-important for Rile's scope.
+Rile implementation: implements a small compatible subset: no-prefix previous-line
+movement past the current line, numeric repeat counts, positive and negative line
+movement, point placement, final-newline-safe editing, read-only checks, and one
+undo entry per command. It defers zero-argument mark-line exchange unless a later
+capture shows it is important for Rile's scope.
 
 Evidence: GNU Emacs manual, Transposing Text, `C-x C-t`; GNU Emacs
 `describe-function` output for `transpose-lines`; local batch probes for ordinary,
 negative-argument, and zero-argument behavior; Emacs scenario
 `tools/reference/emacs/scenarios/transpose-core.scenario`; Rile command registry
-currently has no `transpose-lines` entry.
+entry `transpose-lines`; Rile unit and PTY tests for no-prefix movement, numeric
+arguments, UTF-8 lines, undo, boundary failures, and read-only behavior.
 
 Notes: Tests should cover files without a trailing newline, the first line, the
 last line, and multi-byte UTF-8 text so line-range replacement does not corrupt

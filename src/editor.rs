@@ -215,6 +215,12 @@ struct TransposeEdit {
     cursor_after: Position,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct WordSpan {
+    start: usize,
+    end: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum KillEntry {
     Text(String),
@@ -2300,6 +2306,22 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_transpose_lines(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.transpose_lines(context.argument)?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_transpose_words(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.transpose_words(context.argument)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_undo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.undo()?;
         Ok(CommandOutcome::Continue)
@@ -3027,6 +3049,90 @@ impl Editor {
             edit.cursor_after,
         );
         self.cursor = edit.cursor_after;
+        self.goal_display_column = None;
+        self.minibuffer.clear();
+        self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn transpose_words(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let argument = argument.unwrap_or(1);
+        if argument == 0 {
+            self.minibuffer
+                .set_error("zero-argument transpose-words is not supported");
+            return Ok(());
+        }
+
+        let cursor_before = self.cursor;
+        let mut replacement = self.document().buffer().serialize();
+        let mut cursor = position_to_absolute(self.document().buffer(), self.cursor)?;
+        for _ in 0..argument.unsigned_abs() {
+            let Some((next_text, next_cursor)) =
+                transpose_words_once(&replacement, cursor, argument)
+            else {
+                self.minibuffer.set_error("Cannot transpose words");
+                return Ok(());
+            };
+            replacement = next_text;
+            cursor = next_cursor;
+        }
+
+        let cursor_after = absolute_to_position(&replacement, cursor);
+        self.replace_buffer_text(replacement, cursor_before, cursor_after)?;
+        Ok(())
+    }
+
+    fn transpose_lines(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let argument = argument.unwrap_or(1);
+        if argument == 0 {
+            self.minibuffer
+                .set_error("zero-argument transpose-lines is not supported");
+            return Ok(());
+        }
+
+        let cursor_before = self.cursor;
+        let Some((lines, cursor_after)) =
+            transpose_lines_edit(self.document().buffer(), self.cursor, argument)
+        else {
+            self.minibuffer.set_error("Cannot transpose lines");
+            return Ok(());
+        };
+
+        self.replace_buffer_text(lines.join("\n"), cursor_before, cursor_after)?;
+        Ok(())
+    }
+
+    fn replace_buffer_text(
+        &mut self,
+        replacement: String,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) -> Result<()> {
+        let range = TextRange::new(Position::new(0, 0), self.document().buffer().end_position());
+        let old_text = self.document_mut().buffer_mut().delete_range(range)?;
+        let replacement_end = self
+            .document_mut()
+            .buffer_mut()
+            .insert(Position::new(0, 0), &replacement)?;
+        self.record_replace(
+            TextRange::new(Position::new(0, 0), replacement_end),
+            old_text,
+            replacement,
+            cursor_before,
+            cursor_after,
+        );
+        self.cursor = cursor_after;
         self.goal_display_column = None;
         self.minibuffer.clear();
         self.deactivate_region();
@@ -6044,6 +6150,180 @@ fn paragraph_backward_position(buffer: &Buffer, position: Position) -> Result<Po
         line -= 1;
     }
     Ok(Position::new(line, 0))
+}
+
+fn position_to_absolute(buffer: &Buffer, position: Position) -> Result<usize> {
+    buffer.validate_position(position)?;
+    let prefix_len = buffer
+        .lines()
+        .iter()
+        .take(position.line)
+        .map(|line| line.len() + 1)
+        .sum::<usize>();
+    Ok(prefix_len + position.byte)
+}
+
+fn absolute_to_position(text: &str, absolute: usize) -> Position {
+    let absolute = absolute.min(text.len());
+    let mut line_start = 0;
+    let mut line = 0;
+    for (byte, character) in text.char_indices() {
+        if byte >= absolute {
+            break;
+        }
+        if character == '\n' {
+            line += 1;
+            line_start = byte + 1;
+        }
+    }
+    Position::new(line, absolute - line_start)
+}
+
+fn transpose_words_once(text: &str, cursor: usize, argument: i32) -> Option<(String, usize)> {
+    if argument > 0 {
+        let source = word_at_or_before(text, cursor)?;
+        let target = next_word_after(text, source.end)?;
+        Some(transpose_word_spans(text, source, target))
+    } else {
+        let source = word_at_or_before(text, cursor)?;
+        let target = previous_word_before(text, source.start)?;
+        let (replacement, _) = transpose_word_spans(text, target, source);
+        Some((replacement, target.start + (source.end - source.start)))
+    }
+}
+
+fn transpose_word_spans(text: &str, first: WordSpan, second: WordSpan) -> (String, usize) {
+    debug_assert!(first.end <= second.start);
+    let first_text = &text[first.start..first.end];
+    let middle = &text[first.end..second.start];
+    let second_text = &text[second.start..second.end];
+
+    let mut replacement = String::with_capacity(text.len());
+    replacement.push_str(&text[..first.start]);
+    replacement.push_str(second_text);
+    replacement.push_str(middle);
+    replacement.push_str(first_text);
+    replacement.push_str(&text[second.end..]);
+
+    (
+        replacement,
+        first.start + second_text.len() + middle.len() + first_text.len(),
+    )
+}
+
+fn word_at_or_before(text: &str, cursor: usize) -> Option<WordSpan> {
+    if cursor < text.len() && text.is_char_boundary(cursor) {
+        let character = text[cursor..].chars().next()?;
+        if is_word_character(character) {
+            return word_around(text, cursor);
+        }
+    }
+
+    previous_word_before(text, cursor)
+}
+
+fn word_around(text: &str, byte: usize) -> Option<WordSpan> {
+    let mut start = byte;
+    for (offset, character) in text[..byte].char_indices().rev() {
+        if !is_word_character(character) {
+            break;
+        }
+        start = offset;
+    }
+
+    let mut end = byte;
+    for (offset, character) in text[byte..].char_indices() {
+        if !is_word_character(character) {
+            break;
+        }
+        end = byte + offset + character.len_utf8();
+    }
+
+    (start < end).then_some(WordSpan { start, end })
+}
+
+fn next_word_after(text: &str, byte: usize) -> Option<WordSpan> {
+    let mut start = None;
+    for (offset, character) in text[byte..].char_indices() {
+        let absolute = byte + offset;
+        if is_word_character(character) {
+            start = Some(absolute);
+            break;
+        }
+    }
+    let start = start?;
+    word_around(text, start)
+}
+
+fn previous_word_before(text: &str, byte: usize) -> Option<WordSpan> {
+    let mut end = None;
+    for (offset, character) in text[..byte].char_indices().rev() {
+        if is_word_character(character) {
+            end = Some(offset + character.len_utf8());
+            break;
+        }
+    }
+    let end = end?;
+
+    let mut start = end;
+    for (offset, character) in text[..end].char_indices().rev() {
+        if !is_word_character(character) {
+            break;
+        }
+        start = offset;
+    }
+
+    Some(WordSpan { start, end })
+}
+
+fn transpose_lines_edit(
+    buffer: &Buffer,
+    position: Position,
+    argument: i32,
+) -> Option<(Vec<String>, Position)> {
+    let lines = buffer.lines();
+    let effective_len =
+        if buffer.final_newline() && lines.last().is_some_and(|line| line.is_empty()) {
+            lines.len().saturating_sub(1)
+        } else {
+            lines.len()
+        };
+    if effective_len < 2 || position.line >= lines.len() {
+        return None;
+    }
+
+    let current_line = position.line.min(effective_len - 1);
+    if current_line == 0 {
+        return None;
+    }
+
+    let source = current_line - 1;
+    let mut replacement = lines[..effective_len].to_vec();
+    if argument > 0 {
+        let target = source
+            .checked_add(argument as usize)?
+            .min(effective_len - 1);
+        if target == source {
+            return None;
+        }
+        let moved = replacement.remove(source);
+        replacement.insert(target, moved);
+        if effective_len < lines.len() {
+            replacement.extend_from_slice(&lines[effective_len..]);
+        }
+        let cursor_byte = replacement[target].len();
+        Some((replacement, Position::new(target, cursor_byte)))
+    } else {
+        let distance = argument.unsigned_abs() as usize;
+        let target = source.checked_sub(distance)?;
+        let moved = replacement.remove(source);
+        replacement.insert(target, moved);
+        if effective_len < lines.len() {
+            replacement.extend_from_slice(&lines[effective_len..]);
+        }
+        let cursor_byte = replacement[target].len();
+        Some((replacement, Position::new(target, cursor_byte)))
+    }
 }
 
 fn transpose_chars_edit(line: &str, position: Position, argument: i32) -> Option<TransposeEdit> {
@@ -13896,6 +14176,264 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('t'))
             .expect("read-only C-t should not edit");
         assert_eq!(editor.document().buffer().serialize(), "abcd");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn transpose_words_preserves_punctuation_and_undoes() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "FOO, BAR baz")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "FOO".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("M-t should transpose words");
+        assert_eq!(editor.document().buffer().serialize(), "BAR, FOO baz");
+        assert_eq!(editor.cursor(), Position::new(0, "BAR, FOO".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore transposed words");
+        assert_eq!(editor.document().buffer().serialize(), "FOO, BAR baz");
+        assert_eq!(editor.cursor(), Position::new(0, "FOO".len()));
+    }
+
+    #[test]
+    fn transpose_words_honors_repeat_arguments_and_utf8() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "déjà two three")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "déjà".len());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("C-u 2 M-t should drag word forward");
+        assert_eq!(editor.document().buffer().serialize(), "two three déjà");
+        assert_eq!(editor.cursor(), Position::new(0, "two three déjà".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("negative prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("negative prefix sign should be recorded");
+        editor
+            .handle_key(KeyEvent::Text("1".to_owned()))
+            .expect("negative prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("C-u -1 M-t should drag word backward");
+        assert_eq!(editor.document().buffer().serialize(), "two déjà three");
+        assert_eq!(editor.cursor(), Position::new(0, "two déjà".len()));
+    }
+
+    #[test]
+    fn transpose_words_reports_boundaries_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "one".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("M-t should report missing target word");
+        assert_eq!(editor.document().buffer().serialize(), "one");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Cannot transpose words")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("0".to_owned()))
+            .expect("zero prefix should be recorded");
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("zero M-t should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: zero-argument transpose-words is not supported")
+        );
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .handle_key(KeyEvent::Meta('t'))
+            .expect("read-only M-t should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "one");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn transpose_lines_moves_previous_line_and_undoes() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\nthree")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-x C-t should transpose lines");
+        assert_eq!(editor.document().buffer().serialize(), "two\none\nthree");
+        assert_eq!(editor.cursor(), Position::new(1, "one".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore transposed lines");
+        assert_eq!(editor.document().buffer().serialize(), "one\ntwo\nthree");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn transpose_lines_honors_arguments_utf8_and_boundaries() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "å\ntwo\nthree\nfour")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("2".to_owned()))
+            .expect("prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-u 2 C-x C-t should move line forward");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "two\nthree\nå\nfour"
+        );
+        assert_eq!(editor.cursor(), Position::new(2, "å".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("negative prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("-".to_owned()))
+            .expect("negative prefix sign should be recorded");
+        editor
+            .handle_key(KeyEvent::Text("1".to_owned()))
+            .expect("negative prefix digit should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-u -1 C-x C-t should move line backward");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "three\ntwo\nå\nfour"
+        );
+        assert_eq!(editor.cursor(), Position::new(0, "three".len()));
+
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("first-line transpose should report boundary failure");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: Cannot transpose lines")
+        );
+    }
+
+    #[test]
+    fn transpose_lines_preserves_final_newline_at_eof() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = editor.document().buffer().end_position();
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-x C-t at EOF should transpose real lines");
+        assert_eq!(editor.document().buffer().serialize(), "two\none\n");
+        assert_eq!(editor.cursor(), Position::new(1, "one".len()));
+    }
+
+    #[test]
+    fn transpose_lines_reports_zero_argument_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("0".to_owned()))
+            .expect("zero prefix should be recorded");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("zero C-x C-t should be reported");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: zero-argument transpose-lines is not supported")
+        );
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("read-only C-x C-t should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "one\ntwo");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Buffer is read-only: *scratch*")

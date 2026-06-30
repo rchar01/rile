@@ -182,8 +182,8 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Implemented subset | Done | Uses Rile's space/tab-only blank-line definition and covers blank runs, isolated blank lines, and nonblank lines before blanks. |
 | `delete-trailing-whitespace` | `delete-trailing-whitespace` | None | Implemented subset | Done | Deletes ASCII spaces/tabs at physical line ends across the whole buffer or active-region bounds. |
 | `transpose-chars` | `transpose-chars` | `C-t` | Implemented subset | Done | Uses UTF-8-safe grapheme transposition, repeat arguments, EOL behavior, read-only checks, and undo. |
-| `transpose-words` | `transpose-words` | `M-t` | Missing | P2 | Depends on consistent word-span logic; defer mark-based zero-argument behavior. |
-| `transpose-lines` | `transpose-lines` | `C-x C-t` | Missing | P2 | Useful, but line-range replacement and point restoration need careful tests. |
+| `transpose-words` | `transpose-words` | `M-t` | Implemented subset | Done | Uses Rile word boundaries, repeat arguments, punctuation preservation, read-only checks, and undo; defers mark-based zero-argument behavior. |
+| `transpose-lines` | `transpose-lines` | `C-x C-t` | Implemented subset | Done | Moves the previous line past the current line or lines, supports repeat arguments, read-only checks, and undo; defers mark-line zero-argument behavior. |
 | `fill-paragraph` | `fill-paragraph` | `M-q` | Missing | P2 | Implement plain-text reflow only after paragraph-boundary helpers exist. |
 | `comment-dwim` | `comment-dwim` | `M-;` | Missing | P2 | Add reusable comment-syntax metadata first; target line comments before full Emacs DWIM behavior. |
 | `comment-region` | `comment-region` | None globally | Missing | P2 | Build as a line-comment subset for known modes; avoid C-mode block-comment parity in the first version. |
@@ -195,12 +195,10 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## Ranked Missing Work
 
-1. Transpose follow-ups: evaluate `transpose-words` and `transpose-lines` after
-   the implemented `transpose-chars` subset is stable.
-2. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
+1. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
    `uncomment-region`. These are useful but need paragraph wrapping and reusable
    comment-syntax metadata to avoid coupling editing behavior to rendering.
-3. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
+2. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
    deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
 
 Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
@@ -213,6 +211,9 @@ Completed third slice: `forward-paragraph` and `backward-paragraph` are
 implemented as documented subsets.
 
 Completed fourth slice: `transpose-chars` is implemented as a documented subset.
+
+Completed fifth slice: `transpose-words` and `transpose-lines` are implemented as
+documented subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -275,6 +276,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the transpose follow-up slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-words` and `transpose-lines`; unit tests cover punctuation, UTF-8, numeric arguments, undo, boundary failures, and read-only behavior; `tests/pty_insert.rs` covers visible `M-t` and `C-x C-t` behavior. |
 | 2026-06-30 | Implemented the `transpose-chars` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-chars`; unit tests cover ordinary, end-of-line, UTF-8, argument, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `C-t` behavior and undo. |
 | 2026-06-30 | Implemented the paragraph movement slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `forward-paragraph` and `backward-paragraph`; unit tests cover blank-line-separated paragraph movement, formfeed separators, and numeric arguments; `tests/pty_movement.rs` covers visible default-key behavior. |
 | 2026-06-29 | Implemented the whitespace cleanup slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `delete-horizontal-space`, `delete-blank-lines`, and `delete-trailing-whitespace`; unit tests cover spaces/tabs, prefix behavior, blank runs, isolated blank lines, trailing cleanup, active-region bounds, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior for the bound commands. |

@@ -227,11 +227,15 @@ and does not mutate buffer text or create undo entries. It intentionally defers
 customizable Emacs paragraph regexes, fill prefixes, and mode-specific paragraph
 movement functions.
 
-Post-Milestone 14 transpose polish adds `transpose-chars` on `C-t`. The first
-subset transposes same-line UTF-8 grapheme clusters, handles the Emacs end-of-line
-case by swapping the previous two graphemes, supports positive and negative
-numeric arguments, respects read-only buffers, and records one undo entry per
-command. It intentionally defers zero-argument mark-based transposition.
+Post-Milestone 14 transpose polish adds `transpose-chars` on `C-t`,
+`transpose-words` on `M-t`, and `transpose-lines` on `C-x C-t`. The first
+character subset transposes same-line UTF-8 grapheme clusters and handles the
+Emacs end-of-line case by swapping the previous two graphemes. The word subset
+uses Rile's Unicode-aware word boundaries and preserves punctuation between the
+swapped words. The line subset moves the previous line past the current line or
+lines. These commands support positive and negative numeric arguments, respect
+read-only buffers, and record one undo entry per command. They intentionally
+defer zero-argument mark-based transposition.
 
 Post-Milestone 14 case-conversion polish adds `downcase-word` on `M-l`,
 `upcase-word` on `M-u`, `capitalize-word` on `M-c`, `downcase-region` on

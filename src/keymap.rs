@@ -281,6 +281,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
         KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
+        KeyBinding::new([KeyEvent::Meta('t')], TransposeWords),
         KeyBinding::new([KeyEvent::Meta('\\')], DeleteHorizontalSpace),
         KeyBinding::new([KeyEvent::Meta('l')], DowncaseWord),
         KeyBinding::new([KeyEvent::Meta('u')], UpcaseWord),
@@ -395,6 +396,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('o')], DeleteBlankLines),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')], ToggleReadOnly),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')], FindFileReadOnly),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('t')], TransposeLines),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')], UpcaseRegion),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], WriteFile),
         KeyBinding::new(
@@ -660,6 +662,10 @@ mod tests {
             KeyResolution::Command(UpcaseWord)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('t')]),
+            KeyResolution::Command(TransposeWords)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::MetaSpecial(SpecialKey::Backspace)]),
             KeyResolution::Command(BackwardKillWord)
         );
@@ -840,6 +846,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),
             KeyResolution::Command(FindFileReadOnly)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('t')]),
+            KeyResolution::Command(TransposeLines)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')]),
