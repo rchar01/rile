@@ -12,8 +12,8 @@ This directory contains maintainer and contributor documentation for Rile.
 - [Architecture](architecture.md): current module boundaries, runtime flow,
   editor state, rendering, terminal integration, and known hotspots.
 - [Development Notes](development.md): repository scope, milestone history, tooling, containers, release files, and CI expectations.
-- [Emacs Function Reference](emacs-function-reference.md): curated Emacs command
-  behavior notes for Rile compatibility work.
+- [Emacs Function Reference](emacs-function-reference.md): durable curated Emacs
+  command behavior notes for completed and future Rile compatibility work.
 - [Performance Smoke Testing](performance.md): optional large-file and long-line
   timing comparisons against reference editors.
 - [Reference Testing](reference-testing.md): optional behavior-capture workflow for reference editors such as GNU Zile and kg.
@@ -26,8 +26,4 @@ This directory contains maintainer and contributor documentation for Rile.
 - [Architecture Improvement Ideas](architecture-improvement-ideas.md): future
   refactor candidates and validation expectations, separate from current
   architecture documentation.
-- [Emacs Behavior Reference Plan](emacs-behavior-reference-plan.md): plan for
-  documenting Emacs command behavior before implementing more compatibility
-  features in Rile.
-
 Completed implementation plans should not remain here as permanent docs. When a plan finishes, move durable guidance into a guide and rely on Git history for the original checklist.

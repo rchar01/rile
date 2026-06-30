@@ -1,5 +1,13 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Remove completed Emacs behavior plan.
+
+	* docs/README.md: Remove the completed plan from the planning documents list
+	and describe the Emacs function reference as durable guidance.
+	* docs/emacs-behavior-reference-plan.md: Delete completed plan.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement sentence movement commands.
 
 	* src/command.rs (Command): Add BackwardSentence and ForwardSentence.
