@@ -227,6 +227,14 @@ and does not mutate buffer text or create undo entries. It intentionally defers
 customizable Emacs paragraph regexes, fill prefixes, and mode-specific paragraph
 movement functions.
 
+Post-Milestone 14 fill polish adds `fill-paragraph` on `M-q`. The first subset
+fills plain-text paragraphs by collapsing internal whitespace and wrapping words
+at a fixed fill column while preserving blank-line paragraph boundaries. It also
+fills each paragraph overlapped by an active region. It respects read-only
+buffers and records one undo entry for each command result. It intentionally
+defers justification, fill prefixes, CJK/kinsoku handling, mode-specific comment
+filling, and programmable fill hooks.
+
 Post-Milestone 14 transpose polish adds `transpose-chars` on `C-t`,
 `transpose-words` on `M-t`, and `transpose-lines` on `C-x C-t`. The first
 character subset transposes same-line UTF-8 grapheme clusters and handles the

@@ -667,7 +667,7 @@ buffer storage.
 
 ### `fill-paragraph`
 
-Status: `missing`.
+Status: `implemented` in Rile as `fill-paragraph`.
 
 Default binding: `M-q` globally and in text buffers. Current GNU Emacs
 programming modes can remap `M-q` to mode-specific fill commands such as
@@ -698,17 +698,19 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement a documented plain-text subset first: fill paragraphs by
-collapsing internal spaces and line breaks, wrapping at a fixed fill column, and
-preserving blank-line paragraph boundaries. Defer justification,
-sentence-end-double-space rules, CJK/kinsoku behavior, fill prefixes, mode-
-specific comment filling, and programmable fill hooks.
+Rile implementation: implements a documented plain-text subset: fill paragraphs
+by collapsing internal spaces and line breaks, wrapping at a fixed fill column,
+and preserving blank-line paragraph boundaries. Active-region invocation fills
+each paragraph overlapped by the region. It defers justification,
+sentence-end-double-space rules, CJK/kinsoku behavior, fill prefixes,
+mode-specific comment filling, and programmable fill hooks.
 
 Evidence: GNU Emacs manual, Explicit Fill Commands, `M-q`; GNU Emacs
 `describe-function` output for `fill-paragraph`; local batch probes for text-mode
 paragraph and active-region filling; Emacs scenario
 `tools/reference/emacs/scenarios/fill-paragraph-core.scenario`; Rile command
-registry currently has no `fill-paragraph` entry.
+registry entry `fill-paragraph`; Rile unit and PTY tests for wrapping, active
+regions, blank-line behavior, undo, and read-only behavior.
 
 Notes: This should probably share wrapping code with help-buffer prose wrapping,
 but editor-buffer filling needs separate undo, point-adjustment, region, and

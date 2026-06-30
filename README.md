@@ -139,6 +139,8 @@ Basic editor keys:
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
+- `M-q` fills the current plain-text paragraph, or paragraphs in the active
+  region, by collapsing whitespace and wrapping at Rile's fixed fill column.
 - `C-t` transposes characters around point, with UTF-8-safe grapheme handling.
 - `M-t` transposes words around point and `C-x C-t` transposes lines.
 - Repeating search at a buffer boundary first reports a failing search; repeating

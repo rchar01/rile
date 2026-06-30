@@ -187,6 +187,37 @@ fn transpose_words_and_lines_update_visible_buffer() -> Result<()> {
 }
 
 #[test]
+fn fill_paragraph_wraps_visible_text() -> Result<()> {
+    let file = fixtures::named_temp_file(
+        "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau\n",
+    )?;
+    let mut rile = RilePty::spawn(file.path(), 12, 100)?;
+
+    rile.wait_for_screen_contains("alpha beta gamma")?;
+    for _ in 0.."alpha beta".len() {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    rile.send("M-q", keys::meta('q'))?;
+    rile.wait_for_screen_contains("pi rho sigma tau")?;
+    let rows = rile.screen_rows();
+    assert!(
+        rows.first()
+            .is_some_and(|row| row.contains("alpha beta gamma")),
+        "first screen row should contain paragraph start after fill: {rows:?}"
+    );
+    assert!(
+        rows.get(1)
+            .is_some_and(|row| row.contains("pi rho sigma tau")),
+        "second screen row should contain wrapped paragraph tail: {rows:?}"
+    );
+    rile.assert_cursor(0, "alpha beta".len().try_into()?)?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn whitespace_cleanup_commands_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("alpha     beta\nheader\n\n\nbody\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

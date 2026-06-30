@@ -1,5 +1,23 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement fill-paragraph.
+
+	* src/command.rs (Command): Add FillParagraph.
+	(default_doc_for_command, default_commands): Register the new command.
+	* src/keymap.rs (default_bindings): Bind M-q.
+	* src/editor.rs (PLAIN_TEXT_FILL_COLUMN, Editor::command_fill_paragraph)
+	(Editor::fill_paragraph, fill_line_bounds)
+	(paragraph_runs_in_line_bounds, fill_plain_text_lines): New plain-text
+	paragraph fill implementation.
+	* tests/pty_insert.rs (fill_paragraph_wraps_visible_text): New test.
+	* README.md: Document the new binding.
+	* NEWS: Mention the new user-visible fill command.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark fill-paragraph implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement transpose word and line commands.
 
 	* src/command.rs (Command): Add TransposeLines and TransposeWords.

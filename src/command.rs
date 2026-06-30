@@ -45,6 +45,7 @@ pub enum Command {
     ExecuteExtendedCommand,
     FindFile,
     FindFileReadOnly,
+    FillParagraph,
     ForwardChar,
     ForwardParagraph,
     ForwardWord,
@@ -192,6 +193,7 @@ impl CommandCategory {
             | DowncaseRegion
             | DowncaseWord
             | ExchangePointAndMark
+            | FillParagraph
             | JoinLine
             | KillLine
             | KillRegion
@@ -287,6 +289,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ExecuteExtendedCommand => "Prompt for an interactive command name and run it.",
         FindFile => "Prompt for a file path and open it for editing.",
         FindFileReadOnly => "Prompt for a file path and open it read-only.",
+        FillParagraph => "Reflow the current plain-text paragraph.",
         ForwardChar => "Move point one character toward the end of the buffer.",
         ForwardParagraph => "Move point forward to the end of a paragraph.",
         ForwardWord => "Move point forward by one word.",
@@ -744,6 +747,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             FindFileReadOnly,
         )
         .with_handler(crate::editor::Editor::command_find_file_read_only),
+        CommandSpec::new(
+            "fill-paragraph",
+            "Reflow the current paragraph",
+            true,
+            FillParagraph,
+        )
+        .with_handler(crate::editor::Editor::command_fill_paragraph),
         CommandSpec::new("forward-char", "Move cursor right", true, ForwardChar)
             .with_handler(crate::editor::Editor::command_forward_char),
         CommandSpec::new(
@@ -1133,6 +1143,7 @@ mod tests {
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));
         assert!(registry.contains("find-file-read-only"));
+        assert!(registry.contains("fill-paragraph"));
         assert!(registry.contains("forward-word"));
         assert!(registry.contains("goto-line"));
         assert!(registry.contains("isearch-forward"));
@@ -1411,6 +1422,7 @@ mod tests {
             Command::DowncaseRegion,
             Command::DowncaseWord,
             Command::ExchangePointAndMark,
+            Command::FillParagraph,
             Command::JoinLine,
             Command::KillLine,
             Command::KillRegion,

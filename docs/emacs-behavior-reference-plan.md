@@ -184,7 +184,7 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `transpose-chars` | `transpose-chars` | `C-t` | Implemented subset | Done | Uses UTF-8-safe grapheme transposition, repeat arguments, EOL behavior, read-only checks, and undo. |
 | `transpose-words` | `transpose-words` | `M-t` | Implemented subset | Done | Uses Rile word boundaries, repeat arguments, punctuation preservation, read-only checks, and undo; defers mark-based zero-argument behavior. |
 | `transpose-lines` | `transpose-lines` | `C-x C-t` | Implemented subset | Done | Moves the previous line past the current line or lines, supports repeat arguments, read-only checks, and undo; defers mark-line zero-argument behavior. |
-| `fill-paragraph` | `fill-paragraph` | `M-q` | Missing | P2 | Implement plain-text reflow only after paragraph-boundary helpers exist. |
+| `fill-paragraph` | `fill-paragraph` | `M-q` | Implemented subset | Done | Fills plain-text paragraphs at a fixed column, supports active-region paragraph filling, read-only checks, and undo; defers full Emacs fill machinery. |
 | `comment-dwim` | `comment-dwim` | `M-;` | Missing | P2 | Add reusable comment-syntax metadata first; target line comments before full Emacs DWIM behavior. |
 | `comment-region` | `comment-region` | None globally | Missing | P2 | Build as a line-comment subset for known modes; avoid C-mode block-comment parity in the first version. |
 | `uncomment-region` | `uncomment-region` | None | Missing | P2 | Implement as the inverse of the line-comment subset. |
@@ -195,9 +195,9 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## Ranked Missing Work
 
-1. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
-   `uncomment-region`. These are useful but need paragraph wrapping and reusable
-   comment-syntax metadata to avoid coupling editing behavior to rendering.
+1. Comment commands: `comment-dwim`, `comment-region`, and
+   `uncomment-region`. These need reusable comment-syntax metadata to avoid
+   coupling editing behavior to rendering.
 2. Sentence movement: `forward-sentence` and `backward-sentence`. These remain
    deferred until Rile needs sentence-aware prose editing beyond paragraph moves.
 
@@ -214,6 +214,9 @@ Completed fourth slice: `transpose-chars` is implemented as a documented subset.
 
 Completed fifth slice: `transpose-words` and `transpose-lines` are implemented as
 documented subsets.
+
+Completed sixth slice: `fill-paragraph` is implemented as a documented plain-text
+subset.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -276,6 +279,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the `fill-paragraph` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `fill-paragraph`; unit tests cover wrapping, active-region paragraph filling, blank-line behavior, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `M-q` wrapping. |
 | 2026-06-30 | Implemented the transpose follow-up slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-words` and `transpose-lines`; unit tests cover punctuation, UTF-8, numeric arguments, undo, boundary failures, and read-only behavior; `tests/pty_insert.rs` covers visible `M-t` and `C-x C-t` behavior. |
 | 2026-06-30 | Implemented the `transpose-chars` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-chars`; unit tests cover ordinary, end-of-line, UTF-8, argument, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `C-t` behavior and undo. |
 | 2026-06-30 | Implemented the paragraph movement slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `forward-paragraph` and `backward-paragraph`; unit tests cover blank-line-separated paragraph movement, formfeed separators, and numeric arguments; `tests/pty_movement.rs` covers visible default-key behavior. |

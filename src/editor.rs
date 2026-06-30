@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::buffer::undo::UndoRecord;
 use crate::buffer::{Buffer, BufferId, Position, RectangleEdit, TextRange};
@@ -47,6 +48,8 @@ use help::{
 };
 use prompt_history::PromptHistoryStore;
 use search::{find_match, search_start_after};
+
+const PLAIN_TEXT_FILL_COLUMN: usize = 70;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -1898,6 +1901,14 @@ impl Editor {
         Ok(CommandOutcome::StartedPrompt)
     }
 
+    pub(crate) fn command_fill_paragraph(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.fill_paragraph()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_forward_char(
         &mut self,
         context: CommandContext,
@@ -3011,6 +3022,50 @@ impl Editor {
         self.goal_display_column = None;
         self.minibuffer.clear();
         self.sync_current_window();
+        Ok(())
+    }
+
+    fn fill_paragraph(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let region = self.active_region_range();
+        let buffer = self.document().buffer();
+        let lines = buffer.lines();
+        let Some((first_line, last_line)) = fill_line_bounds(lines, self.cursor, region) else {
+            return Ok(());
+        };
+        let runs = paragraph_runs_in_line_bounds(lines, first_line, last_line);
+        if runs.is_empty() {
+            return Ok(());
+        }
+
+        let cursor_before = self.cursor;
+        let mut replacement_lines = lines.to_vec();
+        let cursor_after = filled_cursor_position(lines, &runs, cursor_before);
+        for (run_start, run_end) in runs.into_iter().rev() {
+            let filled = fill_plain_text_lines(&replacement_lines[run_start..=run_end]);
+            replacement_lines.splice(run_start..=run_end, filled);
+        }
+
+        let replacement = replacement_lines.join("\n");
+        if replacement == buffer.serialize() {
+            self.minibuffer.clear();
+            return Ok(());
+        }
+
+        let cursor_after = cursor_after
+            .map(|position| clamp_position_to_lines(&replacement_lines, position))
+            .unwrap_or_else(|| {
+                if region.is_some() {
+                    clamp_position_to_lines(&replacement_lines, cursor_before)
+                } else {
+                    Position::new(first_line, 0)
+                }
+            });
+        self.replace_buffer_text(replacement, cursor_before, cursor_after)?;
         Ok(())
     }
 
@@ -6152,6 +6207,243 @@ fn paragraph_backward_position(buffer: &Buffer, position: Position) -> Result<Po
     Ok(Position::new(line, 0))
 }
 
+fn fill_line_bounds(
+    lines: &[String],
+    cursor: Position,
+    region: Option<TextRange>,
+) -> Option<(usize, usize)> {
+    if lines.is_empty() {
+        return None;
+    }
+
+    if let Some(region) = region {
+        let mut start = region.start.line.min(lines.len() - 1);
+        let mut end = region.end.line.min(lines.len() - 1);
+        if region.end.byte == 0 && end > start {
+            end -= 1;
+        }
+        while start <= end && is_paragraph_separator_line(&lines[start]) {
+            start += 1;
+        }
+        while end >= start && is_paragraph_separator_line(&lines[end]) {
+            if end == 0 {
+                break;
+            }
+            end -= 1;
+        }
+        if start > end {
+            return None;
+        }
+        while start > 0 && !is_paragraph_separator_line(&lines[start - 1]) {
+            start -= 1;
+        }
+        while end + 1 < lines.len() && !is_paragraph_separator_line(&lines[end + 1]) {
+            end += 1;
+        }
+        return (start <= end).then_some((start, end));
+    }
+
+    let mut line = cursor.line.min(lines.len() - 1);
+    if is_paragraph_separator_line(&lines[line]) {
+        while line < lines.len() && is_paragraph_separator_line(&lines[line]) {
+            line += 1;
+        }
+        if line == lines.len() {
+            return None;
+        }
+    }
+
+    let mut start = line;
+    while start > 0 && !is_paragraph_separator_line(&lines[start - 1]) {
+        start -= 1;
+    }
+    let mut end = line;
+    while end + 1 < lines.len() && !is_paragraph_separator_line(&lines[end + 1]) {
+        end += 1;
+    }
+    Some((start, end))
+}
+
+fn paragraph_runs_in_line_bounds(
+    lines: &[String],
+    first_line: usize,
+    last_line: usize,
+) -> Vec<(usize, usize)> {
+    let mut runs = Vec::new();
+    let mut line = first_line;
+    while line <= last_line && line < lines.len() {
+        while line <= last_line && line < lines.len() && is_paragraph_separator_line(&lines[line]) {
+            line += 1;
+        }
+        if line > last_line || line >= lines.len() {
+            break;
+        }
+        let start = line;
+        while line <= last_line && line < lines.len() && !is_paragraph_separator_line(&lines[line])
+        {
+            line += 1;
+        }
+        runs.push((start, line - 1));
+    }
+    runs
+}
+
+fn fill_plain_text_lines(lines: &[String]) -> Vec<String> {
+    let words = lines
+        .iter()
+        .flat_map(|line| line.split_whitespace())
+        .collect::<Vec<_>>();
+    if words.is_empty() {
+        return vec![String::new()];
+    }
+
+    let mut filled = Vec::new();
+    let mut current = String::new();
+    for word in words {
+        let next_len = if current.is_empty() {
+            UnicodeWidthStr::width(word)
+        } else {
+            UnicodeWidthStr::width(current.as_str()) + 1 + UnicodeWidthStr::width(word)
+        };
+        if next_len > PLAIN_TEXT_FILL_COLUMN && !current.is_empty() {
+            filled.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push(' ');
+        }
+        current.push_str(word);
+    }
+    if !current.is_empty() {
+        filled.push(current);
+    }
+    filled
+}
+
+fn filled_cursor_position(
+    lines: &[String],
+    runs: &[(usize, usize)],
+    cursor: Position,
+) -> Option<Position> {
+    let mut line_delta = 0isize;
+    for &(run_start, run_end) in runs {
+        if cursor.line < run_start {
+            if lines
+                .get(cursor.line)
+                .is_some_and(|line| is_paragraph_separator_line(line))
+            {
+                return Some(Position::new(run_start.checked_add_signed(line_delta)?, 0));
+            }
+            return Some(Position::new(
+                cursor.line.checked_add_signed(line_delta)?,
+                cursor.byte,
+            ));
+        }
+        let original_len = run_end - run_start + 1;
+        let filled = fill_plain_text_lines(&lines[run_start..=run_end]);
+        let output_start = run_start.checked_add_signed(line_delta)?;
+        if (run_start..=run_end).contains(&cursor.line) {
+            return cursor_in_filled_run(
+                &lines[run_start..=run_end],
+                Position::new(cursor.line - run_start, cursor.byte),
+                &filled,
+                output_start,
+            );
+        }
+        line_delta += filled.len() as isize - original_len as isize;
+    }
+    Some(Position::new(
+        cursor.line.checked_add_signed(line_delta)?,
+        cursor.byte,
+    ))
+}
+
+fn cursor_in_filled_run(
+    original: &[String],
+    cursor: Position,
+    filled: &[String],
+    output_start_line: usize,
+) -> Option<Position> {
+    let original_text = original.join("\n");
+    let cursor_absolute = position_to_absolute_in_lines(original, cursor)?;
+    let anchor = word_anchor_for_absolute(&original_text, cursor_absolute);
+    let filled_text = filled.join("\n");
+    let filled_absolute = absolute_for_word_anchor(&filled_text, anchor);
+    let relative = absolute_to_position(&filled_text, filled_absolute);
+    Some(Position::new(
+        output_start_line + relative.line,
+        relative.byte,
+    ))
+}
+
+fn position_to_absolute_in_lines(lines: &[String], position: Position) -> Option<usize> {
+    let line = lines.get(position.line)?;
+    if position.byte > line.len() || !line.is_char_boundary(position.byte) {
+        return None;
+    }
+    let prefix = lines
+        .iter()
+        .take(position.line)
+        .map(|line| line.len() + 1)
+        .sum::<usize>();
+    Some(prefix + position.byte)
+}
+
+fn word_anchor_for_absolute(text: &str, absolute: usize) -> (usize, usize) {
+    let words = word_spans(text);
+    for (index, word) in words.iter().enumerate() {
+        if absolute < word.start {
+            return (index, 0);
+        }
+        if absolute <= word.end {
+            return (index, absolute - word.start);
+        }
+    }
+    (words.len(), 0)
+}
+
+fn absolute_for_word_anchor(text: &str, anchor: (usize, usize)) -> usize {
+    let words = word_spans(text);
+    let (index, offset) = anchor;
+    if index >= words.len() {
+        return text.len();
+    }
+    let word = words[index];
+    (word.start + offset).min(word.end)
+}
+
+fn word_spans(text: &str) -> Vec<WordSpan> {
+    let mut words = Vec::new();
+    let mut start = None;
+    for (byte, character) in text.char_indices() {
+        if character.is_whitespace() {
+            if let Some(word_start) = start.take() {
+                words.push(WordSpan {
+                    start: word_start,
+                    end: byte,
+                });
+            }
+        } else if start.is_none() {
+            start = Some(byte);
+        }
+    }
+    if let Some(word_start) = start {
+        words.push(WordSpan {
+            start: word_start,
+            end: text.len(),
+        });
+    }
+    words
+}
+
+fn clamp_position_to_lines(lines: &[String], position: Position) -> Position {
+    let line = position.line.min(lines.len().saturating_sub(1));
+    let byte = lines
+        .get(line)
+        .map(|line_text| position.byte.min(line_text.len()))
+        .unwrap_or(0);
+    Position::new(line, byte)
+}
+
 fn position_to_absolute(buffer: &Buffer, position: Position) -> Result<usize> {
     buffer.validate_position(position)?;
     let prefix_len = buffer
@@ -6891,7 +7183,7 @@ mod tests {
     };
     use super::{
         AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, KillEntry,
-        file_prompt_base_input, format_rectangle_number,
+        PLAIN_TEXT_FILL_COLUMN, file_prompt_base_input, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -7364,6 +7656,189 @@ mod tests {
             .handle_key(KeyEvent::Meta('}'))
             .expect("M-} at buffer end should stay at end");
         assert_eq!(editor.cursor(), Position::new(4, 0));
+    }
+
+    #[test]
+    fn fill_paragraph_wraps_current_paragraph_and_undoes() {
+        let text = "alpha   beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau\n\nnext untouched";
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), text)
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha   beta gamma".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill paragraph");
+        let filled = editor.document().buffer().serialize();
+        assert!(filled.contains("\n\nnext untouched"));
+        assert!(!filled.contains("alpha   beta"));
+        assert!(
+            filled
+                .lines()
+                .take_while(|line| !line.is_empty())
+                .all(|line| line.len() <= PLAIN_TEXT_FILL_COLUMN)
+        );
+        assert_eq!(editor.cursor().line, 0);
+        assert!(editor.cursor().byte > 0);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore unfilled paragraph");
+        assert_eq!(editor.document().buffer().serialize(), text);
+        assert_eq!(
+            editor.cursor(),
+            Position::new(0, "alpha   beta gamma".len())
+        );
+    }
+
+    #[test]
+    fn fill_paragraph_fills_active_region_paragraphs() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(
+                Position::new(0, 0),
+                "one   two\n\nthree   four\n\nfive   six",
+            )
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(2, "three   four".len());
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill region paragraphs");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one two\n\nthree four\n\nfive   six"
+        );
+        assert_eq!(editor.active_region_range(), None);
+    }
+
+    #[test]
+    fn fill_paragraph_expands_partial_region_to_whole_paragraph() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(
+                Position::new(0, 0),
+                "one two\nthree   four\nfive six\n\nnext",
+            )
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, "three".len());
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(1, "three   fo".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill whole overlapped paragraph");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one two three four five six\n\nnext"
+        );
+        assert_eq!(editor.cursor().line, 0);
+        assert!(editor.cursor().byte > "one two ".len());
+    }
+
+    #[test]
+    fn fill_paragraph_region_on_separator_does_not_fill_neighbors() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one   two\n\nthree   four")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(2, 0);
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q on separator-only region should not edit");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one   two\n\nthree   four"
+        );
+    }
+
+    #[test]
+    fn fill_paragraph_maps_region_cursor_on_trailing_separator() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(
+                Position::new(0, 0),
+                "one two\nthree   four\nfive six\n\nnext",
+            )
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 0);
+        editor
+            .handle_key(KeyEvent::Ctrl('@'))
+            .expect("mark should set");
+        editor.cursor = Position::new(3, 0);
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill paragraph before separator");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one two three four five six\n\nnext"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn fill_paragraph_on_separator_fills_next_paragraph() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "intro\n\nalpha   beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q on blank line should fill next paragraph");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "intro\n\nalpha beta"
+        );
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+    }
+
+    #[test]
+    fn fill_paragraph_respects_read_only_buffers() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha   beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("read-only M-q should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "alpha   beta");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
     }
 
     #[test]
