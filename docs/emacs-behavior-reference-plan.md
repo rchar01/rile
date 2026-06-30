@@ -177,10 +177,10 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `capitalize-word` | `capitalize-word` | `M-c` | Implemented subset | Done | Shares the case-word implementation and covers mixed ASCII/UTF-8 input in tests. |
 | `downcase-region` | `downcase-region` | `C-x C-l` | Implemented subset | Done | Intentionally skips Emacs disabled-command confirmation. |
 | `upcase-region` | `upcase-region` | `C-x C-u` | Implemented subset | Done | Preserves point/mark, keeps the active region adjusted, and has region undo tests. |
-| `delete-horizontal-space` | `delete-horizontal-space` | `M-\` | Missing | P1 | Small, useful, and unit-testable; implement ASCII space/tab behavior before broader whitespace rules. |
+| `delete-horizontal-space` | `delete-horizontal-space` | `M-\` | Implemented subset | Done | Uses ASCII space/tab behavior, prefix backward-only deletion, read-only checks, and undo. |
 | `just-one-space` | `just-one-space` | No active binding | Missing | P2 | Implement after deciding whether `M-SPC` should eventually map to `cycle-spacing` instead. |
-| `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Missing | P1 | Useful and bounded; test point on blank runs, isolated blank lines, and nonblank lines before blanks. |
-| `delete-trailing-whitespace` | `delete-trailing-whitespace` | None | Missing | P1 | Useful for source/config files; implement region-or-buffer ASCII space/tab cleanup first. |
+| `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Implemented subset | Done | Uses Rile's space/tab-only blank-line definition and covers blank runs, isolated blank lines, and nonblank lines before blanks. |
+| `delete-trailing-whitespace` | `delete-trailing-whitespace` | None | Implemented subset | Done | Deletes ASCII spaces/tabs at physical line ends across the whole buffer or active-region bounds. |
 | `transpose-chars` | `transpose-chars` | `C-t` | Missing | P1 | High familiarity and small scope; verify terminal input and UTF-8 character boundaries. |
 | `transpose-words` | `transpose-words` | `M-t` | Missing | P2 | Depends on consistent word-span logic; defer mark-based zero-argument behavior. |
 | `transpose-lines` | `transpose-lines` | `C-x C-t` | Missing | P2 | Useful, but line-range replacement and point restoration need careful tests. |
@@ -195,10 +195,8 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 ## Ranked Missing Work
 
-1. Whitespace cleanup and paragraph movement: `delete-horizontal-space`,
-   `delete-blank-lines`, `delete-trailing-whitespace`, `forward-paragraph`, and
-   `backward-paragraph`. These are high-value editing conveniences and establish
-   reusable range/boundary helpers.
+1. Paragraph movement: `forward-paragraph` and `backward-paragraph`. These are
+   high-value movement commands and establish reusable paragraph-boundary helpers.
 2. Transpose basics: start with `transpose-chars`, then evaluate
    `transpose-words` and `transpose-lines` after the first two groups are stable.
 3. Fill and comments: `fill-paragraph`, `comment-dwim`, `comment-region`, and
@@ -209,6 +207,9 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 
 Completed first slice: `downcase-word`, `upcase-word`, `capitalize-word`,
 `downcase-region`, and `upcase-region` are implemented as documented subsets.
+
+Completed second slice: `delete-horizontal-space`, `delete-blank-lines`, and
+`delete-trailing-whitespace` are implemented as documented subsets.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -243,6 +244,23 @@ coverage for key bindings and visible editing behavior.
 The first slice explicitly excludes Emacs disabled-command confirmation for the
 region commands and exact Emacs syntax-table or locale behavior.
 
+## Second Implementation Slice
+
+Whitespace cleanup is partially implemented:
+
+- `delete-horizontal-space`
+- `delete-blank-lines`
+- `delete-trailing-whitespace`
+
+This slice added command registry entries, default Emacs bindings, unit tests for
+ASCII spaces/tabs, prefix backward-only deletion, blank-run cleanup, isolated
+blank deletion, trailing spaces/tabs, active-region cleanup, read-only behavior,
+undo, and PTY coverage for visible default-key behavior.
+
+The second slice explicitly excludes `just-one-space`, `cycle-spacing`,
+`delete-trailing-lines` customization, formfeed exceptions, and broader Unicode
+whitespace rules.
+
 ## Validation
 
 - [ ] Run `git diff --check` after documentation or scenario edits.
@@ -254,6 +272,7 @@ region commands and exact Emacs syntax-table or locale behavior.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-29 | Implemented the whitespace cleanup slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `delete-horizontal-space`, `delete-blank-lines`, and `delete-trailing-whitespace`; unit tests cover spaces/tabs, prefix behavior, blank runs, isolated blank lines, trailing cleanup, active-region bounds, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior for the bound commands. |
 | 2026-06-29 | Implemented the Phase 4 case-conversion slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `downcase-word`, `upcase-word`, `capitalize-word`, `downcase-region`, and `upcase-region`; unit tests cover word arguments, UTF-8, region preservation, undo, and read-only behavior; `tests/pty_insert.rs` covers visible default-key behavior. |
 | 2026-06-29 | Completed Phase 4 Rile comparison and backlog ranking. | `src/command.rs` and `src/keymap.rs` show that only `join-line` and `query-replace` from the curated reference are implemented; the new backlog ranks the remaining documented command families and defines case conversion as the first slice. |
 | 2026-06-29 | Added Phase 3 Emacs fill/comment captures. | `tools/reference/emacs/scenarios/fill-paragraph-core.scenario` covers `M-q` fill and undo; `comment-commands-core.scenario` covers `M-;`, `comment-region`, and `uncomment-region` prompts/results in C mode. |

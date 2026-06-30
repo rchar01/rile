@@ -227,6 +227,16 @@ and record one undo entry per command. Region commands preserve point and mark,
 keep the adjusted active region, respect read-only buffers, and intentionally do
 not implement Emacs disabled-command confirmation.
 
+Post-Milestone 14 whitespace cleanup polish adds `delete-horizontal-space` on
+`M-\\`, `delete-blank-lines` on `C-x C-o`, and `delete-trailing-whitespace` as
+an unbound `M-x` command. Horizontal cleanup deletes ASCII spaces and tabs around
+point, or only before point with a prefix argument. Blank-line cleanup uses
+Rile's space/tab-only blank-line definition, collapses blank runs to one blank
+line, deletes isolated blank lines, and deletes following blank lines after a
+nonblank line. Trailing cleanup deletes ASCII spaces and tabs at physical line
+ends across the whole buffer or within active-region bounds. These commands
+respect read-only buffers and record one undo entry for each command result.
+
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
 path the visited file. Empty input reports `Error: missing file name`.

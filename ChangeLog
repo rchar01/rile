@@ -1,5 +1,28 @@
 2026-06-29  Robert Charusta  <rch-public@posteo.net>
 
+	Implement whitespace cleanup commands.
+
+	* src/command.rs (Command): Add DeleteBlankLines,
+	DeleteHorizontalSpace, and DeleteTrailingWhitespace.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-\\ and C-x C-o.
+	* src/editor.rs (Editor::command_delete_blank_lines)
+	(Editor::command_delete_horizontal_space)
+	(Editor::command_delete_trailing_whitespace, Editor::delete_text_range)
+	(Editor::delete_horizontal_space, Editor::delete_blank_lines)
+	(Editor::delete_trailing_whitespace, is_horizontal_space_byte)
+	(trailing_horizontal_space_start, adjust_position_after_same_line_delete)
+	(is_blank_line, blank_line_run): New whitespace cleanup implementation.
+	* tests/pty_insert.rs (whitespace_cleanup_commands_update_visible_buffer):
+	New test.
+	* README.md: Document the new bindings.
+	* NEWS: Mention the new user-visible whitespace cleanup commands.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark the implemented whitespace commands.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-29  Robert Charusta  <rch-public@posteo.net>
+
 	Implement Emacs-style case conversion commands.
 
 	* src/command.rs (Command): Add CapitalizeWord, DowncaseRegion,

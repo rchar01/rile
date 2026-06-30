@@ -281,6 +281,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
         KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
+        KeyBinding::new([KeyEvent::Meta('\\')], DeleteHorizontalSpace),
         KeyBinding::new([KeyEvent::Meta('l')], DowncaseWord),
         KeyBinding::new([KeyEvent::Meta('u')], UpcaseWord),
         KeyBinding::new([KeyEvent::Meta('^')], JoinLine),
@@ -388,6 +389,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('f')], FindFile),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('b')], ListBuffers),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('l')], DowncaseRegion),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('o')], DeleteBlankLines),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('q')], ToggleReadOnly),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')], FindFileReadOnly),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')], UpcaseRegion),
@@ -627,6 +629,10 @@ mod tests {
             KeyResolution::Command(ForwardWord)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('\\')]),
+            KeyResolution::Command(DeleteHorizontalSpace)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('b')]),
             KeyResolution::Command(BackwardWord)
         );
@@ -811,6 +817,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('l')]),
             KeyResolution::Command(DowncaseRegion)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('o')]),
+            KeyResolution::Command(DeleteBlankLines)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),

@@ -1679,6 +1679,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_delete_blank_lines(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_blank_lines()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_delete_char(
         &mut self,
         context: CommandContext,
@@ -1688,6 +1696,22 @@ impl Editor {
             Self::delete_char,
             Self::delete_backward_char,
         )?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_horizontal_space(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_horizontal_space(context.argument.is_some())?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_delete_trailing_whitespace(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.delete_trailing_whitespace()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2932,6 +2956,25 @@ impl Editor {
         Ok(cursor_after)
     }
 
+    fn delete_text_range(&mut self, range: TextRange, cursor_after: Position) -> Result<bool> {
+        if range.start == range.end {
+            return Ok(false);
+        }
+
+        let cursor_before = self.cursor;
+        let text = self.document_mut().buffer_mut().delete_range(range)?;
+        if text.is_empty() {
+            return Ok(false);
+        }
+        self.cursor = cursor_after;
+        self.record_delete(range, text, cursor_before, cursor_after);
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.minibuffer.clear();
+        self.sync_current_window();
+        Ok(true)
+    }
+
     fn delete_backward_char(&mut self) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
@@ -2973,6 +3016,189 @@ impl Editor {
         self.record_delete(range, text, cursor, cursor);
         self.goal_display_column = None;
         self.deactivate_region();
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn delete_horizontal_space(&mut self, backward_only: bool) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let Some(line) = self.document().buffer().line(self.cursor.line) else {
+            return Ok(());
+        };
+        let bytes = line.as_bytes();
+        let mut start = self.cursor.byte;
+        while start > 0 && is_horizontal_space_byte(bytes[start - 1]) {
+            start -= 1;
+        }
+        let mut end = self.cursor.byte;
+        if !backward_only {
+            while end < bytes.len() && is_horizontal_space_byte(bytes[end]) {
+                end += 1;
+            }
+        }
+
+        self.delete_text_range(
+            TextRange::new(
+                Position::new(self.cursor.line, start),
+                Position::new(self.cursor.line, end),
+            ),
+            Position::new(self.cursor.line, start),
+        )?;
+        Ok(())
+    }
+
+    fn delete_blank_lines(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let buffer = self.document().buffer();
+        let line_count = buffer.line_count();
+        let line_index = self.cursor.line;
+        let Some(line) = buffer.line(line_index) else {
+            return Ok(());
+        };
+
+        let (range, cursor_after) = if is_blank_line(line) {
+            let (run_start, run_end) = blank_line_run(buffer.lines(), line_index);
+            if run_start == 0 && run_end + 1 == line_count {
+                (
+                    TextRange::new(Position::new(0, 0), buffer.end_position()),
+                    Position::new(0, 0),
+                )
+            } else if run_end > run_start {
+                let delete_start = if run_end + 1 < line_count {
+                    Position::new(run_start + 1, 0)
+                } else {
+                    Position::new(run_start, buffer.line(run_start).unwrap_or("").len())
+                };
+                let delete_end = if run_end + 1 < line_count {
+                    Position::new(run_end + 1, 0)
+                } else {
+                    buffer.end_position()
+                };
+                (
+                    TextRange::new(delete_start, delete_end),
+                    Position::new(run_start, 0),
+                )
+            } else if line_count == 1 {
+                (
+                    TextRange::new(Position::new(0, 0), Position::new(0, line.len())),
+                    Position::new(0, 0),
+                )
+            } else if line_index + 1 < line_count {
+                (
+                    TextRange::new(
+                        Position::new(line_index, 0),
+                        Position::new(line_index + 1, 0),
+                    ),
+                    Position::new(line_index, 0),
+                )
+            } else {
+                let previous_line = line_index - 1;
+                let previous_len = buffer.line(previous_line).unwrap_or("").len();
+                (
+                    TextRange::new(
+                        Position::new(previous_line, previous_len),
+                        Position::new(line_index, line.len()),
+                    ),
+                    Position::new(previous_line, previous_len),
+                )
+            }
+        } else {
+            let blank_start = line_index + 1;
+            if blank_start >= line_count || !is_blank_line(buffer.line(blank_start).unwrap_or("")) {
+                return Ok(());
+            }
+
+            let mut blank_end = blank_start;
+            while blank_end + 1 < line_count
+                && is_blank_line(buffer.line(blank_end + 1).unwrap_or(""))
+            {
+                blank_end += 1;
+            }
+            let delete_end = if blank_end + 1 < line_count {
+                Position::new(blank_end + 1, 0)
+            } else {
+                buffer.end_position()
+            };
+            (
+                TextRange::new(Position::new(blank_start, 0), delete_end),
+                self.cursor,
+            )
+        };
+
+        self.delete_text_range(range, cursor_after)?;
+        Ok(())
+    }
+
+    fn delete_trailing_whitespace(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let region = self.active_region_range();
+        let lines = self.document().buffer().lines().to_vec();
+        let Some(last_line) = lines.len().checked_sub(1) else {
+            return Ok(());
+        };
+        let start_line = region.map_or(0, |range| range.start.line);
+        let end_line = region.map_or(last_line, |range| range.end.line.min(last_line));
+        let mut ranges = Vec::new();
+
+        for (line_index, line) in lines.iter().enumerate().take(end_line + 1).skip(start_line) {
+            let line_end_in_scope = match region {
+                None => true,
+                Some(range) if line_index < range.end.line => true,
+                Some(range) => range.end.byte >= line.len(),
+            };
+            if !line_end_in_scope {
+                continue;
+            }
+
+            let lower_bound = match region {
+                Some(range) if line_index == range.start.line => range.start.byte,
+                _ => 0,
+            };
+            let start = trailing_horizontal_space_start(line).max(lower_bound);
+            if start < line.len() {
+                ranges.push(TextRange::new(
+                    Position::new(line_index, start),
+                    Position::new(line_index, line.len()),
+                ));
+            }
+        }
+
+        if ranges.is_empty() {
+            return Ok(());
+        }
+
+        let cursor_before = self.cursor;
+        let mut cursor_after = self.cursor;
+        let mut deletes = Vec::new();
+        for range in ranges {
+            let text = self.document_mut().buffer_mut().delete_range(range)?;
+            if !text.is_empty() {
+                cursor_after = adjust_position_after_same_line_delete(cursor_after, range);
+                deletes.push((range, text));
+            }
+        }
+
+        if deletes.is_empty() {
+            return Ok(());
+        }
+
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.record_batch_delete(deletes, cursor_before, cursor_after);
+        self.deactivate_region();
+        self.minibuffer.clear();
         self.sync_current_window();
         Ok(())
     }
@@ -5618,6 +5844,52 @@ fn is_kill_command(command: Command) -> bool {
             | Command::KillRectangle
             | Command::KillWord
     )
+}
+
+fn is_horizontal_space_byte(byte: u8) -> bool {
+    matches!(byte, b' ' | b'\t')
+}
+
+fn trailing_horizontal_space_start(line: &str) -> usize {
+    let bytes = line.as_bytes();
+    let mut start = bytes.len();
+    while start > 0 && is_horizontal_space_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    start
+}
+
+fn adjust_position_after_same_line_delete(position: Position, range: TextRange) -> Position {
+    if position.line != range.start.line || position.byte <= range.start.byte {
+        return position;
+    }
+
+    if position.byte >= range.end.byte {
+        Position::new(
+            position.line,
+            position.byte - (range.end.byte - range.start.byte),
+        )
+    } else {
+        Position::new(position.line, range.start.byte)
+    }
+}
+
+fn is_blank_line(line: &str) -> bool {
+    line.bytes().all(is_horizontal_space_byte)
+}
+
+fn blank_line_run(lines: &[String], line_index: usize) -> (usize, usize) {
+    let mut start = line_index;
+    while start > 0 && is_blank_line(&lines[start - 1]) {
+        start -= 1;
+    }
+
+    let mut end = line_index;
+    while end + 1 < lines.len() && is_blank_line(&lines[end + 1]) {
+        end += 1;
+    }
+
+    (start, end)
 }
 
 fn is_yank_command(command: Command) -> bool {
@@ -13375,6 +13647,257 @@ M-g g           goto-line                      Go to line or line:column\n"
             .execute_command_by_name("join-line")
             .expect("read-only join-line should not error");
         assert_eq!(editor.document().buffer().serialize(), "alpha\ngamma\nlast");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn delete_horizontal_space_removes_spaces_and_tabs_around_point() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha \t  beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha \t".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('\\'))
+            .expect("delete-horizontal-space should run");
+        assert_eq!(editor.document().buffer().serialize(), "alphabeta");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore horizontal space");
+        assert_eq!(editor.document().buffer().serialize(), "alpha \t  beta");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha \t".len()));
+    }
+
+    #[test]
+    fn delete_horizontal_space_prefix_deletes_only_before_point_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha \t  beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha \t".len());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        editor
+            .handle_key(KeyEvent::Meta('\\'))
+            .expect("prefixed delete-horizontal-space should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha  beta");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor.cursor = Position::new(0, "alpha  ".len());
+        editor
+            .execute_command_by_name("delete-horizontal-space")
+            .expect("read-only delete-horizontal-space should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha  beta");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn delete_horizontal_space_handles_utf8_neighbors_and_deactivates_region() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "é \t  beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor.cursor = Position::new(0, "é \t".len());
+
+        editor
+            .execute_command_by_name("delete-horizontal-space")
+            .expect("delete-horizontal-space should run");
+        assert_eq!(editor.document().buffer().serialize(), "ébeta");
+        assert_eq!(editor.cursor(), Position::new(0, "é".len()));
+        assert_eq!(editor.active_region_range(), None);
+    }
+
+    #[test]
+    fn delete_blank_lines_handles_nonblank_runs_blank_runs_and_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "header\n\n\nbody\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('o'))
+            .expect("delete-blank-lines should run after nonblank line");
+        assert_eq!(editor.document().buffer().serialize(), "header\nbody\n");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore blank run");
+        assert_eq!(editor.document().buffer().serialize(), "header\n\n\nbody\n");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor.cursor = Position::new(2, 0);
+        editor
+            .execute_command_by_name("delete-blank-lines")
+            .expect("delete-blank-lines should collapse blank run");
+        assert_eq!(editor.document().buffer().serialize(), "header\n\nbody\n");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+    }
+
+    #[test]
+    fn delete_blank_lines_deletes_isolated_blank_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n\nbeta\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .execute_command_by_name("delete-blank-lines")
+            .expect("delete-blank-lines should delete isolated blank line");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\nbeta\n");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor.cursor = Position::new(0, 0);
+        editor
+            .execute_command_by_name("delete-blank-lines")
+            .expect("read-only delete-blank-lines should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\nbeta\n");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn delete_blank_lines_handles_eof_and_all_blank_buffers() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 0);
+
+        editor
+            .execute_command_by_name("delete-blank-lines")
+            .expect("delete-blank-lines should handle EOF blank line");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
+        assert_eq!(editor.cursor(), Position::new(1, 0));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "\n\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("delete-blank-lines")
+            .expect("delete-blank-lines should handle all-blank buffer");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn delete_trailing_whitespace_cleans_buffer_and_undo_restores() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha  \nbeta\t\t\ngamma")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, "beta\t\t".len());
+
+        editor
+            .execute_command_by_name("delete-trailing-whitespace")
+            .expect("delete-trailing-whitespace should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\nbeta\ngamma");
+        assert_eq!(editor.cursor(), Position::new(1, "beta".len()));
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore trailing whitespace");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "alpha  \nbeta\t\t\ngamma"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, "beta\t\t".len()));
+    }
+
+    #[test]
+    fn delete_trailing_whitespace_respects_active_region_bounds() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha  \nbeta\t\ngamma  \n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 0);
+        editor
+            .execute_command_by_name("set-mark-command")
+            .expect("mark should set");
+        editor.cursor = Position::new(2, 0);
+
+        editor
+            .execute_command_by_name("delete-trailing-whitespace")
+            .expect("region delete-trailing-whitespace should run");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "alpha\nbeta\ngamma  \n"
+        );
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        assert_eq!(editor.active_region_range(), None);
+    }
+
+    #[test]
+    fn delete_trailing_whitespace_noops_without_dirtying_and_respects_read_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\nbeta")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("delete-trailing-whitespace")
+            .expect("clean delete-trailing-whitespace should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\nbeta");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+        editor
+            .execute_command_by_name("delete-trailing-whitespace")
+            .expect("read-only delete-trailing-whitespace should not error");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\nbeta");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Buffer is read-only: *scratch*")

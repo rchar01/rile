@@ -21,8 +21,11 @@ pub enum Command {
     CopyRectangleToRegister,
     CopyToRegister,
     DeleteBackwardChar,
+    DeleteBlankLines,
     DeleteChar,
+    DeleteHorizontalSpace,
     DeleteRectangle,
+    DeleteTrailingWhitespace,
     DeleteOtherWindows,
     DeleteWindow,
     DescribeBuffer,
@@ -174,12 +177,31 @@ impl CommandCategory {
             | NextLine | PreviousLine | Recenter | ScrollPageBackward | ScrollPageForward => {
                 Self::Movement
             }
-            BackwardKillWord | CapitalizeWord | CopyRegionAsKill | DeleteBackwardChar
-            | DeleteChar | DowncaseRegion | DowncaseWord | ExchangePointAndMark | JoinLine
-            | KillLine | KillRegion | KillWord | MarkWholeBuffer | NewlineAndIndent | OpenLine
-            | QuotedInsert | SetMarkCommand | Undo | UpcaseRegion | UpcaseWord | Yank | YankPop => {
-                Self::Editing
-            }
+            BackwardKillWord
+            | CapitalizeWord
+            | CopyRegionAsKill
+            | DeleteBackwardChar
+            | DeleteBlankLines
+            | DeleteChar
+            | DeleteHorizontalSpace
+            | DeleteTrailingWhitespace
+            | DowncaseRegion
+            | DowncaseWord
+            | ExchangePointAndMark
+            | JoinLine
+            | KillLine
+            | KillRegion
+            | KillWord
+            | MarkWholeBuffer
+            | NewlineAndIndent
+            | OpenLine
+            | QuotedInsert
+            | SetMarkCommand
+            | Undo
+            | UpcaseRegion
+            | UpcaseWord
+            | Yank
+            | YankPop => Self::Editing,
             FindFile | FindFileReadOnly | InsertFile | SaveBuffer | WriteFile => Self::Files,
             BufferListSelect | KillBuffer | ListBuffers | QuitBufferList | SwitchToBuffer => {
                 Self::Buffers
@@ -234,8 +256,11 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         CopyRectangleToRegister => "Copy the active rectangle into a prompted register.",
         CopyToRegister => "Copy the active region text into a prompted register.",
         DeleteBackwardChar => "Delete the character immediately before point.",
+        DeleteBlankLines => "Delete redundant blank lines around point.",
         DeleteChar => "Delete the character at point.",
+        DeleteHorizontalSpace => "Delete spaces and tabs around point.",
         DeleteRectangle => "Delete the active rectangle without saving it to the kill ring.",
+        DeleteTrailingWhitespace => "Delete trailing spaces and tabs at line ends.",
         DeleteOtherWindows => "Delete every window except the selected window.",
         DeleteWindow => "Delete the selected window when another window is available.",
         DescribeBuffer => "Show detailed state for the current buffer.",
@@ -565,6 +590,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_delete_backward_char),
         CommandSpec::new(
+            "delete-blank-lines",
+            "Delete redundant blank lines",
+            true,
+            DeleteBlankLines,
+        )
+        .with_handler(crate::editor::Editor::command_delete_blank_lines),
+        CommandSpec::new(
             "delete-char",
             "Delete character at cursor",
             true,
@@ -572,12 +604,26 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_delete_char),
         CommandSpec::new(
+            "delete-horizontal-space",
+            "Delete spaces and tabs around cursor",
+            true,
+            DeleteHorizontalSpace,
+        )
+        .with_handler(crate::editor::Editor::command_delete_horizontal_space),
+        CommandSpec::new(
             "delete-rectangle",
             "Delete rectangle without saving it",
             true,
             DeleteRectangle,
         )
         .with_handler(crate::editor::Editor::command_delete_rectangle),
+        CommandSpec::new(
+            "delete-trailing-whitespace",
+            "Delete trailing spaces and tabs",
+            true,
+            DeleteTrailingWhitespace,
+        )
+        .with_handler(crate::editor::Editor::command_delete_trailing_whitespace),
         CommandSpec::new(
             "delete-other-windows",
             "Delete all other windows",
@@ -1094,6 +1140,9 @@ mod tests {
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
         assert!(registry.contains("delete-rectangle"));
+        assert!(registry.contains("delete-blank-lines"));
+        assert!(registry.contains("delete-horizontal-space"));
+        assert!(registry.contains("delete-trailing-whitespace"));
         assert!(registry.contains("delete-window"));
         assert!(registry.contains("delete-other-windows"));
         assert!(registry.contains("downcase-region"));
@@ -1306,7 +1355,10 @@ mod tests {
             Command::CapitalizeWord,
             Command::CopyRegionAsKill,
             Command::DeleteBackwardChar,
+            Command::DeleteBlankLines,
             Command::DeleteChar,
+            Command::DeleteHorizontalSpace,
+            Command::DeleteTrailingWhitespace,
             Command::DowncaseRegion,
             Command::DowncaseWord,
             Command::ExchangePointAndMark,

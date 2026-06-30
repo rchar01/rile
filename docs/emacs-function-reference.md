@@ -359,7 +359,7 @@ restoration and undo tests should cover non-ASCII input.
 
 ### `delete-horizontal-space`
 
-Status: `missing`.
+Status: `implemented` in Rile as `delete-horizontal-space`.
 
 Default binding: `M-\`.
 
@@ -384,13 +384,14 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement the small Emacs-compatible subset for ASCII space and tab
-characters first. Do not treat newlines as horizontal space.
+Rile target: implemented as a small Emacs-compatible subset for ASCII space and
+tab characters. Newlines are not treated as horizontal space.
 
 Evidence: GNU Emacs `describe-function` output for `delete-horizontal-space`;
 current GNU Emacs key binding for `M-\`; Emacs scenario
 `tools/reference/emacs/scenarios/whitespace-spacing-core.scenario`; Rile command
-registry currently has no `delete-horizontal-space` entry.
+registry entry `delete-horizontal-space`; Rile unit and PTY tests for whitespace
+cleanup.
 
 Notes: This command is a good unit-test target because it does not depend on
 terminal-visible prompts or mode-specific indentation rules.
@@ -441,7 +442,7 @@ in a later slice.
 
 ### `delete-blank-lines`
 
-Status: `missing`.
+Status: `implemented` in Rile as `delete-blank-lines`.
 
 Default binding: `C-x C-o`.
 
@@ -464,21 +465,23 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: match the base Emacs line-local behavior for blank lines. Use Rile's
-existing definition of blank lines as lines containing only spaces or tabs unless
-later evidence requires a broader whitespace definition.
+Rile target: implemented as a small compatible subset using Rile's existing
+definition of blank lines as lines containing only spaces or tabs. The command
+collapses multi-blank-line runs, deletes isolated blank lines, and deletes
+following blank lines after a nonblank line.
 
 Evidence: GNU Emacs manual, Blank Lines, `C-x C-o`; GNU Emacs
 `describe-function` output for `delete-blank-lines`; Emacs scenario
 `tools/reference/emacs/scenarios/whitespace-cleanup-core.scenario`; Rile command
-registry currently has no `delete-blank-lines` entry.
+registry entry `delete-blank-lines`; Rile unit and PTY tests for whitespace
+cleanup.
 
 Notes: Unit tests should cover point on a nonblank line before blank lines, point
 inside a multi-blank-line run, and point on a single blank line.
 
 ### `delete-trailing-whitespace`
 
-Status: `missing`.
+Status: `implemented` in Rile as `delete-trailing-whitespace`.
 
 Default binding: none.
 
@@ -505,15 +508,16 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement a small compatible subset: delete ASCII spaces and tabs at
-line ends within the active region bounds or whole buffer. Defer Emacs's
-`delete-trailing-lines` customization and formfeed exception unless Rile gains the
-corresponding customization surface.
+Rile target: implemented as a small compatible subset: delete ASCII spaces and
+tabs at physical line ends within the active region bounds or whole buffer. Defer
+Emacs's `delete-trailing-lines` customization and formfeed exception unless Rile
+gains the corresponding customization surface.
 
 Evidence: GNU Emacs manual, Useless Whitespace, `delete-trailing-whitespace`; GNU
 Emacs `describe-function` output; Emacs scenario
 `tools/reference/emacs/scenarios/whitespace-cleanup-core.scenario`; Rile command
-registry currently has no `delete-trailing-whitespace` entry.
+registry entry `delete-trailing-whitespace`; Rile unit tests for whole-buffer,
+active-region, undo, no-op, and read-only behavior.
 
 Notes: This command is likely useful before full whitespace visualization support
 because it can be implemented and tested independently of rendering faces.

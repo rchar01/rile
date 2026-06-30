@@ -127,6 +127,30 @@ fn case_conversion_commands_update_visible_buffer() -> Result<()> {
 }
 
 #[test]
+fn whitespace_cleanup_commands_update_visible_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha     beta\nheader\n\n\nbody\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha     beta")?;
+    for _ in 0..7 {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    rile.send("M-\\", keys::meta('\\'))?;
+    rile.wait_for_screen_contains("alphabeta")?;
+    rile.assert_cursor(0, 5)?;
+
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-x C-o", keys::control_sequence("xo"))?;
+    rile.wait_for_screen_contains("body")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn keyboard_macro_replays_visible_editing_with_repeat_count() -> Result<()> {
     let file = fixtures::named_temp_file("one\ntwo\nthree\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

@@ -72,6 +72,10 @@ Basic editor keys:
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-l`, `M-u`, and `M-c` downcase, upcase, and capitalize words. `C-x C-l`
   and `C-x C-u` downcase and upcase the active region.
+- `M-\\` deletes spaces and tabs around point; with `C-u`, it deletes only
+  spaces and tabs before point. `C-x C-o` deletes redundant blank lines around
+  point. `M-x delete-trailing-whitespace` removes trailing spaces and tabs from
+  line ends.
 - `M-^` joins the current line to the previous line, trimming indentation around
   the join.
 - `C-j` inserts a newline and leaves point at the start of the new line in the
