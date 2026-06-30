@@ -58,6 +58,7 @@ pub enum Command {
     InsertRegister,
     IncrementRegister,
     JoinLine,
+    JustOneSpace,
     JumpToRegister,
     ListBuffers,
     NewlineAndIndent,
@@ -200,6 +201,7 @@ impl CommandCategory {
             | ExchangePointAndMark
             | FillParagraph
             | JoinLine
+            | JustOneSpace
             | KillLine
             | KillRegion
             | KillWord
@@ -308,6 +310,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         InsertRegister => "Insert the text, rectangle, or number stored in a register.",
         IncrementRegister => "Add the numeric argument to a prompted number register.",
         JoinLine => "Join the current line to the previous line, trimming surrounding space.",
+        JustOneSpace => "Collapse whitespace around point to a requested number of spaces.",
         JumpToRegister => "Move point to the position stored in a prompted register.",
         ListBuffers => "Show a read-only buffer list in another window.",
         NewlineAndIndent => "Insert a newline using the current plain-text indentation policy.",
@@ -838,6 +841,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_join_line),
         CommandSpec::new(
+            "just-one-space",
+            "Collapse whitespace around cursor",
+            true,
+            JustOneSpace,
+        )
+        .with_handler(crate::editor::Editor::command_just_one_space),
+        CommandSpec::new(
             "jump-to-register",
             "Jump to a point register",
             true,
@@ -1184,6 +1194,7 @@ mod tests {
         assert!(registry.contains("insert-file"));
         assert!(registry.contains("insert-register"));
         assert!(registry.contains("join-line"));
+        assert!(registry.contains("just-one-space"));
         assert!(registry.contains("jump-to-register"));
         assert!(registry.contains("list-buffers"));
         assert!(registry.contains("newline-and-indent"));
@@ -1459,6 +1470,7 @@ mod tests {
             Command::ExchangePointAndMark,
             Command::FillParagraph,
             Command::JoinLine,
+            Command::JustOneSpace,
             Command::KillLine,
             Command::KillRegion,
             Command::KillWord,

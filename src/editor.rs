@@ -2013,6 +2013,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_just_one_space(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.just_one_space(context.argument)?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_jump_to_register(
         &mut self,
         _context: CommandContext,
@@ -3374,6 +3382,33 @@ impl Editor {
         Ok(cursor_after)
     }
 
+    fn replace_text_range_with_cursor(
+        &mut self,
+        range: TextRange,
+        replacement: &str,
+        cursor_before: Position,
+        cursor_after: Position,
+    ) -> Result<()> {
+        let old_text = self.document_mut().buffer_mut().delete_range(range)?;
+        let replacement_end = self
+            .document_mut()
+            .buffer_mut()
+            .insert(range.start, replacement)?;
+        self.record_replace(
+            TextRange::new(range.start, replacement_end),
+            old_text,
+            replacement.to_owned(),
+            cursor_before,
+            cursor_after,
+        );
+        self.cursor = cursor_after;
+        self.goal_display_column = None;
+        self.deactivate_region();
+        self.minibuffer.clear();
+        self.sync_current_window();
+        Ok(())
+    }
+
     fn delete_text_range(&mut self, range: TextRange, cursor_after: Position) -> Result<bool> {
         if range.start == range.end {
             return Ok(false);
@@ -3466,6 +3501,36 @@ impl Editor {
             ),
             Position::new(self.cursor.line, start),
         )?;
+        Ok(())
+    }
+
+    fn just_one_space(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+
+        let count = argument.unwrap_or(1);
+        let replacement_count = count.unsigned_abs() as usize;
+        let include_newlines = count < 0;
+        let text = self.document().buffer().serialize();
+        let cursor_absolute = position_to_absolute(self.document().buffer(), self.cursor)?;
+        let (start, end) = whitespace_run_around(&text, cursor_absolute, include_newlines);
+        let replacement = " ".repeat(replacement_count);
+        if text[start..end] == replacement {
+            self.minibuffer.clear();
+            return Ok(());
+        }
+        let cursor_after_absolute = start + replacement.len();
+        let range = TextRange::new(
+            absolute_to_position(&text, start),
+            absolute_to_position(&text, end),
+        );
+        let cursor_after = absolute_to_position(
+            &format!("{}{}{}", &text[..start], replacement, &text[end..]),
+            cursor_after_absolute,
+        );
+        self.replace_text_range_with_cursor(range, &replacement, self.cursor, cursor_after)?;
         Ok(())
     }
 
@@ -6275,6 +6340,23 @@ fn trailing_horizontal_space_start(line: &str) -> usize {
         start -= 1;
     }
     start
+}
+
+fn whitespace_run_around(text: &str, byte: usize, include_newlines: bool) -> (usize, usize) {
+    let mut start = byte;
+    while start > 0 && is_collapsible_space(text.as_bytes()[start - 1], include_newlines) {
+        start -= 1;
+    }
+
+    let mut end = byte;
+    while end < text.len() && is_collapsible_space(text.as_bytes()[end], include_newlines) {
+        end += 1;
+    }
+    (start, end)
+}
+
+fn is_collapsible_space(byte: u8, include_newlines: bool) -> bool {
+    is_horizontal_space_byte(byte) || (include_newlines && byte == b'\n')
 }
 
 fn adjust_position_after_same_line_delete(position: Position, range: TextRange) -> Position {
@@ -15639,6 +15721,105 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.document().buffer().serialize(), "ébeta");
         assert_eq!(editor.cursor(), Position::new(0, "é".len()));
         assert_eq!(editor.active_region_range(), None);
+    }
+
+    #[test]
+    fn just_one_space_collapses_horizontal_space_and_undoes() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha \t  beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha \t".len());
+
+        editor
+            .execute_command_by_name("just-one-space")
+            .expect("just-one-space should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha beta");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha ".len()));
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore whitespace");
+        assert_eq!(editor.document().buffer().serialize(), "alpha \t  beta");
+    }
+
+    #[test]
+    fn just_one_space_honors_numeric_and_negative_arguments() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha\n \t\nbeta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(1, 1);
+
+        editor
+            .just_one_space(Some(-2))
+            .expect("negative just-one-space should collapse newlines");
+        assert_eq!(editor.document().buffer().serialize(), "alpha  beta");
+        assert_eq!(editor.cursor(), Position::new(0, "alpha  ".len()));
+
+        editor
+            .just_one_space(Some(0))
+            .expect("zero just-one-space should delete spaces");
+        assert_eq!(editor.document().buffer().serialize(), "alphabeta");
+    }
+
+    #[test]
+    fn just_one_space_respects_read_only_buffers() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha   beta")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha ".len());
+        editor
+            .execute_command_by_name("toggle-read-only")
+            .expect("toggle-read-only should run");
+
+        editor
+            .execute_command_by_name("just-one-space")
+            .expect("read-only just-one-space should not edit");
+        assert_eq!(editor.document().buffer().serialize(), "alpha   beta");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Buffer is read-only: *scratch*")
+        );
+    }
+
+    #[test]
+    fn just_one_space_noops_without_dirtying_clean_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha beta")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha ".len());
+
+        editor
+            .execute_command_by_name("just-one-space")
+            .expect("already-normalized just-one-space should run");
+        assert_eq!(editor.document().buffer().serialize(), "alpha beta");
+        assert!(!editor.document().is_dirty());
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alphabeta")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha".len());
+        editor
+            .just_one_space(Some(0))
+            .expect("zero-space no-op should run");
+        assert_eq!(editor.document().buffer().serialize(), "alphabeta");
+        assert!(!editor.document().is_dirty());
     }
 
     #[test]

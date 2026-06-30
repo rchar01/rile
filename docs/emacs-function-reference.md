@@ -398,7 +398,7 @@ terminal-visible prompts or mode-specific indentation rules.
 
 ### `just-one-space`
 
-Status: `missing`.
+Status: `implemented` in Rile as `just-one-space`.
 
 Default binding: no active default binding in current GNU Emacs; active key lookup
 resolves `M-SPC` to `cycle-spacing`.
@@ -423,16 +423,16 @@ Rile read-only guard.
 
 Messages: no success message is required for the normal edit.
 
-Rile target: implement a small subset before `cycle-spacing`: no-argument
-one-space collapse and positive numeric arguments for horizontal space. Defer
-negative-argument newline joining unless a focused scenario confirms it is worth
-the extra behavior.
+Rile implementation: implements an unbound `M-x` subset before `cycle-spacing`:
+no-argument one-space collapse, positive numeric arguments for horizontal space,
+and negative numeric arguments that also collapse newlines.
 
 Evidence: GNU Emacs `describe-function` output for `just-one-space`; current GNU
 Emacs key binding for `M-SPC` resolves to `cycle-spacing`; `M-x just-one-space`
 advertises `M-SPC` after execution; Emacs scenario
 `tools/reference/emacs/scenarios/whitespace-spacing-core.scenario`; Rile command
-registry currently has no `just-one-space` entry.
+registry entry `just-one-space`; Rile unit tests for horizontal space, numeric
+arguments, negative newline collapse, undo, and read-only behavior.
 
 Notes: The plan names this underlying command, but `M-SPC` has subtle current
 Emacs behavior because `cycle-spacing` is the active binding while `M-x

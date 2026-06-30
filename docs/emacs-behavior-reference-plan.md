@@ -178,7 +178,7 @@ is useful but larger or less urgent, and P3 is deferred for later Rile releases.
 | `downcase-region` | `downcase-region` | `C-x C-l` | Implemented subset | Done | Intentionally skips Emacs disabled-command confirmation. |
 | `upcase-region` | `upcase-region` | `C-x C-u` | Implemented subset | Done | Preserves point/mark, keeps the active region adjusted, and has region undo tests. |
 | `delete-horizontal-space` | `delete-horizontal-space` | `M-\` | Implemented subset | Done | Uses ASCII space/tab behavior, prefix backward-only deletion, read-only checks, and undo. |
-| `just-one-space` | `just-one-space` | No active binding | Missing | P2 | Implement after deciding whether `M-SPC` should eventually map to `cycle-spacing` instead. |
+| `just-one-space` | `just-one-space` | No active binding | Implemented subset | Done | Exposed through `M-x`; collapses spaces/tabs around point, supports numeric counts and negative newline collapse, and leaves `M-SPC` unbound pending a `cycle-spacing` decision. |
 | `delete-blank-lines` | `delete-blank-lines` | `C-x C-o` | Implemented subset | Done | Uses Rile's space/tab-only blank-line definition and covers blank runs, isolated blank lines, and nonblank lines before blanks. |
 | `delete-trailing-whitespace` | `delete-trailing-whitespace` | None | Implemented subset | Done | Deletes ASCII spaces/tabs at physical line ends across the whole buffer or active-region bounds. |
 | `transpose-chars` | `transpose-chars` | `C-t` | Implemented subset | Done | Uses UTF-8-safe grapheme transposition, repeat arguments, EOL behavior, read-only checks, and undo. |
@@ -217,6 +217,9 @@ subset.
 
 Completed seventh slice: `comment-dwim`, `comment-region`, and
 `uncomment-region` are implemented as documented line-comment subsets.
+
+Completed eighth slice: `just-one-space` is implemented as an unbound documented
+subset.
 
 ## Rile 1.0 Non-Goals From This Batch
 
@@ -279,6 +282,7 @@ whitespace rules.
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-06-30 | Implemented the `just-one-space` slice. | `src/command.rs` and `src/editor.rs` now implement `just-one-space` as an unbound `M-x` command; unit tests cover horizontal whitespace, numeric arguments, negative newline collapse, undo, and read-only behavior. |
 | 2026-06-30 | Implemented the comment command slice. | `src/syntax.rs` now exposes reusable line-comment metadata; `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `comment-dwim`, `comment-region`, and `uncomment-region`; unit tests cover current-line insertion, active-region toggling, Rust/TOML markers, no-syntax errors, read-only behavior, and undo; `tests/pty_insert.rs` covers visible `M-;` behavior. |
 | 2026-06-30 | Implemented the `fill-paragraph` slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `fill-paragraph`; unit tests cover wrapping, active-region paragraph filling, blank-line behavior, undo, and read-only behavior; `tests/pty_insert.rs` covers visible `M-q` wrapping. |
 | 2026-06-30 | Implemented the transpose follow-up slice. | `src/command.rs`, `src/keymap.rs`, and `src/editor.rs` now implement `transpose-words` and `transpose-lines`; unit tests cover punctuation, UTF-8, numeric arguments, undo, boundary failures, and read-only behavior; `tests/pty_insert.rs` covers visible `M-t` and `C-x C-t` behavior. |

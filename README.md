@@ -100,6 +100,9 @@ Basic editor keys:
   successful command.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
+- `M-x just-one-space` collapses spaces and tabs around point to one space;
+  numeric arguments choose the number of spaces, and negative arguments also
+  collapse newlines.
 - `C-w` kills the active region.
 - `M-w` copies the active region.
 - `C-y` yanks the latest kill or copy; consecutive kill commands coalesce into

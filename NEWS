@@ -44,6 +44,7 @@ Editing features:
 * Delete spaces and tabs around point with M-\\, or only before point with a
   prefix argument.  Delete redundant blank lines around point with C-x C-o, and
   remove trailing spaces and tabs with M-x delete-trailing-whitespace.
+* Collapse whitespace around point with M-x just-one-space.
 * Insert a newline with C-j through the newline-and-indent command.  In the
   current plain-text mode, point is left at the start of the new line.
 * Quote the next key with C-q to insert printable text, Tab, or Enter

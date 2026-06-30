@@ -1,5 +1,20 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Implement just-one-space.
+
+	* src/command.rs (Command): Add JustOneSpace.
+	(default_doc_for_command, default_commands): Register the new command.
+	* src/editor.rs (Editor::command_just_one_space)
+	(Editor::just_one_space, Editor::replace_text_range_with_cursor)
+	(whitespace_run_around, is_collapsible_space): New spacing implementation.
+	* README.md: Document the unbound command.
+	* NEWS: Mention the new user-visible spacing command.
+	* docs/development.md: Record the implementation scope and limits.
+	* docs/emacs-function-reference.md: Mark just-one-space implemented.
+	* docs/emacs-behavior-reference-plan.md: Update backlog status and progress.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Implement line-comment commands.
 
 	* src/syntax.rs (CommentSyntax, MajorMode::comment_syntax): Add reusable
