@@ -1,5 +1,33 @@
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
+	Make fill column configurable.
+
+	* src/option.rs (OptionId): Add FillColumn.
+	(default_options, valid_fill_column): Add fill_column option metadata and
+	validation.
+	* src/config.rs (Config): Add fill_column field.
+	(Config::option_value, Config::empty_for_registry_defaults)
+	(Config::apply_option_value): Handle FillColumn.
+	* src/editor.rs (Editor): Store configured fill column.
+	(Editor::with_config, Editor::fill_paragraph, fill_plain_text_lines): Use the
+	configured column for fill-paragraph wrapping.
+	(filled_cursor_position): Use the configured column for cursor remapping.
+	* tests/support/pty.rs (RilePty): Track whether a session uses visual-test mode.
+	(RilePty::spawn_visual_with_home): New helper.
+	(RilePty::spawn_with_loaded_config): New helper.
+	(RilePty::assert_status_contains, RilePty::quit, RilePty::screen_dump): Handle
+	visual-test state explicitly.
+	* tests/pty_insert.rs (fill_paragraph_uses_configured_fill_column_from_config):
+	New test.
+	(visual_test_fill_paragraph_ignores_user_config): New test.
+	(quit_helper_exits_clean_buffer, quit_helper_confirms_dirty_buffer): New tests.
+	* README.md: Document fill_column and its range.
+	* NEWS: Mention configurable fill column.
+	* docs/development.md: Document the option and fill behavior.
+	* docs/emacs-function-reference.md: Update fill-paragraph scope.
+
+2026-06-30  Robert Charusta  <rch-public@posteo.net>
+
 	Remove completed Emacs behavior plan.
 
 	* docs/README.md: Remove the completed plan from the planning documents list

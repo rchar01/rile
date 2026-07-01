@@ -37,7 +37,8 @@ Editing features:
   C-x C-l and C-x C-u.
 * Transpose characters around point with C-t, words with M-t, and lines with
   C-x C-t.
-* Fill plain-text paragraphs with M-q, including active-region paragraph filling.
+* Fill plain-text paragraphs with M-q, including active-region paragraph filling
+  and a configurable fill column.
 * Insert and toggle line comments with M-; in Rust, C, shell, and TOML buffers.
   Region line-comment commands are also available through M-x comment-region and
   M-x uncomment-region.
@@ -150,7 +151,7 @@ Display and configuration:
 * Highlight Rust, C, shell, Markdown, and TOML using simple line-local
   highlighters.
 * Select Emacs-style major-mode names from file extensions.
-* Configure tab width, line numbers, syntax highlighting, search
+* Configure tab width, fill column, line numbers, syntax highlighting, search
   highlighting, theme, command-completion style, and optional save backups in
   ~/.config/rile/config.toml.
 * Toggle line numbers, syntax highlighting, and search highlighting from

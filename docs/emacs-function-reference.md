@@ -699,11 +699,12 @@ Rile read-only guard.
 Messages: no success message is required for the normal edit.
 
 Rile implementation: implements a documented plain-text subset: fill paragraphs
-by collapsing internal spaces and line breaks, wrapping at a fixed fill column,
-and preserving blank-line paragraph boundaries. Active-region invocation fills
-each paragraph overlapped by the region. It defers justification,
-sentence-end-double-space rules, CJK/kinsoku behavior, fill prefixes,
-mode-specific comment filling, and programmable fill hooks.
+by collapsing internal spaces and line breaks, wrapping at the configured
+`fill_column`, and preserving blank-line paragraph boundaries. Active-region
+invocation fills each paragraph overlapped by the region. It defers buffer-local
+fill columns, justification, sentence-end-double-space rules, CJK/kinsoku
+behavior, fill prefixes, mode-specific comment filling, and programmable fill
+hooks.
 
 Evidence: GNU Emacs manual, Explicit Fill Commands, `M-q`; GNU Emacs
 `describe-function` output for `fill-paragraph`; local batch probes for text-mode

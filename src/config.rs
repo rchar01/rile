@@ -26,6 +26,7 @@ impl ThemeName {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     pub tab_width: usize,
+    pub fill_column: usize,
     pub line_numbers: bool,
     pub syntax_highlighting: bool,
     pub search_highlighting: bool,
@@ -93,6 +94,7 @@ impl Config {
     pub fn option_value(&self, option: OptionId) -> OptionValue {
         match option {
             OptionId::TabWidth => OptionValue::Integer(self.tab_width),
+            OptionId::FillColumn => OptionValue::Integer(self.fill_column),
             OptionId::LineNumbers => OptionValue::Boolean(self.line_numbers),
             OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_highlighting),
             OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
@@ -112,6 +114,7 @@ impl Config {
     fn empty_for_registry_defaults() -> Self {
         Self {
             tab_width: 0,
+            fill_column: 0,
             line_numbers: false,
             syntax_highlighting: false,
             search_highlighting: false,
@@ -133,6 +136,7 @@ impl Config {
     ) -> std::result::Result<(), &'static str> {
         match (option, value) {
             (OptionId::TabWidth, OptionValue::Integer(value)) => self.tab_width = value,
+            (OptionId::FillColumn, OptionValue::Integer(value)) => self.fill_column = value,
             (OptionId::LineNumbers, OptionValue::Boolean(value)) => self.line_numbers = value,
             (OptionId::SyntaxHighlighting, OptionValue::Boolean(value)) => {
                 self.syntax_highlighting = value;
@@ -213,6 +217,7 @@ mod tests {
             r#"
             [editor]
             tab_width = 2
+            fill_column = 72
             line_numbers = true
             syntax_highlighting = false
             search_highlighting = false
@@ -227,6 +232,7 @@ mod tests {
         .expect("config should parse");
 
         assert_eq!(config.tab_width, 2);
+        assert_eq!(config.fill_column, 72);
         assert!(config.line_numbers);
         assert!(!config.syntax_highlighting);
         assert!(!config.search_highlighting);
@@ -241,6 +247,7 @@ mod tests {
     #[test]
     fn rejects_invalid_config_values() {
         assert!(Config::parse("tab_width = 0").is_err());
+        assert!(Config::parse("fill_column = 19").is_err());
         assert!(Config::parse("line_numbers = yes").is_err());
         assert!(Config::parse("backup_on_save = sometimes").is_err());
         assert!(Config::parse("theme = \"solarized\"").is_err());
@@ -271,6 +278,7 @@ mod tests {
         let config = Config::parse(
             r#"
             tab_width = 2
+            fill_column = 80
             completion_matching = "substring"
             "#,
         )
@@ -279,6 +287,10 @@ mod tests {
         assert_eq!(
             config.option_value(OptionId::TabWidth),
             OptionValue::Integer(2)
+        );
+        assert_eq!(
+            config.option_value(OptionId::FillColumn),
+            OptionValue::Integer(80)
         );
         assert_eq!(
             config.option_value(OptionId::CompletionMatching),

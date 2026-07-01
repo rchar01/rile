@@ -24,6 +24,7 @@ pub struct RilePty {
     file: PathBuf,
     rows: u16,
     columns: u16,
+    visual_test: bool,
     last_action: String,
     closed: bool,
 }
@@ -31,10 +32,42 @@ pub struct RilePty {
 impl RilePty {
     pub fn spawn(file: &Path, rows: u16, columns: u16) -> Result<Self> {
         let home = fixtures::temp_home()?;
+        Self::spawn_with_home_and_visual_test(file, rows, columns, home, true)
+    }
+
+    pub fn spawn_visual_with_home(
+        file: &Path,
+        rows: u16,
+        columns: u16,
+        home: TempDir,
+    ) -> Result<Self> {
+        Self::spawn_with_home_and_visual_test(file, rows, columns, home, true)
+    }
+
+    pub fn spawn_with_loaded_config(
+        file: &Path,
+        rows: u16,
+        columns: u16,
+        home: TempDir,
+    ) -> Result<Self> {
+        // Visual-test mode intentionally bypasses user config; this path keeps a
+        // deterministic size while exercising normal config loading.
+        Self::spawn_with_home_and_visual_test(file, rows, columns, home, false)
+    }
+
+    fn spawn_with_home_and_visual_test(
+        file: &Path,
+        rows: u16,
+        columns: u16,
+        home: TempDir,
+        visual_test: bool,
+    ) -> Result<Self> {
         let binary = assert_cmd::cargo::cargo_bin("rile");
         let mut command = Command::new(binary);
+        if visual_test {
+            command.arg("--visual-test");
+        }
         command
-            .arg("--visual-test")
             .arg("--test-size")
             .arg(format!("{columns}x{rows}"))
             .arg(file)
@@ -52,6 +85,7 @@ impl RilePty {
             file: file.to_path_buf(),
             rows,
             columns,
+            visual_test,
             last_action: "spawn".to_owned(),
             closed: false,
         })
@@ -112,6 +146,9 @@ impl RilePty {
     }
 
     pub fn assert_status_contains(&self, expected: &str) -> Result<()> {
+        if !self.visual_test {
+            bail!("assert_status_contains requires a visual-test PTY session");
+        }
         let status_row = self
             .screen_rows()
             .into_iter()
@@ -155,10 +192,11 @@ impl RilePty {
 
     pub fn screen_dump(&self) -> String {
         let mut dump = format!(
-            "file: {}\nsize: {}x{}\nlast action: {}\n",
+            "file: {}\nsize: {}x{}\nvisual test: {}\nlast action: {}\n",
             self.file.display(),
             self.columns,
             self.rows,
+            self.visual_test,
             self.last_action
         );
         dump.push_str(&screen::dump(self.parser.screen()));
@@ -169,18 +207,46 @@ impl RilePty {
         if self.closed {
             return Ok(());
         }
-        let may_prompt = self.snapshot_text().contains("modified:true");
         self.last_action = "quit".to_owned();
         self.session
             .send(keys::control_sequence("xc"))
             .context("failed to send quit sequence")?;
-        if may_prompt {
-            self.wait_for_screen_contains("Modified buffers exist; exit anyway? (yes or no)")?;
+        if self.wait_for_dirty_quit_prompt_or_exit()? {
             self.session
                 .send(b"yes\r")
                 .context("failed to confirm dirty quit")?;
+            self.expect_exit()
+        } else {
+            self.closed = true;
+            Ok(())
         }
-        self.expect_exit()
+    }
+
+    fn wait_for_dirty_quit_prompt_or_exit(&mut self) -> Result<bool> {
+        let prompt = "Modified buffers exist; exit anyway? (yes or no)";
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut buffer = [0; 4096];
+        while Instant::now() < deadline {
+            match self.session.try_read(&mut buffer) {
+                Ok(0) => return Ok(false),
+                Ok(bytes_read) => {
+                    self.parser.process(&buffer[..bytes_read]);
+                    if self.snapshot_text().contains(prompt) {
+                        return Ok(true);
+                    }
+                }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => {
+                    return Err(error).context("failed to read PTY after quit");
+                }
+            }
+        }
+        bail!(
+            "rile neither exited nor prompted after quit\n{}",
+            self.screen_dump()
+        )
     }
 
     pub fn expect_exit(&mut self) -> Result<()> {

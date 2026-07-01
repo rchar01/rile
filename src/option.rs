@@ -6,6 +6,7 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum OptionId {
     TabWidth,
+    FillColumn,
     LineNumbers,
     SyntaxHighlighting,
     SearchHighlighting,
@@ -185,6 +186,18 @@ fn default_options() -> Vec<OptionSpec> {
             validation_error: "tab_width must be between 1 and 16",
         }),
         option_spec(OptionSpecData {
+            id: OptionId::FillColumn,
+            name: "fill_column",
+            summary: "Fill column",
+            doc: "Display column used by fill-paragraph when wrapping plain-text paragraphs.",
+            value_type: OptionType::Integer,
+            default: OptionValue::Integer(70),
+            valid_values: "integer from 20 through 200",
+            validator: valid_fill_column,
+            parse_error: "fill_column must be an integer",
+            validation_error: "fill_column must be between 20 and 200",
+        }),
+        option_spec(OptionSpecData {
             id: OptionId::LineNumbers,
             name: "line_numbers",
             summary: "Line numbers",
@@ -332,6 +345,10 @@ fn valid_tab_width(value: &OptionValue) -> bool {
     matches!(value, OptionValue::Integer(width) if (1..=16).contains(width))
 }
 
+fn valid_fill_column(value: &OptionValue) -> bool {
+    matches!(value, OptionValue::Integer(column) if (20..=200).contains(column))
+}
+
 fn valid_theme(value: &OptionValue) -> bool {
     matches!(value, OptionValue::Choice("default" | "mono"))
 }
@@ -370,7 +387,7 @@ mod tests {
         let registry = OptionRegistry::default();
 
         assert_eq!(registry.validate(), Ok(()));
-        assert_eq!(registry.options().count(), 10);
+        assert_eq!(registry.options().count(), 11);
     }
 
     #[test]
@@ -425,6 +442,41 @@ mod tests {
         );
         assert_eq!(
             registry
+                .get("fill_column")
+                .expect("fill_column option should exist")
+                .parse_value("20"),
+            Ok(OptionValue::Integer(20))
+        );
+        assert_eq!(
+            registry
+                .get("fill_column")
+                .expect("fill_column option should exist")
+                .parse_value("200"),
+            Ok(OptionValue::Integer(200))
+        );
+        assert_eq!(
+            registry
+                .get("fill_column")
+                .expect("fill_column option should exist")
+                .parse_value("72"),
+            Ok(OptionValue::Integer(72))
+        );
+        assert!(
+            registry
+                .get("fill_column")
+                .expect("fill_column option should exist")
+                .parse_value("19")
+                .is_err()
+        );
+        assert!(
+            registry
+                .get("fill_column")
+                .expect("fill_column option should exist")
+                .parse_value("201")
+                .is_err()
+        );
+        assert_eq!(
+            registry
                 .get("theme")
                 .expect("theme option should exist")
                 .parse_value("\"mono\""),
@@ -439,6 +491,12 @@ mod tests {
             ("line_numbers", "yes", "expected true or false"),
             ("tab_width", "wide", "tab_width must be an integer"),
             ("tab_width", "0", "tab_width must be between 1 and 16"),
+            ("fill_column", "wide", "fill_column must be an integer"),
+            (
+                "fill_column",
+                "19",
+                "fill_column must be between 20 and 200",
+            ),
             (
                 "theme",
                 "\"solarized\"",

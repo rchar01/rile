@@ -181,8 +181,11 @@ Milestone 13 adds syntax highlighting:
 Milestone 14 adds configuration and polish:
 
 - `config::Config` loads `~/.config/rile/config.toml` when present and otherwise uses defaults;
-- the config parser supports a small TOML subset with `tab_width`, `line_numbers`, `syntax_highlighting`, `search_highlighting`, and `theme` keys;
-- `tab_width` controls terminal tab expansion and cursor column calculation for tabs;
+- the config parser supports a small TOML subset with `tab_width`, `fill_column`,
+  `line_numbers`, `syntax_highlighting`, `search_highlighting`, and `theme` keys;
+- `tab_width` controls terminal tab expansion and cursor column calculation for
+  tabs;
+- `fill_column` controls the display column used by `fill-paragraph`;
 - optional line numbers render in a left gutter with `Face::LineNumber`;
 - syntax and search highlighting can start disabled from config and can be toggled with `M-x toggle-syntax-highlighting` and `M-x toggle-search-highlighting`;
 - line numbers can be toggled with `M-x toggle-line-numbers`;
@@ -239,11 +242,11 @@ sentence functions.
 
 Post-Milestone 14 fill polish adds `fill-paragraph` on `M-q`. The first subset
 fills plain-text paragraphs by collapsing internal whitespace and wrapping words
-at a fixed fill column while preserving blank-line paragraph boundaries. It also
-fills each paragraph overlapped by an active region. It respects read-only
-buffers and records one undo entry for each command result. It intentionally
-defers justification, fill prefixes, CJK/kinsoku handling, mode-specific comment
-filling, and programmable fill hooks.
+at the configured `fill_column` while preserving blank-line paragraph boundaries.
+It also fills each paragraph overlapped by an active region. It respects
+read-only buffers and records one undo entry for each command result. It
+intentionally defers buffer-local fill columns, justification, fill prefixes,
+CJK/kinsoku handling, mode-specific comment filling, and programmable fill hooks.
 
 Post-Milestone 14 comment polish adds reusable line-comment metadata to major
 modes and implements `comment-dwim` on `M-;`, plus `comment-region` and

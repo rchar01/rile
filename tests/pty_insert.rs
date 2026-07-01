@@ -3,9 +3,32 @@
 
 mod support;
 
+use std::fs;
+
 use anyhow::Result;
 
 use support::{fixtures, keys, pty::RilePty};
+
+#[test]
+fn quit_helper_exits_clean_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn quit_helper_confirms_dirty_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("insert", b"z")?;
+    rile.quit()?;
+    Ok(())
+}
 
 #[test]
 fn insert_delete_and_backspace_update_visible_buffer() -> Result<()> {
@@ -212,6 +235,65 @@ fn fill_paragraph_wraps_visible_text() -> Result<()> {
     );
     rile.assert_cursor(0, "alpha beta".len().try_into()?)?;
     rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn fill_paragraph_uses_configured_fill_column_from_config() -> Result<()> {
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(config_dir.join("config.toml"), "fill_column = 20\n")?;
+    let file = fixtures::named_temp_file("alpha beta gamma delta epsilon\n")?;
+    let mut rile = RilePty::spawn_with_loaded_config(file.path(), 12, 80, home)?;
+
+    rile.wait_for_screen_contains("alpha beta gamma")?;
+    for _ in 0.."alpha beta gamma delta".len() {
+        rile.send("C-f", keys::control('f'))?;
+    }
+    rile.send("M-q", keys::meta('q'))?;
+    rile.wait_for_screen_contains("delta epsilon")?;
+
+    let rows = rile.screen_rows();
+    assert!(
+        rows.first()
+            .is_some_and(|row| row.contains("alpha beta gamma")),
+        "first screen row should use configured fill column: {rows:?}"
+    );
+    assert!(
+        rows.get(1).is_some_and(|row| row.contains("delta epsilon")),
+        "second screen row should use configured fill column: {rows:?}"
+    );
+    rile.assert_cursor(1, "delta".len().try_into()?)?;
+
+    rile.send("C-x C-s", keys::control_sequence("xs"))?;
+    assert_eq!(
+        fs::read_to_string(file.path())?,
+        "alpha beta gamma\ndelta epsilon\n"
+    );
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn visual_test_fill_paragraph_ignores_user_config() -> Result<()> {
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(config_dir.join("config.toml"), "fill_column = 20\n")?;
+    let file = fixtures::named_temp_file("alpha beta gamma delta epsilon zeta eta theta\n")?;
+    let mut rile = RilePty::spawn_visual_with_home(file.path(), 12, 80, home)?;
+
+    rile.wait_for_screen_contains("alpha beta gamma delta epsilon zeta eta theta")?;
+    rile.send("M-q", keys::meta('q'))?;
+    let rows = rile.screen_rows();
+    assert!(
+        rows.first()
+            .is_some_and(|row| row.contains("alpha beta gamma delta epsilon zeta eta theta")),
+        "visual-test mode should keep default config: {rows:?}"
+    );
 
     rile.quit()?;
     Ok(())

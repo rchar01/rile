@@ -145,7 +145,7 @@ Basic editor keys:
 - `M-e` and `M-a` move forward and backward by sentence using Rile's documented
   default sentence-boundary subset.
 - `M-q` fills the current plain-text paragraph, or paragraphs in the active
-  region, by collapsing whitespace and wrapping at Rile's fixed fill column.
+  region, by collapsing whitespace and wrapping at the configured fill column.
 - `M-;` inserts a line comment for supported modes, or toggles line comments in
   an active region. `M-x comment-region` and `M-x uncomment-region` operate on
   active regions using the current mode's line-comment marker.
@@ -189,6 +189,7 @@ Rile loads a minimal TOML-style config file from `~/.config/rile/config.toml` wh
 
 ```toml
 tab_width = 4
+fill_column = 70
 line_numbers = false
 syntax_highlighting = true
 search_highlighting = true
@@ -199,6 +200,8 @@ completion_max_candidates = 8
 completion_show_annotations = true
 completion_matching = "orderless" # "orderless", "prefix", or "substring"
 ```
+
+`fill_column` accepts integer values from 20 through 200.
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and

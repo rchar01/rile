@@ -49,8 +49,6 @@ use help::{
 use prompt_history::PromptHistoryStore;
 use search::{find_match, search_start_after};
 
-const PLAIN_TEXT_FILL_COLUMN: usize = 70;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
     Continue,
@@ -109,6 +107,7 @@ pub struct Editor {
     search_highlighting: bool,
     line_numbers: bool,
     tab_width: usize,
+    fill_column: usize,
     backup_on_save: bool,
     theme: ThemeName,
 }
@@ -462,6 +461,7 @@ impl Editor {
             search_highlighting: config.search_highlighting,
             line_numbers: config.line_numbers,
             tab_width: config.tab_width,
+            fill_column: config.fill_column,
             backup_on_save: config.backup_on_save,
             theme: config.theme,
         }
@@ -3250,9 +3250,10 @@ impl Editor {
 
         let cursor_before = self.cursor;
         let mut replacement_lines = lines.to_vec();
-        let cursor_after = filled_cursor_position(lines, &runs, cursor_before);
+        let cursor_after = filled_cursor_position(lines, &runs, cursor_before, self.fill_column);
         for (run_start, run_end) in runs.into_iter().rev() {
-            let filled = fill_plain_text_lines(&replacement_lines[run_start..=run_end]);
+            let filled =
+                fill_plain_text_lines(&replacement_lines[run_start..=run_end], self.fill_column);
             replacement_lines.splice(run_start..=run_end, filled);
         }
 
@@ -4835,6 +4836,7 @@ impl Editor {
     fn option_value(&self, option: OptionId) -> OptionValue {
         match option {
             OptionId::TabWidth => OptionValue::Integer(self.tab_width),
+            OptionId::FillColumn => OptionValue::Integer(self.fill_column),
             OptionId::LineNumbers => OptionValue::Boolean(self.line_numbers),
             OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_enabled),
             OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
@@ -6720,7 +6722,7 @@ fn paragraph_runs_in_line_bounds(
     runs
 }
 
-fn fill_plain_text_lines(lines: &[String]) -> Vec<String> {
+fn fill_plain_text_lines(lines: &[String], fill_column: usize) -> Vec<String> {
     let words = lines
         .iter()
         .flat_map(|line| line.split_whitespace())
@@ -6737,7 +6739,7 @@ fn fill_plain_text_lines(lines: &[String]) -> Vec<String> {
         } else {
             UnicodeWidthStr::width(current.as_str()) + 1 + UnicodeWidthStr::width(word)
         };
-        if next_len > PLAIN_TEXT_FILL_COLUMN && !current.is_empty() {
+        if next_len > fill_column && !current.is_empty() {
             filled.push(std::mem::take(&mut current));
         }
         if !current.is_empty() {
@@ -6755,6 +6757,7 @@ fn filled_cursor_position(
     lines: &[String],
     runs: &[(usize, usize)],
     cursor: Position,
+    fill_column: usize,
 ) -> Option<Position> {
     let mut line_delta = 0isize;
     for &(run_start, run_end) in runs {
@@ -6771,7 +6774,7 @@ fn filled_cursor_position(
             ));
         }
         let original_len = run_end - run_start + 1;
-        let filled = fill_plain_text_lines(&lines[run_start..=run_end]);
+        let filled = fill_plain_text_lines(&lines[run_start..=run_end], fill_column);
         let output_start = run_start.checked_add_signed(line_delta)?;
         if (run_start..=run_end).contains(&cursor.line) {
             return cursor_in_filled_run(
@@ -7674,7 +7677,7 @@ mod tests {
     };
     use super::{
         AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, KillEntry,
-        PLAIN_TEXT_FILL_COLUMN, file_prompt_base_input, format_rectangle_number,
+        file_prompt_base_input, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -8351,7 +8354,7 @@ mod tests {
             filled
                 .lines()
                 .take_while(|line| !line.is_empty())
-                .all(|line| line.len() <= PLAIN_TEXT_FILL_COLUMN)
+                .all(|line| line.len() <= 70)
         );
         assert_eq!(editor.cursor().line, 0);
         assert!(editor.cursor().byte > 0);
@@ -8364,6 +8367,31 @@ mod tests {
             editor.cursor(),
             Position::new(0, "alpha   beta gamma".len())
         );
+    }
+
+    #[test]
+    fn fill_paragraph_uses_configured_fill_column() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha beta gamma delta epsilon")
+            .expect("fixture should insert");
+        let config = Config {
+            fill_column: 20,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(document, config);
+        editor.cursor = Position::new(0, "alpha beta gamma delta".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill paragraph with configured column");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "alpha beta gamma\ndelta epsilon"
+        );
+        assert_eq!(editor.cursor(), Position::new(1, "delta".len()));
     }
 
     #[test]
@@ -16559,6 +16587,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             Document::scratch(),
             Config {
                 tab_width: 2,
+                fill_column: 72,
                 line_numbers: true,
                 syntax_highlighting: false,
                 search_highlighting: false,
@@ -16569,6 +16598,10 @@ M-g g           goto-line                      Go to line or line:column\n"
         );
 
         assert_eq!(editor.tab_width(), 2);
+        assert_eq!(
+            editor.option_value(OptionId::FillColumn),
+            OptionValue::Integer(72)
+        );
         assert!(editor.line_numbers());
         assert!(!editor.syntax_enabled());
         assert!(!editor.search_highlighting());
