@@ -102,6 +102,7 @@ pub enum Command {
     OtherWindow,
     SplitWindowBelow,
     SplitWindowRight,
+    SuspendFrame,
     SwitchToBuffer,
     ScrollPageBackward,
     ScrollPageForward,
@@ -148,6 +149,7 @@ pub enum CommandOutcome {
     Continue,
     Exit,
     StartedPrompt,
+    Suspend,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -279,7 +281,7 @@ impl CommandCategory {
             | ToggleReadOnly
             | ToggleSearchHighlighting
             | ToggleSyntaxHighlighting => Self::Configuration,
-            SaveBuffersKillTerminal => Self::System,
+            SaveBuffersKillTerminal | SuspendFrame => Self::System,
         }
     }
 }
@@ -395,6 +397,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         OtherWindow => "Select the next window in the current frame layout.",
         SplitWindowBelow => "Split the selected window into upper and lower panes.",
         SplitWindowRight => "Split the selected window into left and right panes.",
+        SuspendFrame => "Suspend Rile and return to the invoking shell.",
         SwitchToBuffer => "Prompt for a buffer name and switch the selected window to it.",
         ScrollPageBackward => "Scroll backward by one visible page with overlap.",
         ScrollPageForward => "Scroll forward by one visible page with overlap.",
@@ -1154,6 +1157,8 @@ pub fn default_commands() -> Vec<CommandSpec> {
             SplitWindowRight,
         )
         .with_handler(crate::editor::Editor::command_split_window_right),
+        CommandSpec::new("suspend-frame", "Suspend Rile", true, SuspendFrame)
+            .with_handler(crate::editor::Editor::command_suspend_frame),
         CommandSpec::new(
             "switch-to-buffer",
             "Switch to a buffer by name",
@@ -1370,6 +1375,7 @@ mod tests {
         assert!(registry.contains("write-file"));
         assert!(registry.contains("split-window-below"));
         assert!(registry.contains("split-window-right"));
+        assert!(registry.contains("suspend-frame"));
         assert!(registry.contains("delete-rectangle"));
         assert!(registry.contains("delete-blank-lines"));
         assert!(registry.contains("delete-horizontal-space"));

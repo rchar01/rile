@@ -187,6 +187,8 @@ Basic editor keys:
   shows version, build, terminal, config, and runtime path information, and
   `C-h e` opens the read-only `*Messages*` message history, which updates while
   it is visible.
+- `C-z` suspends Rile and returns to the invoking shell on terminals with job
+  control; resuming the process redraws the editor.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
   goto-line, rectangle, shell-command, describe-function, and describe-variable
   minibuffer prompts.

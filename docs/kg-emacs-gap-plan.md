@@ -33,7 +33,7 @@ it is not a source-porting guide or a behavior oracle.
 | Current-line whitespace cleanup | `M-x delete-trailing-space` | no default priority over `delete-trailing-whitespace` | Defer unless a clear Emacs-compatible command target is chosen. |
 | kg whole-buffer whitespace cleanup | `M-x whitespace-cleanup` | `delete-trailing-whitespace` | Already covered by Rile's `delete-trailing-whitespace`; keep Emacs name. |
 | Version display | `M-x version` | `emacs-version`, `about-emacs` | Already covered differently by `about-rile`; keep Rile command. |
-| Suspend editor | `C-z` | `suspend-frame`, `C-z` on capable terminals | Research before implementing because terminal lifecycle behavior is risky. |
+| Suspend editor | `C-z` | `suspend-frame`, `C-z` on capable terminals | Implemented with raw-mode/alternate-screen restore around `SIGTSTP`. |
 | Keyboard macro aliases | `F3`, `F4` | `kmacro-start-macro-or-insert-counter`, `kmacro-end-or-call-macro` | Implemented for common terminal F3/F4 sequences. |
 | Ctrl-arrow aliases | Ctrl arrows/Home/End | terminal and Emacs dependent | Implemented for standard Ctrl-modified CSI sequences. |
 | Shift selection | Shift arrows/Home/End | `shift-select-mode` | Defer as optional-mode work; do not make a kg-only default. |

@@ -1,5 +1,26 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Implement suspend-frame.
+
+	* src/command.rs (Command): Add SuspendFrame.
+	(CommandOutcome): Add Suspend.
+	(default_doc_for_command, default_commands): Register suspend-frame.
+	* src/keymap.rs (default_bindings): Bind C-z.
+	* src/editor.rs (EditorOutcome): Add Suspend.
+	(Editor::command_suspend_frame): New method.
+	(editor_outcome_for_command_outcome, command_outcome_for_editor_outcome):
+	Handle suspend outcomes.
+	* src/terminal/mod.rs (RawModeGuard::enable, raw_termios_from_original): New.
+	(TerminalSession::suspend): New method.
+	(TerminalSession::run): Handle suspend outcomes.
+	(ScreenGuard::leave, ScreenGuard::enter_again): New methods.
+	* README.md: Document C-z.
+	* NEWS: Mention suspend-frame.
+	* docs/development.md: Record terminal lifecycle behavior.
+	* docs/kg-emacs-gap-plan.md: Mark suspend complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Add function-key and Ctrl-navigation aliases.
 
 	* src/input.rs (SpecialKey): Add F3 and F4.

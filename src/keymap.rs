@@ -334,6 +334,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('q')], QuotedInsert),
         KeyBinding::new([KeyEvent::Ctrl('t')], TransposeChars),
         KeyBinding::new([KeyEvent::Ctrl('u')], UniversalArgument),
+        KeyBinding::new([KeyEvent::Ctrl('z')], SuspendFrame),
         KeyBinding::new([KeyEvent::Ctrl('@')], SetMarkCommand),
         KeyBinding::new([KeyEvent::Ctrl('h'), KeyEvent::Ctrl('a')], AboutRile),
         KeyBinding::new(
@@ -815,6 +816,10 @@ mod tests {
             keymap.resolve(&[KeyEvent::Meta('|')]),
             KeyResolution::Command(ShellCommandOnRegion)
         );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('z')]),
+            KeyResolution::Command(SuspendFrame)
+        );
     }
 
     #[test]
@@ -1150,7 +1155,7 @@ mod tests {
         let keymap = KeyMap::default();
 
         assert_eq!(
-            keymap.resolve(&[KeyEvent::Ctrl('z')]),
+            keymap.resolve(&[KeyEvent::Ctrl(']')]),
             KeyResolution::NoMatch
         );
     }

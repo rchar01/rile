@@ -104,6 +104,33 @@ impl RawModeGuard {
         self.active = false;
         Ok(())
     }
+
+    pub fn enable(&mut self) -> Result<()> {
+        if self.active {
+            return Ok(());
+        }
+        let Some(original) = self.original.as_ref() else {
+            return Ok(());
+        };
+        let raw = raw_termios_from_original(original);
+        // SAFETY: raw is derived from a valid termios value for this fd.
+        if unsafe { libc::tcsetattr(self.fd, libc::TCSAFLUSH, &raw) } == -1 {
+            return Err(io::Error::last_os_error().into());
+        }
+        self.active = true;
+        Ok(())
+    }
+}
+
+fn raw_termios_from_original(original: &libc::termios) -> libc::termios {
+    let mut raw = *original;
+    raw.c_iflag &= !(libc::BRKINT | libc::ICRNL | libc::INPCK | libc::ISTRIP | libc::IXON);
+    raw.c_oflag &= !libc::OPOST;
+    raw.c_cflag |= libc::CS8;
+    raw.c_lflag &= !(libc::ECHO | libc::ICANON | libc::IEXTEN | libc::ISIG);
+    raw.c_cc[libc::VMIN] = 0;
+    raw.c_cc[libc::VTIME] = 1;
+    raw
 }
 
 impl Drop for RawModeGuard {
@@ -232,7 +259,7 @@ pub fn run_basic_editor(options: RuntimeOptions<'_>) -> Result<()> {
 
 struct TerminalSession<R, W: Write> {
     screen: ScreenGuard<W>,
-    _raw_mode: RawModeGuard,
+    raw_mode: RawModeGuard,
     input: KeyReader<R>,
     output_fd: libc::c_int,
     test_size: Option<TerminalSize>,
@@ -259,7 +286,7 @@ where
 
         Ok(Self {
             screen,
-            _raw_mode: raw_mode,
+            raw_mode,
             input: KeyReader::with_erase_byte(input, erase_byte),
             output_fd,
             test_size: options.test_size,
@@ -277,11 +304,28 @@ where
                 match editor.handle_key(key)? {
                     EditorOutcome::Quit => return Ok(()),
                     EditorOutcome::Continue => self.draw(&mut editor)?,
+                    EditorOutcome::Suspend => {
+                        self.suspend()?;
+                        self.draw(&mut editor)?;
+                    }
                 }
             } else if editor.poll_auto_revert()? {
                 self.draw(&mut editor)?;
             }
         }
+    }
+
+    fn suspend(&mut self) -> Result<()> {
+        self.screen.leave()?;
+        self.raw_mode.disable()?;
+        // SAFETY: raising SIGTSTP suspends the current process when job control is available.
+        if unsafe { libc::raise(libc::SIGTSTP) } == -1 {
+            return Err(io::Error::last_os_error().into());
+        }
+        self.raw_mode.enable()?;
+        self.screen.enter_again()?;
+        self.last_size = None;
+        Ok(())
     }
 
     fn draw(&mut self, editor: &mut Editor) -> Result<()> {
@@ -1376,19 +1420,39 @@ impl<W: Write> ScreenGuard<W> {
         self.reset_cursor_style_on_drop = true;
         Ok(())
     }
+
+    fn leave(&mut self) -> Result<()> {
+        if !self.active {
+            return Ok(());
+        }
+        if self.reset_cursor_style_on_drop {
+            self.terminal.reset_cursor_style()?;
+        }
+        self.terminal.show_cursor()?;
+        self.terminal.leave_alternate_screen()?;
+        self.terminal.flush()?;
+        self.active = false;
+        Ok(())
+    }
+
+    fn enter_again(&mut self) -> Result<()> {
+        if self.active {
+            return Ok(());
+        }
+        self.terminal.enter_alternate_screen()?;
+        if self.reset_cursor_style_on_drop {
+            self.terminal.set_steady_block_cursor()?;
+        }
+        self.terminal.clear_screen()?;
+        self.terminal.flush()?;
+        self.active = true;
+        Ok(())
+    }
 }
 
 impl<W: Write> Drop for ScreenGuard<W> {
     fn drop(&mut self) {
-        if self.active {
-            if self.reset_cursor_style_on_drop {
-                let _ = self.terminal.reset_cursor_style();
-            }
-            let _ = self.terminal.show_cursor();
-            let _ = self.terminal.leave_alternate_screen();
-            let _ = self.terminal.flush();
-            self.active = false;
-        }
+        let _ = self.leave();
     }
 }
 

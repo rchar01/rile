@@ -53,6 +53,7 @@ use search::{find_match, search_start_after};
 pub enum EditorOutcome {
     Continue,
     Quit,
+    Suspend,
 }
 
 #[derive(Debug, Clone)]
@@ -2463,6 +2464,13 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         self.split_window(SplitAxis::Vertical)?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_suspend_frame(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        Ok(CommandOutcome::Suspend)
     }
 
     pub(crate) fn command_switch_to_buffer(
@@ -7623,6 +7631,7 @@ fn editor_outcome_for_command_outcome(outcome: CommandOutcome) -> EditorOutcome 
     match outcome {
         CommandOutcome::Continue | CommandOutcome::StartedPrompt => EditorOutcome::Continue,
         CommandOutcome::Exit => EditorOutcome::Quit,
+        CommandOutcome::Suspend => EditorOutcome::Suspend,
     }
 }
 
@@ -7630,6 +7639,7 @@ fn command_outcome_for_editor_outcome(outcome: EditorOutcome) -> CommandOutcome 
     match outcome {
         EditorOutcome::Continue => CommandOutcome::Continue,
         EditorOutcome::Quit => CommandOutcome::Exit,
+        EditorOutcome::Suspend => CommandOutcome::Suspend,
     }
 }
 
@@ -12407,13 +12417,13 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("c".to_owned()))
             .expect("describe-key-briefly should start");
         editor
-            .handle_key(KeyEvent::Ctrl('z'))
+            .handle_key(KeyEvent::Ctrl(']'))
             .expect("describe-key-briefly should finish");
 
         assert_eq!(editor.current_buffer_name(), "*scratch*");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("C-z is not bound to any command.")
+            Some("C-] is not bound to any command.")
         );
     }
 
@@ -12428,14 +12438,25 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("k".to_owned()))
             .expect("describe-key should start");
         editor
-            .handle_key(KeyEvent::Ctrl('z'))
+            .handle_key(KeyEvent::Ctrl(']'))
             .expect("describe-key should finish");
 
         assert_eq!(editor.current_buffer_name(), "*Help*");
         assert_eq!(
             editor.document().buffer().serialize(),
-            "C-z is undefined.\n"
+            "C-] is undefined.\n"
         );
+    }
+
+    #[test]
+    fn suspend_frame_returns_suspend_outcome() {
+        let mut editor = Editor::new(Document::scratch());
+
+        let outcome = editor
+            .execute_command_by_name("suspend-frame")
+            .expect("suspend-frame should execute");
+
+        assert_eq!(outcome, EditorOutcome::Suspend);
     }
 
     #[test]

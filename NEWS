@@ -83,6 +83,8 @@ Editing features:
   insertion on Tab, selected-candidate acceptance on Enter, and Emacs-style
   y-or-n-p dirty-buffer confirmation.
 * Prompt before C-x C-c exits when normal buffers have unsaved changes.
+* Suspend Rile with C-z / suspend-frame on terminals with job control, restoring
+  terminal state before suspension and redrawing after resume.
 * Report point location with C-x =.
 * Describe key bindings with C-h k, interactive commands with C-h f,
   configuration options with C-h v, active modes with C-h m, and the current

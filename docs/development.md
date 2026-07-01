@@ -413,6 +413,12 @@ macro recording or replays the last macro. Ctrl-Left/Right map to word movement,
 Ctrl-Up/Down map to paragraph movement, and Ctrl-Home/End map to buffer
 beginning/end.
 
+Post-Milestone 14 terminal polish adds `suspend-frame` on `C-z`. The terminal
+session leaves the alternate screen, restores cooked mode, raises `SIGTSTP`, and
+re-enters raw mode plus the alternate screen after the process resumes. This is
+intended for Unix terminals with job control; automated tests cover command
+dispatch without sending a real suspend signal.
+
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are
