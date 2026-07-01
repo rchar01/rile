@@ -17,6 +17,7 @@ pub mod minibuffer;
 pub mod mode;
 pub mod option;
 pub mod render;
+pub(crate) mod search_pattern;
 pub mod shell;
 pub mod syntax;
 pub mod terminal;

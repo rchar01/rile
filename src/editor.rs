@@ -25,6 +25,7 @@ use crate::minibuffer::{MinibufferState, PromptKind};
 use crate::mode::{ModeId, ModeRegistry};
 use crate::option::{OptionId, OptionRegistry, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
+use crate::search_pattern::{PatternKind, SearchPattern};
 use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{CommentSyntax, Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::text::is_word_character;
@@ -47,7 +48,7 @@ use help::{
     format_unbound_key_help, format_unbound_key_message,
 };
 use prompt_history::PromptHistoryStore;
-use search::{find_match, search_start_after};
+use search::{find_match, search_start_after, search_start_before};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -380,33 +381,48 @@ enum SearchDirection {
 }
 
 impl SearchDirection {
-    fn label(self) -> &'static str {
-        match self {
-            Self::Forward => "I-search: ",
-            Self::Backward => "I-search backward: ",
+    fn label(self, kind: PatternKind) -> &'static str {
+        match (kind, self) {
+            (PatternKind::Literal, Self::Forward) => "I-search: ",
+            (PatternKind::Literal, Self::Backward) => "I-search backward: ",
+            (PatternKind::Regexp, Self::Forward) => "Regexp I-search: ",
+            (PatternKind::Regexp, Self::Backward) => "Regexp I-search backward: ",
         }
     }
 
-    fn failing_label(self) -> &'static str {
-        match self {
-            Self::Forward => "Failing I-search: ",
-            Self::Backward => "Failing I-search backward: ",
+    fn failing_label(self, kind: PatternKind) -> &'static str {
+        match (kind, self) {
+            (PatternKind::Literal, Self::Forward) => "Failing I-search: ",
+            (PatternKind::Literal, Self::Backward) => "Failing I-search backward: ",
+            (PatternKind::Regexp, Self::Forward) => "Failing regexp I-search: ",
+            (PatternKind::Regexp, Self::Backward) => "Failing regexp I-search backward: ",
         }
     }
 
-    fn wrapped_label(self) -> &'static str {
+    fn invalid_label(self) -> &'static str {
         match self {
-            Self::Forward => "Wrapped I-search: ",
-            Self::Backward => "Wrapped I-search backward: ",
+            Self::Forward => "Invalid regexp I-search: ",
+            Self::Backward => "Invalid regexp I-search backward: ",
+        }
+    }
+
+    fn wrapped_label(self, kind: PatternKind) -> &'static str {
+        match (kind, self) {
+            (PatternKind::Literal, Self::Forward) => "Wrapped I-search: ",
+            (PatternKind::Literal, Self::Backward) => "Wrapped I-search backward: ",
+            (PatternKind::Regexp, Self::Forward) => "Wrapped regexp I-search: ",
+            (PatternKind::Regexp, Self::Backward) => "Wrapped regexp I-search backward: ",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SearchState {
+    kind: PatternKind,
     direction: SearchDirection,
     origin: Position,
     current: Option<TextRange>,
+    pattern: Option<SearchPattern>,
     failed_direction: Option<SearchDirection>,
 }
 
@@ -734,7 +750,6 @@ impl Editor {
         let search = SearchDecorator {
             enabled: self.search_highlighting,
             search: self.search.as_ref(),
-            query: self.minibuffer.prompt_input(),
         };
         let providers: [&dyn DecorationProvider; 4] = [&syntax, &region, &query_replace, &search];
         collect_spans_for_line(&providers, line_index, line)
@@ -2121,7 +2136,7 @@ impl Editor {
         &mut self,
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.start_incremental_search(SearchDirection::Backward)?;
+        self.start_incremental_search(SearchDirection::Backward, PatternKind::Literal)?;
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -2129,7 +2144,23 @@ impl Editor {
         &mut self,
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.start_incremental_search(SearchDirection::Forward)?;
+        self.start_incremental_search(SearchDirection::Forward, PatternKind::Literal)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_incremental_search_regexp_backward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_incremental_search(SearchDirection::Backward, PatternKind::Regexp)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_incremental_search_regexp_forward(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_incremental_search(SearchDirection::Forward, PatternKind::Regexp)?;
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -5902,17 +5933,23 @@ impl Editor {
         Ok(EditorOutcome::Continue)
     }
 
-    fn start_incremental_search(&mut self, direction: SearchDirection) -> Result<()> {
+    fn start_incremental_search(
+        &mut self,
+        direction: SearchDirection,
+        kind: PatternKind,
+    ) -> Result<()> {
         self.sync_current_window();
         self.query_replace = None;
         self.search = Some(SearchState {
+            kind,
             direction,
             origin: self.cursor,
             current: None,
+            pattern: None,
             failed_direction: None,
         });
         self.minibuffer
-            .start_prompt(PromptKind::IncrementalSearch, direction.label());
+            .start_prompt(PromptKind::IncrementalSearch, direction.label(kind));
         Ok(())
     }
 
@@ -6001,9 +6038,11 @@ impl Editor {
             return Ok(());
         };
 
+        let pattern = SearchPattern::compile(PatternKind::Literal, &query)
+            .expect("literal search patterns should compile");
         let found = find_match(
             self.document().buffer(),
-            &query,
+            &pattern,
             start,
             SearchDirection::Forward,
         )?;
@@ -6150,37 +6189,57 @@ impl Editor {
 
         let origin = search.origin;
         let direction = search.direction;
+        let kind = search.kind;
         if query.is_empty() {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.pattern = None;
                 search.failed_direction = None;
             }
             self.cursor = origin;
             self.goal_display_column = None;
             self.sync_current_window();
-            self.minibuffer.set_prompt_label(direction.label());
+            self.minibuffer.set_prompt_label(direction.label(kind));
             return Ok(());
         }
 
-        let found = find_match(self.document().buffer(), &query, origin, direction)?;
+        let pattern = match SearchPattern::compile(kind, &query) {
+            Ok(pattern) => pattern,
+            Err(_) => {
+                if let Some(search) = &mut self.search {
+                    search.current = None;
+                    search.pattern = None;
+                    search.failed_direction = Some(direction);
+                }
+                self.cursor = origin;
+                self.goal_display_column = None;
+                self.sync_current_window();
+                self.minibuffer.set_prompt_label(direction.invalid_label());
+                return Ok(());
+            }
+        };
+        let found = find_match(self.document().buffer(), &pattern, origin, direction)?;
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
+                search.pattern = Some(pattern);
                 search.failed_direction = None;
             }
             self.cursor = range.start;
             self.goal_display_column = None;
             self.sync_current_window();
-            self.minibuffer.set_prompt_label(direction.label());
+            self.minibuffer.set_prompt_label(direction.label(kind));
         } else {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.pattern = Some(pattern);
                 search.failed_direction = Some(direction);
             }
             self.cursor = origin;
             self.goal_display_column = None;
             self.sync_current_window();
-            self.minibuffer.set_prompt_label(direction.failing_label());
+            self.minibuffer
+                .set_prompt_label(direction.failing_label(kind));
         }
         Ok(())
     }
@@ -6194,10 +6253,17 @@ impl Editor {
         };
 
         let previous_cursor = self.cursor;
+        let kind = search.kind;
         let is_wrapping = search.current.is_none() && search.failed_direction == Some(direction);
+        let mut repeated_backward_zero_length_at_start = false;
         let start = match (direction, search.current, is_wrapping) {
             (SearchDirection::Forward, Some(range), _) => {
                 search_start_after(self.document().buffer(), range.start)?
+            }
+            (SearchDirection::Backward, Some(range), _) if range.start == range.end => {
+                let previous = search_start_before(self.document().buffer(), range.start)?;
+                repeated_backward_zero_length_at_start = previous == range.start;
+                previous
             }
             (SearchDirection::Backward, Some(range), _) => range.start,
             (SearchDirection::Forward, None, true) => Position::new(0, 0),
@@ -6210,33 +6276,53 @@ impl Editor {
         }
 
         if query.is_empty() {
-            self.minibuffer.set_prompt_label(direction.label());
+            self.minibuffer.set_prompt_label(direction.label(kind));
             return Ok(());
         }
 
-        let found = find_match(self.document().buffer(), &query, start, direction)?;
+        let pattern = match SearchPattern::compile(kind, &query) {
+            Ok(pattern) => pattern,
+            Err(_) => {
+                if let Some(search) = &mut self.search {
+                    search.current = None;
+                    search.pattern = None;
+                    search.failed_direction = Some(direction);
+                }
+                self.minibuffer.set_prompt_label(direction.invalid_label());
+                return Ok(());
+            }
+        };
+
+        let found = if repeated_backward_zero_length_at_start {
+            None
+        } else {
+            find_match(self.document().buffer(), &pattern, start, direction)?
+        };
         if let Some(range) = found {
             if let Some(search) = &mut self.search {
                 search.current = Some(range);
+                search.pattern = Some(pattern);
                 search.failed_direction = None;
             }
             self.cursor = range.start;
             self.goal_display_column = None;
             self.sync_current_window();
             let label = if is_wrapping {
-                direction.wrapped_label()
+                direction.wrapped_label(kind)
             } else {
-                direction.label()
+                direction.label(kind)
             };
             self.minibuffer.set_prompt_label(label);
         } else {
             if let Some(search) = &mut self.search {
                 search.current = None;
+                search.pattern = Some(pattern);
                 search.failed_direction = Some(direction);
             }
             self.cursor = previous_cursor;
             self.sync_current_window();
-            self.minibuffer.set_prompt_label(direction.failing_label());
+            self.minibuffer
+                .set_prompt_label(direction.failing_label(kind));
         }
         Ok(())
     }
@@ -7827,7 +7913,6 @@ impl DecorationProvider for QueryReplaceDecorator {
 struct SearchDecorator<'a> {
     enabled: bool,
     search: Option<&'a SearchState>,
-    query: Option<&'a str>,
 }
 
 impl DecorationProvider for SearchDecorator<'_> {
@@ -7838,16 +7923,14 @@ impl DecorationProvider for SearchDecorator<'_> {
         let Some(search) = self.search else {
             return Vec::new();
         };
-        let Some(query) = self.query else {
+        let Some(pattern) = search.pattern.as_ref() else {
             return Vec::new();
         };
-        if query.is_empty() {
-            return Vec::new();
-        }
 
-        line.match_indices(query)
-            .map(|(start, match_text)| {
-                let end = start + match_text.len();
+        pattern
+            .match_ranges_in_line(line)
+            .into_iter()
+            .map(|(start, end)| {
                 let face = if search.current
                     == Some(TextRange::new(
                         Position::new(line_index, start),
@@ -17661,6 +17744,154 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(
             editor.minibuffer().display_text().as_deref(),
             Some("Failing I-search backward: z")
+        );
+    }
+
+    #[test]
+    fn regexp_incremental_search_matches_and_highlights() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo\nbar\nféo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt");
+        for character in "f.o".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Regexp I-search: f.o")
+        );
+
+        let spans = editor.spans_for_line(2, "féo");
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_byte, 0);
+        assert_eq!(spans[0].end_byte, "féo".len());
+        assert_eq!(spans[0].face, Face::SearchMatch);
+    }
+
+    #[test]
+    fn regexp_incremental_search_repeats_and_wraps() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo\nbar\nféo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt");
+        for character in "f.o".chars() {
+            editor
+                .handle_key(KeyEvent::Text(character.to_string()))
+                .expect("query should update");
+        }
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should move");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should fail at boundary");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing regexp I-search: f.o")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("repeat forward should wrap");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Wrapped regexp I-search: f.o")
+        );
+    }
+
+    #[test]
+    fn regexp_incremental_search_reports_invalid_pattern() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("[".to_owned()))
+            .expect("invalid query should update prompt");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Invalid regexp I-search: [")
+        );
+    }
+
+    #[test]
+    fn regexp_incremental_search_finds_zero_length_boundary() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, "alpha".len());
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('r'))
+            .expect("regexp search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("$".to_owned()))
+            .expect("query should update");
+
+        assert_eq!(editor.cursor(), Position::new(0, "alpha".len()));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Regexp I-search backward: $")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("repeat backward should not refind same zero-length match");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing regexp I-search backward: $")
+        );
+    }
+
+    #[test]
+    fn regexp_incremental_search_does_not_repeat_zero_length_at_bob() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('r'))
+            .expect("regexp search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("$".to_owned()))
+            .expect("query should update");
+
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Regexp I-search backward: $")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("repeat backward should fail at boundary");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Failing regexp I-search backward: $")
         );
     }
 }

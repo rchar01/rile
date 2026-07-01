@@ -147,6 +147,29 @@ Notes: Emacs supports many additional choice keys such as comma, period, undo,
 recursive edit, replacement editing, and help. Those are out of scope for the
 current Rile command unless a concrete user need appears.
 
+### `isearch-forward-regexp` / `isearch-backward-regexp`
+
+Status: `implemented` in Rile as a small regexp subset.
+
+Default binding: `C-M-s` and `C-M-r`.
+
+Purpose: search forward or backward incrementally using a regular expression.
+
+Prompt flow: the regexp query updates the current match live. Enter accepts the
+current match, and `C-g` cancels and restores the original point. Repeating with
+`C-s` or `C-r` moves to the next or previous match and wraps after an explicit
+boundary failure.
+
+Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
+`^`, `$`, escaped metacharacters, and character classes such as `[abc]`,
+`[^abc]`, and `[a-z]`. Rile does not yet support grouping, alternation,
+captures, backreferences, counted repetition, word-boundary syntax, syntax
+classes, or multiline regexp matching.
+
+Evidence: GNU Emacs command names and default bindings; Rile unit and PTY tests
+for regexp isearch command dispatch, matching, repeat, wrap, invalid patterns,
+and highlighting.
+
 ## First-Batch Reference Entries
 
 ### `downcase-word`

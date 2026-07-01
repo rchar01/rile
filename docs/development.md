@@ -85,16 +85,18 @@ Milestone 7 adds incremental search:
 
 - `C-s` starts forward incremental search;
 - `C-r` starts backward incremental search;
+- `C-M-s` and `C-M-r` start forward and backward regexp incremental search;
 - typed query text updates the current match live;
 - repeated `C-s` and `C-r` jump to the next or previous match;
 - repeating search at a buffer boundary first reports a failing search, and the
   next repeat wraps to the first or last match with a wrapped-search prompt;
 - Enter accepts the current match;
 - `C-g` cancels search and restores the original cursor position;
-- active search uses `render::Face::CurrentSearchMatch` and `render::Face::SearchMatch` spans;
+- active search uses `render::Face::CurrentSearchMatch` and
+  `render::Face::SearchMatch` spans;
 - the terminal renderer displays active search spans with ANSI highlighting;
 - tests cover UTF-8 matches, repeated search, wrapping, cancellation, failed
-  search, and ANSI span rendering.
+  search, regexp search, and ANSI span rendering.
 
 Milestone 8 adds multiple buffers:
 
@@ -481,10 +483,11 @@ Current limitations: there is no prompt cursor movement, no
 incremental-search/query-replace prompt history, no shell-command process
 timeout/cancellation, no message-log retention limit or persistence across
 sessions, and no redo or advanced Emacs undo traversal yet.
-Search and query replace are exact
-line-local substring matching; search wraps only after an explicit boundary
-failure, query replace does not wrap, and neither command matches across line
-breaks.
+Literal search and query replace are exact line-local substring matching. Regexp
+incremental search uses Rile's built-in line-local subset: `.`, `*`, `+`, `?`,
+`^`, `$`, escaped metacharacters, and character classes with ranges and
+negation. Search wraps only after an explicit boundary failure, query replace
+does not wrap, and no search command matches across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
 The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.

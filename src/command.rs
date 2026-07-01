@@ -59,6 +59,8 @@ pub enum Command {
     GlobalAutoRevertMode,
     IncrementalSearchBackward,
     IncrementalSearchForward,
+    IncrementalSearchRegexpBackward,
+    IncrementalSearchRegexpForward,
     InsertFile,
     InsertRegister,
     IncrementRegister,
@@ -254,7 +256,11 @@ impl CommandCategory {
             }
             DeleteOtherWindows | DeleteWindow | OtherWindow | SplitWindowBelow
             | SplitWindowRight => Self::Windows,
-            IncrementalSearchBackward | IncrementalSearchForward | QueryReplace => Self::Search,
+            IncrementalSearchBackward
+            | IncrementalSearchForward
+            | IncrementalSearchRegexpBackward
+            | IncrementalSearchRegexpForward
+            | QueryReplace => Self::Search,
             ShellCommand | ShellCommandOnRegion | QuitShellOutputWindow => Self::Shell,
             CopyRectangleToRegister
             | CopyToRegister
@@ -348,6 +354,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         GlobalAutoRevertMode => "Toggle automatic reloads for all clean file buffers.",
         IncrementalSearchBackward => "Start backward incremental search from point.",
         IncrementalSearchForward => "Start forward incremental search from point.",
+        IncrementalSearchRegexpBackward => "Start backward regexp incremental search from point.",
+        IncrementalSearchRegexpForward => "Start forward regexp incremental search from point.",
         InsertFile => "Prompt for a file path and insert its contents at point.",
         InsertRegister => "Insert the text, rectangle, or number stored in a register.",
         IncrementRegister => "Add the numeric argument to a prompted number register.",
@@ -891,12 +899,26 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_incremental_search_backward),
         CommandSpec::new(
+            "isearch-backward-regexp",
+            "Search backward by regexp incrementally",
+            true,
+            IncrementalSearchRegexpBackward,
+        )
+        .with_handler(crate::editor::Editor::command_incremental_search_regexp_backward),
+        CommandSpec::new(
             "isearch-forward",
             "Search forward incrementally",
             true,
             IncrementalSearchForward,
         )
         .with_handler(crate::editor::Editor::command_incremental_search_forward),
+        CommandSpec::new(
+            "isearch-forward-regexp",
+            "Search forward by regexp incrementally",
+            true,
+            IncrementalSearchRegexpForward,
+        )
+        .with_handler(crate::editor::Editor::command_incremental_search_regexp_forward),
         CommandSpec::new(
             "insert-file",
             "Insert file contents at point",
@@ -1317,6 +1339,8 @@ mod tests {
         assert!(registry.contains("global-auto-revert-mode"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
+        assert!(registry.contains("isearch-forward-regexp"));
+        assert!(registry.contains("isearch-backward-regexp"));
         assert!(registry.contains("increment-register"));
         assert!(registry.contains("insert-file"));
         assert!(registry.contains("insert-register"));

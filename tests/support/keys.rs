@@ -26,6 +26,11 @@ pub fn meta(letter: char) -> Vec<u8> {
     vec![b'\x1b', letter as u8]
 }
 
+pub fn ctrl_meta(letter: char) -> Vec<u8> {
+    assert!(letter.is_ascii_alphabetic());
+    vec![b'\x1b', (letter.to_ascii_lowercase() as u8) - b'a' + 1]
+}
+
 pub fn meta_backspace() -> Vec<u8> {
     vec![b'\x1b', b'\x7f']
 }

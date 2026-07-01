@@ -153,6 +153,9 @@ Basic editor keys:
 - `C-x o` selects the next window.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
+- `C-M-s` and `C-M-r` start forward and backward regexp incremental search.
+  The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`, escaped
+  metacharacters, and character classes such as `[abc]`, `[^abc]`, and `[a-z]`.
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
 - `M-e` and `M-a` move forward and backward by sentence using Rile's documented
   default sentence-boundary subset.
@@ -194,7 +197,7 @@ Basic editor keys:
   minibuffer prompts.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current search and query replace use exact UTF-8 substring matching within individual lines. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and neither command matches across line breaks yet.
+Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search uses Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Empty rows are left blank rather than filled with marker characters.

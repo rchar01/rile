@@ -67,7 +67,8 @@ Helper modules under `src/editor/` hold pure or narrowly scoped behavior that wa
 split out of the main editor body:
 
 - `src/editor/help.rs`: generated help/about/describe text.
-- `src/editor/search.rs`: exact UTF-8 search helper logic.
+- `src/editor/search.rs`: buffer-position search helper logic.
+- `src/search_pattern.rs`: literal and built-in regexp pattern matching.
 - `src/editor/prompt_history.rs`: per-prompt-kind history storage and navigation.
 - `src/editor/completion_policy.rs`: completion prompt Enter, `M-RET`, Tab,
   directory descent, and exact-input acceptance policy.
@@ -140,7 +141,8 @@ orderless matching.
 
 Incremental search and query replace are coordinated by `Editor` because they
 span prompts, cursor movement, highlights, wrapping/failure state, and undo.
-Search matching itself is kept in `src/editor/search.rs`.
+Buffer traversal is kept in `src/editor/search.rs`; literal and line-local
+regexp pattern matching lives in `src/search_pattern.rs`.
 
 Registers support point, text, rectangle, and number values. Rectangles support
 mark mode, kill/copy/yank, delete, clear, open, string replacement, and line

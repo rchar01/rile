@@ -369,8 +369,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('_')], Undo),
         KeyBinding::new([KeyEvent::Ctrl('k')], KillLine),
         KeyBinding::new([KeyEvent::Ctrl('s')], IncrementalSearchForward),
+        KeyBinding::new([KeyEvent::CtrlMeta('s')], IncrementalSearchRegexpForward),
         KeyBinding::new([KeyEvent::Ctrl('w')], KillRegion),
         KeyBinding::new([KeyEvent::Ctrl('r')], IncrementalSearchBackward),
+        KeyBinding::new([KeyEvent::CtrlMeta('r')], IncrementalSearchRegexpBackward),
         KeyBinding::new([KeyEvent::Ctrl('y')], Yank),
         KeyBinding::new([KeyEvent::Special(SpecialKey::Delete)], DeleteChar),
         KeyBinding::new(

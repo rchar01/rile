@@ -56,6 +56,10 @@ Editing features:
   current plain-text mode, point is left at the start of the new line.
 * Quote the next key with C-q to insert printable text, Tab, or Enter
   literally.
+* Search forward and backward with regular expressions using C-M-s and C-M-r.
+  Rile's built-in line-local regexp subset supports `.`, `*`, `+`, `?`, `^`,
+  `$`, escaped metacharacters, and character classes including ranges and
+  negation.
 * Undo current-buffer edits with grouped normal typing.
 * Run commands through M-x with command-name completion.
 * Run shell commands with M-!, display captured stdout/stderr by default, and

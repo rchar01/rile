@@ -7,9 +7,8 @@ use std::path::{Path, PathBuf};
 use crate::command::CommandRegistry;
 use crate::keymap::{KeyMap, format_key_sequence};
 use crate::matching::{
-    is_smart_case_sensitive, smart_case_contains, smart_case_ends_with_with_mode,
-    smart_case_eq, smart_case_eq_with_mode, smart_case_starts_with,
-    smart_case_starts_with_with_mode,
+    is_smart_case_sensitive, smart_case_contains, smart_case_ends_with_with_mode, smart_case_eq,
+    smart_case_eq_with_mode, smart_case_starts_with, smart_case_starts_with_with_mode,
 };
 use crate::option::OptionRegistry;
 

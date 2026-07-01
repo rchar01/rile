@@ -1,5 +1,31 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp incremental search.
+
+	* src/search_pattern.rs: New literal and regexp search pattern module.
+	* src/lib.rs: Add search_pattern module.
+	* src/editor/search.rs (find_match): Search with compiled patterns.
+	(search_start_before): New helper for repeated backward zero-length matches.
+	* src/editor.rs (SearchState): Track search pattern kind and compiled pattern.
+	(command_incremental_search_regexp_backward): New command handler.
+	(command_incremental_search_regexp_forward): New command handler.
+	(update_incremental_search, repeat_incremental_search): Compile and search
+	regexp patterns, including invalid-pattern prompt labels.
+	(SearchDecorator): Highlight matches through the compiled pattern.
+	* src/command.rs (Command): Add regexp isearch commands.
+	(command_specs): Register isearch-forward-regexp and isearch-backward-regexp.
+	* src/keymap.rs (default_bindings): Bind C-M-s and C-M-r.
+	* tests/support/keys.rs (ctrl_meta): New helper.
+	* tests/pty_search.rs (regexp_incremental_search_matches_and_repeats): New
+	test.
+	* README.md: Document regexp isearch.
+	* NEWS: Add user-visible regexp isearch entry.
+	* docs/development.md: Document regexp search behavior and limits.
+	* docs/architecture.md: Document search pattern module split.
+	* docs/emacs-function-reference.md: Add regexp isearch entry.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Add Ctrl-Meta key events.
 
 	* src/input.rs (KeyEvent): Add CtrlMeta.
