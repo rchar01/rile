@@ -1,5 +1,13 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Remove completed kg gap plan.
+
+	* docs/kg-emacs-gap-plan.md: Delete completed temporary plan.
+	* docs/README.md: Remove link to the plan.
+	* docs/development.md: Preserve optional-mode decisions.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Implement suspend-frame.
 
 	* src/command.rs (Command): Add SuspendFrame.

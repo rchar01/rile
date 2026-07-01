@@ -419,6 +419,12 @@ re-enters raw mode plus the alternate screen after the process resumes. This is
 intended for Unix terminals with job control; automated tests cover command
 dispatch without sending a real suspend signal.
 
+kg-inspired optional conveniences are not planned as default behavior unless a
+clear Emacs-compatible requirement appears. Shift selection belongs behind an
+explicit optional mode, CUA clipboard key aliases belong behind CUA-mode-style
+behavior, and electric-pair insertion belongs behind an optional modern editing
+mode rather than always-on base editing.
+
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are
