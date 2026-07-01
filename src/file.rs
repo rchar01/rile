@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::fs::{self, OpenOptions};
+use std::fs::{self, Metadata, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::SystemTime;
 
 use crate::buffer::Buffer;
 use crate::{Result, RileError};
@@ -22,6 +23,12 @@ pub enum DocumentKind {
     ShellOutput,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileStamp {
+    modified: Option<SystemTime>,
+    len: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     buffer: Buffer,
@@ -31,6 +38,7 @@ pub struct Document {
     read_only: bool,
     missing_on_open: bool,
     backup_on_save: bool,
+    file_stamp: Option<FileStamp>,
 }
 
 impl Document {
@@ -43,6 +51,7 @@ impl Document {
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -60,6 +69,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -72,6 +82,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -84,6 +95,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -96,6 +108,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -108,6 +121,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -120,6 +134,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            file_stamp: None,
         }
     }
 
@@ -128,6 +143,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         match fs::read(&path) {
             Ok(bytes) => {
                 let text = decode_text_file_bytes(&path, bytes)?;
+                let file_stamp = file_stamp_from_path(&path)?;
                 Ok(Self {
                     buffer: Buffer::from_text(&text),
                     path: Some(path),
@@ -136,6 +152,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                     read_only: false,
                     missing_on_open: false,
                     backup_on_save: false,
+                    file_stamp,
                 })
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
@@ -146,6 +163,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                 read_only: false,
                 missing_on_open: true,
                 backup_on_save: false,
+                file_stamp: None,
             }),
             Err(error) => Err(error.into()),
         }
@@ -224,6 +242,15 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.backup_on_save = enabled;
     }
 
+    pub fn file_changed_on_disk(&self) -> Result<bool> {
+        if self.kind != DocumentKind::Normal || self.path.is_none() {
+            return Ok(false);
+        }
+        let path = self.path.as_ref().expect("path checked above");
+        let current = file_stamp_from_path(path)?;
+        Ok(current.is_some() && current != self.file_stamp)
+    }
+
     pub fn save(&mut self) -> Result<()> {
         if self.is_read_only() {
             return Err(RileError::InvalidInput("buffer is read-only".to_owned()));
@@ -290,6 +317,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         safe_write(path, self.buffer.serialize().as_bytes())?;
         self.buffer.mark_clean();
         self.missing_on_open = false;
+        self.file_stamp = file_stamp_from_path(path)?;
         Ok(())
     }
 }
@@ -297,6 +325,24 @@ Rile is free software under GPL-3.0-or-later.\n",
 pub fn read_text_file(path: impl AsRef<Path>) -> Result<String> {
     let path = path.as_ref();
     decode_text_file_bytes(path, fs::read(path)?)
+}
+
+fn file_stamp_from_path(path: &Path) -> Result<Option<FileStamp>> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(Some(FileStamp::from_metadata(&metadata))),
+        Ok(_) => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+impl FileStamp {
+    fn from_metadata(metadata: &Metadata) -> Self {
+        Self {
+            modified: metadata.modified().ok(),
+            len: metadata.len(),
+        }
+    }
 }
 
 fn decode_text_file_bytes(path: &Path, bytes: Vec<u8>) -> Result<String> {

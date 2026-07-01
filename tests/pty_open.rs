@@ -141,3 +141,55 @@ fn not_modified_clears_dirty_marker_without_saving() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn auto_revert_mode_reloads_clean_file_after_idle_poll() -> Result<()> {
+    let file = fixtures::named_temp_file("before\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("before")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("auto-revert-mode", b"auto-revert-mode")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Auto-revert for")?;
+    std::fs::write(file.path(), "after\n")?;
+
+    rile.wait_for_screen_contains("after")?;
+    rile.assert_screen_contains("Reverted")?;
+    if rile.snapshot_text().contains("before") {
+        anyhow::bail!(
+            "auto-revert did not replace old contents\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn auto_revert_mode_does_not_reload_dirty_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("before\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("before")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("auto-revert-mode", b"auto-revert-mode")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Auto-revert for")?;
+    rile.send("dirty edit", b"dirty ")?;
+    rile.assert_screen_contains("dirty before")?;
+    std::fs::write(file.path(), "after\n")?;
+    rile.drain_for(std::time::Duration::from_millis(300))?;
+
+    rile.assert_screen_contains("dirty before")?;
+    if rile.snapshot_text().contains("after") {
+        anyhow::bail!(
+            "auto-revert discarded dirty contents\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.quit()?;
+    Ok(())
+}

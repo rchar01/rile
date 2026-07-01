@@ -28,8 +28,8 @@ it is not a source-porting guide or a behavior oracle.
 | Revert current buffer | `M-x revert-buffer` | `revert-buffer` | Implemented for file-backed normal buffers with dirty confirmation. |
 | Clear dirty flag | `M-x not-modified` | `not-modified` | Implemented without changing file contents or undo history. |
 | Save modified buffers | `C-x s` | `save-some-buffers` | Implemented as per-buffer prompting; skips special, read-only, and unnamed buffers. |
-| Per-buffer auto revert | `M-x auto-revert-mode` | `auto-revert-mode` | Implement only for clean file-backed buffers; never discard dirty edits. |
-| Global auto revert | `M-x global-auto-revert-mode` | `global-auto-revert-mode` | Implement as an editor-wide toggle reusing the clean-buffer safety rule. |
+| Per-buffer auto revert | `M-x auto-revert-mode` | `auto-revert-mode` | Implemented for clean file-backed buffers; never discards dirty edits. |
+| Global auto revert | `M-x global-auto-revert-mode` | `global-auto-revert-mode` | Implemented as an editor-wide toggle reusing the clean-buffer safety rule. |
 | Current-line whitespace cleanup | `M-x delete-trailing-space` | no default priority over `delete-trailing-whitespace` | Defer unless a clear Emacs-compatible command target is chosen. |
 | kg whole-buffer whitespace cleanup | `M-x whitespace-cleanup` | `delete-trailing-whitespace` | Already covered by Rile's `delete-trailing-whitespace`; keep Emacs name. |
 | Version display | `M-x version` | `emacs-version`, `about-emacs` | Already covered differently by `about-rile`; keep Rile command. |
@@ -45,7 +45,7 @@ it is not a source-porting guide or a behavior oracle.
 - [x] Add `what-cursor-position` and `move-to-window-line-top-bottom`.
 - [x] Add `revert-buffer` and `not-modified`.
 - [x] Add `save-some-buffers` on `C-x s`.
-- [ ] Add safe `auto-revert-mode` and `global-auto-revert-mode`.
+- [x] Add safe `auto-revert-mode` and `global-auto-revert-mode`.
 - [ ] Add safe default-compatible key aliases after input parser tests.
 - [ ] Revisit optional modes: shift selection, CUA aliases, and electric pair.
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 
 use unicode_segmentation::UnicodeSegmentation;
@@ -78,6 +78,8 @@ pub struct Editor {
     messages_return: Option<Viewport>,
     shell_output_return: Option<Viewport>,
     buffer_list_rows: Vec<Option<BufferId>>,
+    auto_revert_buffers: HashSet<BufferId>,
+    global_auto_revert: bool,
     describe_key: Option<DescribeKeyState>,
     completion: Option<CompletionSession>,
     completion_return: Option<Viewport>,
@@ -440,6 +442,8 @@ impl Editor {
             messages_return: None,
             shell_output_return: None,
             buffer_list_rows: Vec::new(),
+            auto_revert_buffers: HashSet::new(),
+            global_auto_revert: false,
             describe_key: None,
             completion: None,
             completion_return: None,
@@ -836,6 +840,60 @@ impl Editor {
             }
             key => self.handle_bound_key(key),
         }
+    }
+
+    pub fn poll_auto_revert(&mut self) -> Result<bool> {
+        if self.minibuffer.prompt().is_some() {
+            return Ok(false);
+        }
+        let enabled_buffers = self.auto_revert_buffers.clone();
+        let mut reverted = Vec::new();
+        for entry in self.buffers.entries_mut() {
+            let id = entry.id();
+            if !self.global_auto_revert && !enabled_buffers.contains(&id) {
+                continue;
+            }
+            let document = entry.document_mut();
+            if document.kind() != DocumentKind::Normal
+                || document.path().is_none()
+                || document.is_dirty()
+                || !document.file_changed_on_disk()?
+            {
+                continue;
+            }
+            document.reload_from_disk()?;
+            reverted.push(id);
+        }
+
+        if reverted.is_empty() {
+            return Ok(false);
+        }
+        self.undo_stack
+            .retain(|entry| !reverted.contains(&entry.buffer));
+        for buffer in &reverted {
+            if *buffer == self.current_buffer {
+                self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
+                self.sync_current_window();
+            } else if let Some(document) = self.buffers.document(*buffer)
+                && let Some(viewport) = self.buffer_viewports.get_mut(buffer)
+            {
+                viewport.cursor = clamp_position_to_buffer(document.buffer(), viewport.cursor);
+            }
+        }
+        self.refresh_visible_buffer_list();
+        if reverted.len() == 1 {
+            let name = self
+                .buffers
+                .name(reverted[0])
+                .unwrap_or("buffer")
+                .to_owned();
+            self.minibuffer
+                .set_message(format!("Reverted {name} from disk"));
+        } else {
+            self.minibuffer
+                .set_message(format!("Reverted {} buffers from disk", reverted.len()));
+        }
+        Ok(true)
     }
 
     pub fn execute_command_by_name(&mut self, name: &str) -> Result<EditorOutcome> {
@@ -1590,6 +1648,25 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         let text = format_about_rile_help(&AboutRileInfo::current());
         self.open_help_buffer(text);
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_auto_revert_mode(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.toggle_auto_revert_mode();
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_global_auto_revert_mode(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.global_auto_revert = !self.global_auto_revert;
+        let state = if self.global_auto_revert { "on" } else { "off" };
+        self.minibuffer
+            .set_message(format!("Global auto-revert is {state}"));
         Ok(CommandOutcome::Continue)
     }
 
@@ -4979,6 +5056,25 @@ impl Editor {
         self.refresh_visible_buffer_list();
         self.minibuffer.set_message("Modification flag cleared");
         Ok(())
+    }
+
+    fn toggle_auto_revert_mode(&mut self) {
+        if self.document().kind() != DocumentKind::Normal || self.document().path().is_none() {
+            self.minibuffer
+                .set_error("auto-revert-mode requires a file-backed normal buffer");
+            return;
+        }
+        let enabled = if self.auto_revert_buffers.contains(&self.current_buffer) {
+            self.auto_revert_buffers.remove(&self.current_buffer);
+            false
+        } else {
+            self.auto_revert_buffers.insert(self.current_buffer);
+            true
+        };
+        let state = if enabled { "on" } else { "off" };
+        let name = self.current_buffer_name().to_owned();
+        self.minibuffer
+            .set_message(format!("Auto-revert for {name} is {state}"));
     }
 
     fn start_write_file(&mut self) -> Result<()> {

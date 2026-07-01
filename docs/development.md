@@ -399,6 +399,13 @@ modified file-backed normal buffers in buffer-list order, prompts before each
 save, uses the same safe save path as `save-buffer`, and skips special,
 read-only, and unnamed buffers.
 
+Post-Milestone 14 file-state polish also adds `auto-revert-mode` and
+`global-auto-revert-mode` as unbound `M-x` commands. Auto-revert uses idle input
+timeouts to poll file size and modification timestamp changes, reloads only
+clean file-backed normal buffers, and never discards dirty edits. Reloaded
+buffers drop stale undo records for that buffer and clamp saved point positions
+to the new text.
+
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are

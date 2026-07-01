@@ -1,5 +1,28 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Implement safe auto-revert commands.
+
+	* src/file.rs (FileStamp): New type.
+	(Document): Track file state snapshots.
+	(Document::file_changed_on_disk): New method.
+	* src/input.rs (KeyReader::read_key_or_timeout): New method.
+	* src/terminal/mod.rs (TerminalSession::run): Poll auto-revert while idle.
+	* src/buffers.rs (BufferManager::entries_mut): New method.
+	* src/command.rs (Command): Add AutoRevertMode and GlobalAutoRevertMode.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/editor.rs (Editor): Add auto-revert state.
+	(Editor::command_auto_revert_mode)
+	(Editor::command_global_auto_revert_mode, Editor::poll_auto_revert)
+	(Editor::toggle_auto_revert_mode): New command and polling logic.
+	* tests/pty_open.rs (auto_revert_mode_reloads_clean_file_after_idle_poll)
+	(auto_revert_mode_does_not_reload_dirty_buffer): New tests.
+	* README.md: Document auto-revert commands.
+	* NEWS: Mention idle clean-buffer auto-revert.
+	* docs/development.md: Record behavior and safety rules.
+	* docs/kg-emacs-gap-plan.md: Mark the slice complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Implement save-some-buffers.
 
 	* src/minibuffer.rs (PromptKind): Add SaveSomeBuffers.

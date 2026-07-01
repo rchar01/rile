@@ -273,9 +273,13 @@ where
 
     fn run(&mut self, mut editor: Editor) -> Result<()> {
         loop {
-            match editor.handle_key(self.input.read_key()?)? {
-                EditorOutcome::Quit => return Ok(()),
-                EditorOutcome::Continue => self.draw(&mut editor)?,
+            if let Some(key) = self.input.read_key_or_timeout()? {
+                match editor.handle_key(key)? {
+                    EditorOutcome::Quit => return Ok(()),
+                    EditorOutcome::Continue => self.draw(&mut editor)?,
+                }
+            } else if editor.poll_auto_revert()? {
+                self.draw(&mut editor)?;
             }
         }
     }

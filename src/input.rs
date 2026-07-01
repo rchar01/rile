@@ -59,18 +59,27 @@ impl<R: Read> KeyReader<R> {
 
     pub fn read_key(&mut self) -> Result<KeyEvent> {
         loop {
+            if let Some(key) = self.read_key_or_timeout()? {
+                return Ok(key);
+            }
+        }
+    }
+
+    pub fn read_key_or_timeout(&mut self) -> Result<Option<KeyEvent>> {
+        loop {
             if let Some(parsed) = parse_key_sequence_with_erase_byte(&self.buffer, self.erase_byte)?
             {
                 self.buffer.drain(..parsed.consumed);
-                return Ok(parsed.event);
+                return Ok(Some(parsed.event));
             }
 
             let mut byte = [0];
             match self.reader.read(&mut byte) {
                 Ok(0) if self.buffer == [0x1b] => {
                     self.buffer.clear();
-                    return Ok(KeyEvent::Special(SpecialKey::Escape));
+                    return Ok(Some(KeyEvent::Special(SpecialKey::Escape)));
                 }
+                Ok(0) if self.buffer.is_empty() => return Ok(None),
                 Ok(0) => continue,
                 Ok(_) => self.buffer.push(byte[0]),
                 Err(error) => return Err(error.into()),

@@ -117,6 +117,8 @@ Basic editor keys:
   read-only, and unnamed buffers.
 - `C-x C-v` reverts the current file-backed buffer from disk, prompting before
   discarding unsaved changes.
+- `M-x auto-revert-mode` and `M-x global-auto-revert-mode` reload changed files
+  while idle, but only for clean file-backed buffers.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
 - `C-x C-f` prompts for a file path with completion, starts from the current
   buffer's directory, and opens it; Tab inserts the selected path, Enter accepts

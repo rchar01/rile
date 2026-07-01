@@ -6,6 +6,7 @@ use crate::input::KeyEvent;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
     AboutRile,
+    AutoRevertMode,
     BackToIndentation,
     BackwardChar,
     BackwardKillWord,
@@ -54,6 +55,7 @@ pub enum Command {
     ForwardSentence,
     ForwardWord,
     GotoLine,
+    GlobalAutoRevertMode,
     IncrementalSearchBackward,
     IncrementalSearchForward,
     InsertFile,
@@ -266,7 +268,9 @@ impl CommandCategory {
             AboutRile | DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
             | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
             | QuitMessagesWindow | ViewEchoAreaMessages | WhatCursorPosition => Self::Help,
-            NotModified
+            AutoRevertMode
+            | GlobalAutoRevertMode
+            | NotModified
             | ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -281,6 +285,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
 
     match command {
         AboutRile => "Show version, build, terminal, config, and runtime path information.",
+        AutoRevertMode => "Toggle automatic reloads for the current clean file buffer.",
         BackToIndentation => {
             "Move point to the first non-whitespace character on the current line."
         }
@@ -331,6 +336,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ForwardSentence => "Move point forward to the end of a sentence.",
         ForwardWord => "Move point forward by one word.",
         GotoLine => "Prompt for a line or line:column location and move point there.",
+        GlobalAutoRevertMode => "Toggle automatic reloads for all clean file buffers.",
         IncrementalSearchBackward => "Start backward incremental search from point.",
         IncrementalSearchForward => "Start forward incremental search from point.",
         InsertFile => "Prompt for a file path and insert its contents at point.",
@@ -550,6 +556,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("about-rile", "Show information about Rile", true, AboutRile)
             .with_handler(crate::editor::Editor::command_about_rile),
+        CommandSpec::new(
+            "auto-revert-mode",
+            "Toggle current buffer auto-revert",
+            true,
+            AutoRevertMode,
+        )
+        .with_handler(crate::editor::Editor::command_auto_revert_mode),
         CommandSpec::new(
             "back-to-indentation",
             "Move cursor to first non-whitespace character on line",
@@ -846,6 +859,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_forward_sentence),
         CommandSpec::new("goto-line", "Go to line or line:column", true, GotoLine)
             .with_handler(crate::editor::Editor::command_goto_line),
+        CommandSpec::new(
+            "global-auto-revert-mode",
+            "Toggle global auto-revert",
+            true,
+            GlobalAutoRevertMode,
+        )
+        .with_handler(crate::editor::Editor::command_global_auto_revert_mode),
         CommandSpec::new(
             "isearch-backward",
             "Search backward incrementally",
@@ -1249,6 +1269,7 @@ mod tests {
             Some(Command::SaveBuffer)
         );
         assert!(registry.contains("about-rile"));
+        assert!(registry.contains("auto-revert-mode"));
         assert!(registry.contains("back-to-indentation"));
         assert!(registry.contains("beginning-of-buffer"));
         assert!(registry.contains("backward-kill-word"));
@@ -1273,6 +1294,7 @@ mod tests {
         assert!(registry.contains("forward-sentence"));
         assert!(registry.contains("forward-word"));
         assert!(registry.contains("goto-line"));
+        assert!(registry.contains("global-auto-revert-mode"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("increment-register"));

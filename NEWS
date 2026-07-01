@@ -67,7 +67,9 @@ Editing features:
 * Open files read-only through C-x C-r with file-name completion, including
   selected existing-path acceptance on Enter.
 * Revert file-backed buffers from disk with C-x C-v and clear a buffer's
-  modified flag with M-x not-modified.
+  modified flag with M-x not-modified.  M-x auto-revert-mode and M-x
+  global-auto-revert-mode reload externally changed clean file buffers while
+  idle.
 * Toggle normal buffers read-only and writable with C-x C-q.
 * Switch buffers through C-x b with buffer-name completion, selected-candidate
   insertion on Tab, selected-candidate acceptance on Enter, default-buffer
