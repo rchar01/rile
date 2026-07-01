@@ -6,6 +6,11 @@ use std::path::{Path, PathBuf};
 
 use crate::command::CommandRegistry;
 use crate::keymap::{KeyMap, format_key_sequence};
+use crate::matching::{
+    is_smart_case_sensitive, smart_case_contains, smart_case_ends_with_with_mode,
+    smart_case_eq, smart_case_eq_with_mode, smart_case_starts_with,
+    smart_case_starts_with_with_mode,
+};
 use crate::option::OptionRegistry;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -796,54 +801,6 @@ fn anchored_exact_match_quality(
     case_sensitive: bool,
 ) -> Option<MatchQuality> {
     smart_case_eq_with_mode(value, component, case_sensitive).then_some(MatchQuality::Exact)
-}
-
-fn smart_case_starts_with(value: &str, component: &str) -> bool {
-    if is_smart_case_sensitive(component) {
-        value.starts_with(component)
-    } else {
-        value.to_lowercase().starts_with(&component.to_lowercase())
-    }
-}
-
-fn smart_case_contains(value: &str, component: &str) -> bool {
-    if is_smart_case_sensitive(component) {
-        value.contains(component)
-    } else {
-        value.to_lowercase().contains(&component.to_lowercase())
-    }
-}
-
-fn is_smart_case_sensitive(component: &str) -> bool {
-    component.chars().any(char::is_uppercase)
-}
-
-fn smart_case_eq(value: &str, component: &str) -> bool {
-    smart_case_eq_with_mode(value, component, is_smart_case_sensitive(component))
-}
-
-fn smart_case_eq_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
-    if case_sensitive {
-        value == component
-    } else {
-        value.to_lowercase() == component.to_lowercase()
-    }
-}
-
-fn smart_case_starts_with_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
-    if case_sensitive {
-        value.starts_with(component)
-    } else {
-        value.to_lowercase().starts_with(&component.to_lowercase())
-    }
-}
-
-fn smart_case_ends_with_with_mode(value: &str, component: &str, case_sensitive: bool) -> bool {
-    if case_sensitive {
-        value.ends_with(component)
-    } else {
-        value.to_lowercase().ends_with(&component.to_lowercase())
-    }
 }
 
 fn word_boundary_contains(value: &str, component: &str) -> bool {

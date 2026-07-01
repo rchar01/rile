@@ -12,6 +12,7 @@ pub mod error;
 pub mod file;
 pub mod input;
 pub mod keymap;
+pub(crate) mod matching;
 pub mod minibuffer;
 pub mod mode;
 pub mod option;
