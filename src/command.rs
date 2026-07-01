@@ -43,6 +43,7 @@ pub enum Command {
     DowncaseRegion,
     DowncaseWord,
     EndKeyboardMacro,
+    EndOrCallKeyboardMacro,
     EndOfBuffer,
     EndOfLine,
     ExchangePointAndMark,
@@ -263,7 +264,10 @@ impl CommandCategory {
             ClearRectangle | CopyRectangleAsKill | DeleteRectangle | KillRectangle
             | OpenRectangle | RectangleMarkMode | RectangleNumberLines | StringRectangle
             | YankRectangle => Self::Rectangles,
-            CallLastKeyboardMacro | EndKeyboardMacro | StartKeyboardMacro => Self::Macros,
+            CallLastKeyboardMacro
+            | EndKeyboardMacro
+            | EndOrCallKeyboardMacro
+            | StartKeyboardMacro => Self::Macros,
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
             AboutRile | DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
             | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
@@ -324,6 +328,9 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         DowncaseRegion => "Convert the active region to lower case.",
         DowncaseWord => "Convert the following word or words to lower case.",
         EndKeyboardMacro => "Finish recording the current keyboard macro.",
+        EndOrCallKeyboardMacro => {
+            "Finish the current keyboard macro or replay the last recorded macro."
+        }
         EndOfBuffer => "Move point to the end of the current buffer.",
         EndOfLine => "Move point to the end of the current line.",
         ExchangePointAndMark => "Swap point with mark and reactivate the selected region.",
@@ -795,6 +802,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             EndKeyboardMacro,
         )
         .with_handler(crate::editor::Editor::command_end_keyboard_macro),
+        CommandSpec::new(
+            "kmacro-end-or-call-macro",
+            "Finish or execute keyboard macro",
+            true,
+            EndOrCallKeyboardMacro,
+        )
+        .with_handler(crate::editor::Editor::command_end_or_call_keyboard_macro),
         CommandSpec::new(
             "end-of-buffer",
             "Move cursor to end of buffer",
@@ -1286,6 +1300,7 @@ mod tests {
         assert!(registry.contains("copy-to-register"));
         assert!(registry.contains("end-of-buffer"));
         assert!(registry.contains("end-kbd-macro"));
+        assert!(registry.contains("kmacro-end-or-call-macro"));
         assert!(registry.contains("exchange-point-and-mark"));
         assert!(registry.contains("execute-extended-command"));
         assert!(registry.contains("find-file"));

@@ -18,7 +18,9 @@ Editing features:
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, visible page, repeated C-l center/top/bottom
   recentering, M-r middle/top/bottom window-line movement, beginning/end of
-  line, indentation, word, paragraph, and sentence.
+  line, indentation, word, paragraph, and sentence.  Common Ctrl-arrow,
+  Ctrl-Home, and Ctrl-End terminal sequences are aliases for the matching word,
+  paragraph, and buffer-boundary movement commands.
 * Delete characters, kill words and lines, set a mark, mark the whole buffer,
   kill/copy regions, yank coalesced consecutive kills, and rotate yanks with
   M-y.
@@ -33,7 +35,9 @@ Editing features:
 * Supply repeat counts with C-u for repeatable movement, insertion, deletion,
   kill, and open-line commands.
 * Record keyboard macros with C-x (, finish them with C-x ), and replay them
-  with C-x e, including C-u repeat counts for macro execution.
+  with C-x e, including C-u repeat counts for macro execution.  F3 starts macro
+  recording and F4 stops recording or replays the last macro on terminals that
+  send common function-key escape sequences.
 * Join the current line to the previous line with M-^.
 * Convert word case with M-l, M-u, and M-c, and convert active-region case with
   C-x C-l and C-x C-u.

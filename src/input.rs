@@ -28,6 +28,8 @@ pub enum SpecialKey {
     ArrowRight,
     Home,
     End,
+    F3,
+    F4,
     PageUp,
     PageDown,
 }
@@ -180,6 +182,12 @@ fn parse_csi_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     if let Some(parsed) = parse_csi_u_sequence(bytes) {
         return Ok(Some(parsed));
     }
+    if let Some(parsed) = parse_csi_modifier_sequence(bytes) {
+        return Ok(Some(parsed));
+    }
+    if let Some(parsed) = parse_function_tilde_sequence(bytes) {
+        return Ok(Some(parsed));
+    }
 
     let event = match bytes[2] {
         b'A' => Some((KeyEvent::Special(SpecialKey::ArrowUp), 3)),
@@ -278,6 +286,8 @@ fn parse_ss3_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     let event = match bytes[2] {
         b'H' => KeyEvent::Special(SpecialKey::Home),
         b'F' => KeyEvent::Special(SpecialKey::End),
+        b'R' => KeyEvent::Special(SpecialKey::F3),
+        b'S' => KeyEvent::Special(SpecialKey::F4),
         b'A' => KeyEvent::Special(SpecialKey::ArrowUp),
         b'B' => KeyEvent::Special(SpecialKey::ArrowDown),
         b'C' => KeyEvent::Special(SpecialKey::ArrowRight),
@@ -291,6 +301,40 @@ fn parse_ss3_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     };
 
     Ok(Some(ParsedKey { event, consumed }))
+}
+
+fn parse_csi_modifier_sequence(bytes: &[u8]) -> Option<ParsedKey> {
+    if bytes.len() < 6 || bytes[2] != b'1' || bytes[3] != b';' || bytes[4] != b'5' {
+        return None;
+    }
+    let special = match bytes[5] {
+        b'A' => SpecialKey::ArrowUp,
+        b'B' => SpecialKey::ArrowDown,
+        b'C' => SpecialKey::ArrowRight,
+        b'D' => SpecialKey::ArrowLeft,
+        b'H' => SpecialKey::Home,
+        b'F' => SpecialKey::End,
+        _ => return None,
+    };
+    Some(ParsedKey {
+        event: KeyEvent::CtrlSpecial(special),
+        consumed: 6,
+    })
+}
+
+fn parse_function_tilde_sequence(bytes: &[u8]) -> Option<ParsedKey> {
+    if bytes.len() < 5 || bytes[2] != b'1' || bytes[4] != b'~' {
+        return None;
+    }
+    let special = match bytes[3] {
+        b'3' => SpecialKey::F3,
+        b'4' => SpecialKey::F4,
+        _ => return None,
+    };
+    Some(ParsedKey {
+        event: KeyEvent::Special(special),
+        consumed: 5,
+    })
 }
 
 fn parse_tilde_sequence(bytes: &[u8], key: SpecialKey) -> Result<Option<(KeyEvent, usize)>> {
@@ -416,6 +460,42 @@ mod tests {
         let fallback = parse(b"\x1b[x;5u");
         assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
         assert_eq!(fallback.consumed, b"\x1b[x;5u".len());
+    }
+
+    #[test]
+    fn parses_function_keys() {
+        assert_eq!(parse(b"\x1b[13~").event, KeyEvent::Special(SpecialKey::F3));
+        assert_eq!(parse(b"\x1b[14~").event, KeyEvent::Special(SpecialKey::F4));
+        assert_eq!(parse(b"\x1bOR").event, KeyEvent::Special(SpecialKey::F3));
+        assert_eq!(parse(b"\x1bOS").event, KeyEvent::Special(SpecialKey::F4));
+    }
+
+    #[test]
+    fn parses_ctrl_modified_navigation_keys() {
+        assert_eq!(
+            parse(b"\x1b[1;5A").event,
+            KeyEvent::CtrlSpecial(SpecialKey::ArrowUp)
+        );
+        assert_eq!(
+            parse(b"\x1b[1;5B").event,
+            KeyEvent::CtrlSpecial(SpecialKey::ArrowDown)
+        );
+        assert_eq!(
+            parse(b"\x1b[1;5C").event,
+            KeyEvent::CtrlSpecial(SpecialKey::ArrowRight)
+        );
+        assert_eq!(
+            parse(b"\x1b[1;5D").event,
+            KeyEvent::CtrlSpecial(SpecialKey::ArrowLeft)
+        );
+        assert_eq!(
+            parse(b"\x1b[1;5H").event,
+            KeyEvent::CtrlSpecial(SpecialKey::Home)
+        );
+        assert_eq!(
+            parse(b"\x1b[1;5F").event,
+            KeyEvent::CtrlSpecial(SpecialKey::End)
+        );
     }
 
     #[test]

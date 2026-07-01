@@ -56,6 +56,9 @@ Basic editor keys:
 - `C-v`/PageDown and `M-v`/PageUp scroll by one visible page.
 - Repeated `C-l` cycles the current line through window center, top, and bottom.
 - `M-r` cycles point through the middle, top, and bottom visible window line.
+- Ctrl-Left/Right move by word, Ctrl-Up/Down move by paragraph, and
+  Ctrl-Home/End move to the beginning or end of the buffer when the terminal
+  sends standard modified-key escape sequences.
 - `C-a`/Home and `C-e`/End move within the current line.
 - `M-<` and `M->` move to the beginning and end of the buffer.
 - `M-g g` prompts for a line or `line:column` and moves point there.
@@ -68,7 +71,9 @@ Basic editor keys:
 - `C-u` supplies a numeric argument for the next repeatable command; repeated
   `C-u` multiplies by four, and digits enter an explicit count.
 - `C-x (` starts recording a keyboard macro, `C-x )` ends it, and `C-x e`
-  replays the latest macro. `C-u` before `C-x e` repeats macro execution.
+  replays the latest macro. `C-u` before `C-x e` repeats macro execution. F3
+  starts recording and F4 ends recording or replays the latest macro when the
+  terminal sends common function-key escape sequences.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-l`, `M-u`, and `M-c` downcase, upcase, and capitalize words. `C-x C-l`

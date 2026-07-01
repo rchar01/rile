@@ -1,5 +1,27 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Add function-key and Ctrl-navigation aliases.
+
+	* src/input.rs (SpecialKey): Add F3 and F4.
+	(parse_csi_modifier_sequence, parse_function_tilde_sequence): New helpers.
+	(parse_ss3_sequence): Parse SS3 F3 and F4.
+	* src/command.rs (Command): Add EndOrCallKeyboardMacro.
+	(default_doc_for_command, default_commands): Register kmacro-end-or-call-macro.
+	* src/editor.rs (Editor::command_end_or_call_keyboard_macro): New method.
+	* src/keymap.rs (default_bindings): Bind F3, F4, and Ctrl-modified
+	navigation keys.
+	(format_special_key): Format F3 and F4.
+	* tests/pty_insert.rs (function_keys_start_end_and_replay_keyboard_macro):
+	New test.
+	* tests/pty_movement.rs
+	(ctrl_modified_navigation_aliases_move_by_words_and_buffer): New test.
+	* README.md: Document the aliases.
+	* NEWS: Mention function-key and Ctrl-navigation aliases.
+	* docs/development.md: Record parser and binding behavior.
+	* docs/kg-emacs-gap-plan.md: Mark the alias slice complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Implement safe auto-revert commands.
 
 	* src/file.rs (FileStamp): New type.

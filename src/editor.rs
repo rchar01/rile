@@ -1985,6 +1985,19 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_end_or_call_keyboard_macro(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        if self.recording_keyboard_macro.is_some() {
+            self.end_keyboard_macro()?;
+            Ok(CommandOutcome::Continue)
+        } else {
+            self.call_last_keyboard_macro(context.argument)
+                .map(command_outcome_for_editor_outcome)
+        }
+    }
+
     pub(crate) fn command_end_of_buffer(
         &mut self,
         _context: CommandContext,

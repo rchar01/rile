@@ -406,6 +406,13 @@ clean file-backed normal buffers, and never discards dirty edits. Reloaded
 buffers drop stale undo records for that buffer and clamp saved point positions
 to the new text.
 
+Post-Milestone 14 key-alias polish adds parser support for common F3/F4 escape
+sequences and standard Ctrl-modified arrow/Home/End CSI sequences. F3 maps to
+`start-kbd-macro`; F4 maps to `kmacro-end-or-call-macro`, which stops the active
+macro recording or replays the last macro. Ctrl-Left/Right map to word movement,
+Ctrl-Up/Down map to paragraph movement, and Ctrl-Home/End map to buffer
+beginning/end.
+
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are

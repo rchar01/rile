@@ -34,8 +34,8 @@ it is not a source-porting guide or a behavior oracle.
 | kg whole-buffer whitespace cleanup | `M-x whitespace-cleanup` | `delete-trailing-whitespace` | Already covered by Rile's `delete-trailing-whitespace`; keep Emacs name. |
 | Version display | `M-x version` | `emacs-version`, `about-emacs` | Already covered differently by `about-rile`; keep Rile command. |
 | Suspend editor | `C-z` | `suspend-frame`, `C-z` on capable terminals | Research before implementing because terminal lifecycle behavior is risky. |
-| Keyboard macro aliases | `F3`, `F4` | `kmacro-start-macro-or-insert-counter`, `kmacro-end-or-call-macro` | Add only if the input layer can parse common F3/F4 sequences reliably. |
-| Ctrl-arrow aliases | Ctrl arrows/Home/End | terminal and Emacs dependent | Add only after input parser coverage. |
+| Keyboard macro aliases | `F3`, `F4` | `kmacro-start-macro-or-insert-counter`, `kmacro-end-or-call-macro` | Implemented for common terminal F3/F4 sequences. |
+| Ctrl-arrow aliases | Ctrl arrows/Home/End | terminal and Emacs dependent | Implemented for standard Ctrl-modified CSI sequences. |
 | Shift selection | Shift arrows/Home/End | `shift-select-mode` | Defer as optional-mode work; do not make a kg-only default. |
 | CUA aliases | `S-Del`, `C-Ins`, `S-Ins` | `cua-mode` | Defer; not base Emacs default. |
 | Auto-pair insertion | normal typing | `electric-pair-mode` | Defer as optional modern mode; do not enable by default. |
@@ -46,7 +46,7 @@ it is not a source-porting guide or a behavior oracle.
 - [x] Add `revert-buffer` and `not-modified`.
 - [x] Add `save-some-buffers` on `C-x s`.
 - [x] Add safe `auto-revert-mode` and `global-auto-revert-mode`.
-- [ ] Add safe default-compatible key aliases after input parser tests.
+- [x] Add safe default-compatible key aliases after input parser tests.
 - [ ] Revisit optional modes: shift selection, CUA aliases, and electric pair.
 
 ## Preserved Differences

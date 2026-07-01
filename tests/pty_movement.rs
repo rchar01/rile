@@ -101,6 +101,27 @@ fn movement_commands_cover_backward_arrows_and_words() -> Result<()> {
 }
 
 #[test]
+fn ctrl_modified_navigation_aliases_move_by_words_and_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha beta\ngamma delta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha beta")?;
+    rile.send("Ctrl-Right", b"\x1b[1;5C")?;
+    rile.assert_cursor(0, 5)?;
+    rile.send("Ctrl-Right", b"\x1b[1;5C")?;
+    rile.assert_cursor(0, 10)?;
+    rile.send("Ctrl-Left", b"\x1b[1;5D")?;
+    rile.assert_cursor(0, 6)?;
+    rile.send("Ctrl-End", b"\x1b[1;5F")?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Ctrl-Home", b"\x1b[1;5H")?;
+    rile.assert_cursor(0, 0)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn paragraph_movement_commands_update_cursor_and_status() -> Result<()> {
     let file = fixtures::named_temp_file("one\ntwo\n\nthree\nfour\n\nfive\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

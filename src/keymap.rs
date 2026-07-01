@@ -264,6 +264,8 @@ fn format_special_key(key: SpecialKey) -> String {
         SpecialKey::ArrowRight => "Right".to_owned(),
         SpecialKey::Home => "Home".to_owned(),
         SpecialKey::End => "End".to_owned(),
+        SpecialKey::F3 => "F3".to_owned(),
+        SpecialKey::F4 => "F4".to_owned(),
         SpecialKey::PageUp => "PageUp".to_owned(),
         SpecialKey::PageDown => "PageDown".to_owned(),
     }
@@ -279,10 +281,12 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('f')], ForwardChar),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowRight)], ForwardChar),
         KeyBinding::new([KeyEvent::Meta('b')], BackwardWord),
+        KeyBinding::new([KeyEvent::CtrlSpecial(SpecialKey::ArrowLeft)], BackwardWord),
         KeyBinding::new([KeyEvent::Meta('a')], BackwardSentence),
         KeyBinding::new([KeyEvent::Meta('c')], CapitalizeWord),
         KeyBinding::new([KeyEvent::Meta('e')], ForwardSentence),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
+        KeyBinding::new([KeyEvent::CtrlSpecial(SpecialKey::ArrowRight)], ForwardWord),
         KeyBinding::new([KeyEvent::Meta('q')], FillParagraph),
         KeyBinding::new([KeyEvent::Meta('r')], MoveToWindowLineTopBottom),
         KeyBinding::new([KeyEvent::Meta(';')], CommentDwim),
@@ -298,9 +302,19 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             BackwardKillWord,
         ),
         KeyBinding::new([KeyEvent::Meta('<')], BeginningOfBuffer),
+        KeyBinding::new([KeyEvent::CtrlSpecial(SpecialKey::Home)], BeginningOfBuffer),
         KeyBinding::new([KeyEvent::Meta('>')], EndOfBuffer),
+        KeyBinding::new([KeyEvent::CtrlSpecial(SpecialKey::End)], EndOfBuffer),
         KeyBinding::new([KeyEvent::Meta('{')], BackwardParagraph),
+        KeyBinding::new(
+            [KeyEvent::CtrlSpecial(SpecialKey::ArrowUp)],
+            BackwardParagraph,
+        ),
         KeyBinding::new([KeyEvent::Meta('}')], ForwardParagraph),
+        KeyBinding::new(
+            [KeyEvent::CtrlSpecial(SpecialKey::ArrowDown)],
+            ForwardParagraph,
+        ),
         KeyBinding::new([KeyEvent::Ctrl('p')], PreviousLine),
         KeyBinding::new([KeyEvent::Special(SpecialKey::ArrowUp)], PreviousLine),
         KeyBinding::new([KeyEvent::Ctrl('n')], NextLine),
@@ -409,6 +423,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
             StartKeyboardMacro,
         ),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::F3)], StartKeyboardMacro),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("=".to_owned())],
             WhatCursorPosition,
@@ -417,6 +432,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())],
             EndKeyboardMacro,
         ),
+        KeyBinding::new([KeyEvent::Special(SpecialKey::F4)], EndOrCallKeyboardMacro),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("e".to_owned())],
             CallLastKeyboardMacro,
@@ -798,6 +814,44 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('|')]),
             KeyResolution::Command(ShellCommandOnRegion)
+        );
+    }
+
+    #[test]
+    fn resolves_keyboard_aliases() {
+        let keymap = KeyMap::default();
+
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::ArrowLeft)]),
+            KeyResolution::Command(BackwardWord)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::ArrowRight)]),
+            KeyResolution::Command(ForwardWord)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::ArrowUp)]),
+            KeyResolution::Command(BackwardParagraph)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::ArrowDown)]),
+            KeyResolution::Command(ForwardParagraph)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::Home)]),
+            KeyResolution::Command(BeginningOfBuffer)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlSpecial(SpecialKey::End)]),
+            KeyResolution::Command(EndOfBuffer)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Special(SpecialKey::F3)]),
+            KeyResolution::Command(StartKeyboardMacro)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Special(SpecialKey::F4)]),
+            KeyResolution::Command(EndOrCallKeyboardMacro)
         );
     }
 

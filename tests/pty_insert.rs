@@ -375,6 +375,26 @@ fn keyboard_macro_replays_visible_editing_with_repeat_count() -> Result<()> {
 }
 
 #[test]
+fn function_keys_start_end_and_replay_keyboard_macro() -> Result<()> {
+    let file = fixtures::named_temp_file("one\ntwo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("one")?;
+    rile.send("F3", b"\x1bOR")?;
+    rile.assert_screen_contains("Defining keyboard macro")?;
+    rile.send("insert marker", b">")?;
+    rile.send("F4", b"\x1bOS")?;
+    rile.assert_screen_contains("Keyboard macro defined")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("F4", b"\x1bOS")?;
+
+    rile.wait_for_screen_contains(">two")?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn rectangle_mark_copy_and_regular_yank_paste_columns() -> Result<()> {
     let file = fixtures::named_temp_file("abcdef\n123456\nuvwxyz\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
