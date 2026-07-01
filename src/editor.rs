@@ -2919,6 +2919,7 @@ impl Editor {
                 .minibuffer
                 .set_error("quoted NUL insertion is not supported"),
             KeyEvent::Ctrl(_)
+            | KeyEvent::CtrlMeta(_)
             | KeyEvent::CtrlSpecial(_)
             | KeyEvent::Meta(_)
             | KeyEvent::MetaSpecial(_)

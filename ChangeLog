@@ -1,5 +1,14 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Add Ctrl-Meta key events.
+
+	* src/input.rs (KeyEvent): Add CtrlMeta.
+	(parse_escape_sequence, csi_u_key_event): Parse Ctrl-Meta character input.
+	* src/editor.rs (handle_quoted_insert_key): Reject quoted Ctrl-Meta input.
+	* src/keymap.rs (format_key_event): Format Ctrl-Meta keys.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Share literal matching helpers.
 
 	* src/matching.rs: New smart-case literal matching helper module.

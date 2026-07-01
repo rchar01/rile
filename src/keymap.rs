@@ -242,6 +242,7 @@ pub(crate) fn format_key_sequence(sequence: &[KeyEvent]) -> String {
 fn format_key_event(key: &KeyEvent) -> String {
     match key {
         KeyEvent::Ctrl(character) => format!("C-{character}"),
+        KeyEvent::CtrlMeta(character) => format!("C-M-{character}"),
         KeyEvent::CtrlSpecial(special) => format!("C-{}", format_special_key(*special)),
         KeyEvent::Meta(character) => format!("M-{character}"),
         KeyEvent::MetaSpecial(special) => format!("M-{}", format_special_key(*special)),

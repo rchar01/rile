@@ -8,6 +8,7 @@ use crate::{Result, RileError};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum KeyEvent {
     Ctrl(char),
+    CtrlMeta(char),
     CtrlSpecial(SpecialKey),
     Meta(char),
     MetaSpecial(SpecialKey),
@@ -143,7 +144,7 @@ fn parse_escape_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
             b'\r' | b'\n' => KeyEvent::MetaSpecial(SpecialKey::Enter),
             b'\t' => KeyEvent::Special(SpecialKey::Tab),
             0x7f | 0x08 => KeyEvent::MetaSpecial(SpecialKey::Backspace),
-            0x01..=0x1a => KeyEvent::Ctrl((b'a' + second - 1) as char),
+            0x01..=0x1a => KeyEvent::CtrlMeta((b'a' + second - 1) as char),
             0x20..=0x7e => KeyEvent::Meta(char::from(second)),
             _ => KeyEvent::Special(SpecialKey::Escape),
         };
@@ -239,6 +240,9 @@ fn csi_u_key_event(key_code: u32, has_alt: bool, has_ctrl: bool) -> Option<KeyEv
         } else {
             KeyEvent::Special(special)
         });
+    }
+    if has_ctrl && has_alt {
+        return csi_u_ctrl_key(key_code).map(KeyEvent::CtrlMeta);
     }
     if has_ctrl {
         return csi_u_ctrl_key(key_code).map(KeyEvent::Ctrl);
@@ -422,6 +426,7 @@ mod tests {
         assert_eq!(parse(b"\x1b!").event, KeyEvent::Meta('!'));
         assert_eq!(parse(b"\x1b|").event, KeyEvent::Meta('|'));
         assert_eq!(parse("\u{1b}é".as_bytes()).event, KeyEvent::Meta('é'));
+        assert_eq!(parse(b"\x1b\x13").event, KeyEvent::CtrlMeta('s'));
         assert_eq!(
             parse(b"\x1b\x7f").event,
             KeyEvent::MetaSpecial(SpecialKey::Backspace)
@@ -457,6 +462,7 @@ mod tests {
         assert_eq!(parse(b"\x1b[8;5u").event, KeyEvent::Ctrl('h'));
         assert_eq!(parse(b"\x1b[102;3u").event, KeyEvent::Meta('f'));
         assert_eq!(parse(b"\x1b[65;5u").event, KeyEvent::Ctrl('a'));
+        assert_eq!(parse(b"\x1b[115;7u").event, KeyEvent::CtrlMeta('s'));
         let fallback = parse(b"\x1b[x;5u");
         assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
         assert_eq!(fallback.consumed, b"\x1b[x;5u".len());
