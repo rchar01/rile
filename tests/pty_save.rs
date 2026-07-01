@@ -63,6 +63,154 @@ fn write_file_saves_as_new_path_and_clears_dirty_state() -> Result<()> {
 }
 
 #[test]
+fn save_some_buffers_prompts_for_each_modified_file_buffer() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let first = directory.path().join("first.txt");
+    let second = directory.path().join("second.txt");
+    std::fs::write(&first, "first original\n")?;
+    std::fs::write(&second, "second original\n")?;
+    let mut rile = RilePty::spawn(&first, 12, 100)?;
+
+    rile.wait_for_screen_contains("first original")?;
+    rile.send("edit first", b"saved ")?;
+    rile.wait_for_screen_contains("saved first original")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let second_path = second.display().to_string();
+    rile.send("second path", second_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("second original")?;
+    rile.send("edit second", b"unsaved ")?;
+    rile.wait_for_screen_contains("unsaved second original")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file first.txt?")?;
+    rile.send("yes", b"yes")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Save file second.txt?")?;
+    rile.send("no", b"no")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Saved 1 buffer")?;
+
+    let first_contents = fs::read_to_string(&first)
+        .with_context(|| format!("failed to read saved file {}", first.display()))?;
+    let second_contents = fs::read_to_string(&second)
+        .with_context(|| format!("failed to read skipped file {}", second.display()))?;
+    assert_eq!(first_contents, "saved first original\n");
+    assert_eq!(second_contents, "second original\n");
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn save_some_buffers_cancel_leaves_buffers_unsaved() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let first = directory.path().join("first-cancel.txt");
+    let second = directory.path().join("second-cancel.txt");
+    std::fs::write(&first, "first original\n")?;
+    std::fs::write(&second, "second original\n")?;
+    let mut rile = RilePty::spawn(&first, 12, 100)?;
+
+    rile.wait_for_screen_contains("first original")?;
+    rile.send("edit first", b"saved ")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let second_path = second.display().to_string();
+    rile.send("second path", second_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("second original")?;
+    rile.send("edit second", b"saved ")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file first-cancel.txt?")?;
+    rile.send("C-g", keys::control('g'))?;
+    rile.assert_screen_contains("Quit")?;
+
+    let first_contents = fs::read_to_string(&first)
+        .with_context(|| format!("failed to read unsaved file {}", first.display()))?;
+    let second_contents = fs::read_to_string(&second)
+        .with_context(|| format!("failed to read unsaved file {}", second.display()))?;
+    assert_eq!(first_contents, "first original\n");
+    assert_eq!(second_contents, "second original\n");
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file first-cancel.txt?")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn save_some_buffers_skips_read_only_modified_buffers() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let read_only = directory.path().join("read-only.txt");
+    let writable = directory.path().join("writable.txt");
+    std::fs::write(&read_only, "read only original\n")?;
+    std::fs::write(&writable, "writable original\n")?;
+    let mut rile = RilePty::spawn(&read_only, 12, 100)?;
+
+    rile.wait_for_screen_contains("read only original")?;
+    rile.send("edit read-only", b"skipped ")?;
+    rile.send("C-x C-q", keys::control_sequence("xq"))?;
+    rile.assert_screen_contains("Buffer is now read-only")?;
+
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    let writable_path = writable.display().to_string();
+    rile.send("writable path", writable_path.as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("writable original")?;
+    rile.send("edit writable", b"saved ")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file writable.txt?")?;
+    rile.send("yes", b"yes")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Saved 1 buffer")?;
+
+    let read_only_contents = fs::read_to_string(&read_only)
+        .with_context(|| format!("failed to read skipped file {}", read_only.display()))?;
+    let writable_contents = fs::read_to_string(&writable)
+        .with_context(|| format!("failed to read saved file {}", writable.display()))?;
+    assert_eq!(read_only_contents, "read only original\n");
+    assert_eq!(writable_contents, "saved writable original\n");
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn save_some_buffers_reports_save_failure_and_clears_prompt() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let file = directory.path().join("vanished-parent.txt");
+    std::fs::write(&file, "original\n")?;
+    let mut rile = RilePty::spawn(&file, 12, 100)?;
+
+    rile.wait_for_screen_contains("original")?;
+    rile.send("edit file", b"changed ")?;
+    std::fs::remove_dir_all(directory.path())?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file vanished-parent.txt?")?;
+    rile.send("yes", b"yes")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Error: save failed:")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+    rile.assert_screen_contains("Save file vanished-parent.txt?")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn insert_file_inserts_contents_at_point() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");

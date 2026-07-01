@@ -27,7 +27,7 @@ it is not a source-porting guide or a behavior oracle.
 | Window-line movement | `M-r` | `move-to-window-line-top-bottom`, `M-r` | Implement `M-r`, preserving Rile window/view state. |
 | Revert current buffer | `M-x revert-buffer` | `revert-buffer` | Implemented for file-backed normal buffers with dirty confirmation. |
 | Clear dirty flag | `M-x not-modified` | `not-modified` | Implemented without changing file contents or undo history. |
-| Save modified buffers | `C-x s` | `save-some-buffers` | Implement `C-x s`; preserve special-buffer and read-only safety. |
+| Save modified buffers | `C-x s` | `save-some-buffers` | Implemented as per-buffer prompting; skips special, read-only, and unnamed buffers. |
 | Per-buffer auto revert | `M-x auto-revert-mode` | `auto-revert-mode` | Implement only for clean file-backed buffers; never discard dirty edits. |
 | Global auto revert | `M-x global-auto-revert-mode` | `global-auto-revert-mode` | Implement as an editor-wide toggle reusing the clean-buffer safety rule. |
 | Current-line whitespace cleanup | `M-x delete-trailing-space` | no default priority over `delete-trailing-whitespace` | Defer unless a clear Emacs-compatible command target is chosen. |
@@ -44,7 +44,7 @@ it is not a source-porting guide or a behavior oracle.
 
 - [x] Add `what-cursor-position` and `move-to-window-line-top-bottom`.
 - [x] Add `revert-buffer` and `not-modified`.
-- [ ] Add `save-some-buffers` on `C-x s`.
+- [x] Add `save-some-buffers` on `C-x s`.
 - [ ] Add safe `auto-revert-mode` and `global-auto-revert-mode`.
 - [ ] Add safe default-compatible key aliases after input parser tests.
 - [ ] Revisit optional modes: shift selection, CUA aliases, and electric pair.

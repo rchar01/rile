@@ -92,6 +92,7 @@ pub struct Editor {
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
     shell_command_prompt: Option<ShellCommandPromptState>,
     pending_kill_buffer: Option<BufferId>,
+    save_some_buffers: Option<SaveSomeBuffersState>,
     pending_register: Option<PendingRegisterCommand>,
     quoted_insert: bool,
     region: Option<RegionState>,
@@ -356,6 +357,12 @@ struct ShellCommandPromptState {
     stdin: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SaveSomeBuffersState {
+    pending: Vec<BufferId>,
+    saved: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShellCommandAction {
     Display,
@@ -447,6 +454,7 @@ impl Editor {
             rectangle_number_prompt: None,
             shell_command_prompt: None,
             pending_kill_buffer: None,
+            save_some_buffers: None,
             pending_register: None,
             quoted_insert: false,
             region: None,
@@ -1143,6 +1151,9 @@ impl Editor {
                 if self.minibuffer.prompt_kind() == Some(PromptKind::KillDirtyBuffer) {
                     self.pending_kill_buffer = None;
                 }
+                if self.minibuffer.prompt_kind() == Some(PromptKind::SaveSomeBuffers) {
+                    self.save_some_buffers = None;
+                }
                 self.minibuffer.cancel_prompt();
                 Ok(EditorOutcome::Continue)
             }
@@ -1500,6 +1511,7 @@ impl Editor {
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
             PromptKind::RevertBuffer => Ok(self.submit_revert_buffer(input.trim())),
+            PromptKind::SaveSomeBuffers => Ok(self.submit_save_some_buffers(input.trim())),
             PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
             PromptKind::RectangleNumberFormat => self.submit_rectangle_number_format(input),
             PromptKind::RectangleNumberStart => self.submit_rectangle_number_start(input.trim()),
@@ -2271,6 +2283,15 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         self.save_buffer()?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_save_some_buffers(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        Ok(command_outcome_for_editor_outcome(
+            self.start_save_some_buffers(),
+        ))
     }
 
     pub(crate) fn command_save_buffers_kill_terminal(
@@ -4841,6 +4862,111 @@ impl Editor {
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(())
+    }
+
+    fn start_save_some_buffers(&mut self) -> EditorOutcome {
+        let pending = self
+            .buffers
+            .entries()
+            .iter()
+            .filter(|entry| {
+                entry.document().kind() == DocumentKind::Normal
+                    && entry.document().path().is_some()
+                    && entry.document().is_dirty()
+                    && !entry.document().is_read_only()
+            })
+            .map(|entry| entry.id())
+            .collect::<Vec<_>>();
+
+        if pending.is_empty() {
+            self.minibuffer.set_message("No modified file buffers");
+            return EditorOutcome::Continue;
+        }
+
+        self.save_some_buffers = Some(SaveSomeBuffersState { pending, saved: 0 });
+        self.prompt_next_save_some_buffer()
+    }
+
+    fn submit_save_some_buffers(&mut self, input: &str) -> EditorOutcome {
+        match input.to_ascii_lowercase().as_str() {
+            "yes" => {
+                let Some(buffer) = self.pop_pending_save_some_buffer() else {
+                    return self.finish_save_some_buffers();
+                };
+                match self.save_buffer_by_id(buffer) {
+                    Ok(()) => {
+                        if let Some(state) = &mut self.save_some_buffers {
+                            state.saved += 1;
+                        }
+                        self.prompt_next_save_some_buffer()
+                    }
+                    Err(error) => {
+                        self.save_some_buffers = None;
+                        self.refresh_visible_buffer_list();
+                        self.minibuffer.set_error(format!("save failed: {error}"));
+                        EditorOutcome::Continue
+                    }
+                }
+            }
+            "no" | "" => {
+                let _ = self.pop_pending_save_some_buffer();
+                self.prompt_next_save_some_buffer()
+            }
+            _ => self.prompt_next_save_some_buffer(),
+        }
+    }
+
+    fn prompt_next_save_some_buffer(&mut self) -> EditorOutcome {
+        loop {
+            let Some(buffer) = self
+                .save_some_buffers
+                .as_ref()
+                .and_then(|state| state.pending.first().copied())
+            else {
+                return self.finish_save_some_buffers();
+            };
+            if let Some(name) = self.buffers.name(buffer).map(str::to_owned) {
+                self.minibuffer.start_prompt(
+                    PromptKind::SaveSomeBuffers,
+                    format!("Save file {name}? (yes or no) "),
+                );
+                return EditorOutcome::Continue;
+            }
+            let _ = self.pop_pending_save_some_buffer();
+        }
+    }
+
+    fn pop_pending_save_some_buffer(&mut self) -> Option<BufferId> {
+        let state = self.save_some_buffers.as_mut()?;
+        if state.pending.is_empty() {
+            None
+        } else {
+            Some(state.pending.remove(0))
+        }
+    }
+
+    fn finish_save_some_buffers(&mut self) -> EditorOutcome {
+        let saved = self
+            .save_some_buffers
+            .take()
+            .map(|state| state.saved)
+            .unwrap_or_default();
+        self.refresh_visible_buffer_list();
+        match saved {
+            0 => self.minibuffer.set_message("No buffers saved"),
+            1 => self.minibuffer.set_message("Saved 1 buffer"),
+            count => self
+                .minibuffer
+                .set_message(format!("Saved {count} buffers")),
+        }
+        EditorOutcome::Continue
+    }
+
+    fn save_buffer_by_id(&mut self, buffer: BufferId) -> Result<()> {
+        let Some(document) = self.buffers.document_mut(buffer) else {
+            return Ok(());
+        };
+        document.save()
     }
 
     fn not_modified(&mut self) -> Result<()> {
@@ -7742,6 +7868,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
         PromptKind::RevertBuffer => "Buffer modified; revert anyway? (yes or no) ",
+        PromptKind::SaveSomeBuffers => "Save file? (yes or no) ",
         PromptKind::QuitDirtyBuffers => "Modified buffers exist; exit anyway? (yes or no) ",
         PromptKind::RectangleNumberFormat => "Format string: ",
         PromptKind::RectangleNumberStart => "Number to count from: ",

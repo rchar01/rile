@@ -557,6 +557,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             [KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())],
             KillBuffer,
         ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("s".to_owned())],
+            SaveSomeBuffers,
+        ),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')], SaveBuffer),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("o".to_owned())],
@@ -1060,6 +1064,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("k".to_owned())]),
             KeyResolution::Command(KillBuffer)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("s".to_owned())]),
+            KeyResolution::Command(SaveSomeBuffers)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("2".to_owned())]),

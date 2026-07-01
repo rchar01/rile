@@ -1,5 +1,25 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Implement save-some-buffers.
+
+	* src/minibuffer.rs (PromptKind): Add SaveSomeBuffers.
+	* src/command.rs (Command): Add SaveSomeBuffers.
+	(default_doc_for_command, default_commands): Register the new command.
+	* src/keymap.rs (default_bindings): Bind C-x s.
+	* src/editor.rs (Editor): Add save-some-buffers prompt state.
+	(Editor::command_save_some_buffers, Editor::start_save_some_buffers)
+	(Editor::submit_save_some_buffers, Editor::prompt_next_save_some_buffer)
+	(Editor::pop_pending_save_some_buffer, Editor::finish_save_some_buffers)
+	(Editor::save_buffer_by_id): New command logic.
+	* tests/pty_save.rs (save_some_buffers_prompts_for_each_modified_file_buffer):
+	New test.
+	* README.md: Document C-x s.
+	* NEWS: Mention the new save command.
+	* docs/development.md: Record behavior and scope.
+	* docs/kg-emacs-gap-plan.md: Mark the slice complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Implement revert-buffer and not-modified.
 
 	* src/file.rs (Document::mark_clean, Document::reload_from_disk): New methods.

@@ -89,6 +89,7 @@ pub enum Command {
     Recenter,
     RevertBuffer,
     SaveBuffer,
+    SaveSomeBuffers,
     SaveBuffersKillTerminal,
     SetMarkCommand,
     ShellCommand,
@@ -241,9 +242,8 @@ impl CommandCategory {
             | UpcaseWord
             | Yank
             | YankPop => Self::Editing,
-            FindFile | FindFileReadOnly | InsertFile | RevertBuffer | SaveBuffer | WriteFile => {
-                Self::Files
-            }
+            FindFile | FindFileReadOnly | InsertFile | RevertBuffer | SaveBuffer
+            | SaveSomeBuffers | WriteFile => Self::Files,
             BufferListSelect | KillBuffer | ListBuffers | QuitBufferList | SwitchToBuffer => {
                 Self::Buffers
             }
@@ -372,6 +372,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         Recenter => "Cycle point between center, top, and bottom of the selected window.",
         RevertBuffer => "Replace the current buffer contents with the visited file on disk.",
         SaveBuffer => "Write the current file-backed buffer to disk.",
+        SaveSomeBuffers => "Offer to save each modified file-backed buffer.",
         SaveBuffersKillTerminal => "Quit Rile, prompting before exit when buffers are modified.",
         SetMarkCommand => "Set mark at point and activate the region.",
         ShellCommand => "Prompt for a shell command and display or insert its output.",
@@ -1048,6 +1049,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer)
             .with_handler(crate::editor::Editor::command_save_buffer),
         CommandSpec::new(
+            "save-some-buffers",
+            "Save modified file buffers",
+            true,
+            SaveSomeBuffers,
+        )
+        .with_handler(crate::editor::Editor::command_save_some_buffers),
+        CommandSpec::new(
             "scroll-page-backward",
             "Scroll one page backward",
             true,
@@ -1305,6 +1313,7 @@ mod tests {
         assert!(registry.contains("rectangle-number-lines"));
         assert!(registry.contains("recenter"));
         assert!(registry.contains("revert-buffer"));
+        assert!(registry.contains("save-some-buffers"));
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));

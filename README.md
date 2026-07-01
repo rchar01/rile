@@ -113,6 +113,8 @@ Basic editor keys:
 - `C-k` kills to the end of the line, or the line break at end of line.
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
+- `C-x s` offers to save each modified file-backed buffer, skipping special,
+  read-only, and unnamed buffers.
 - `C-x C-v` reverts the current file-backed buffer from disk, prompting before
   discarding unsaved changes.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
@@ -231,7 +233,7 @@ on Enter when selected from exact directory text, an explicitly moved selection,
 or a typed prefix of the selected directory; substring-only directory matches
 keep the raw typed path.
 Command completion candidates show the first known key binding, such as
-`save-buffer (C-x C-s)`, when one exists.
+`save-buffer (C-x C-s)` or `save-some-buffers (C-x s)`, when one exists.
 
 Current completion matching supports these forms:
 

@@ -394,6 +394,11 @@ discarding dirty contents, preserves the buffer's read-only setting, clears undo
 history, and clamps point to the reloaded contents. `not-modified` clears the
 dirty flag without writing the file or changing buffer text.
 
+Post-Milestone 14 save polish adds `save-some-buffers` on `C-x s`. It walks
+modified file-backed normal buffers in buffer-list order, prompts before each
+save, uses the same safe save path as `save-buffer`, and skips special,
+read-only, and unnamed buffers.
+
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are
