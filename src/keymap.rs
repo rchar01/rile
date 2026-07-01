@@ -403,6 +403,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')], FindFileReadOnly),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('t')], TransposeLines),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('u')], UpcaseRegion),
+        KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('v')], RevertBuffer),
         KeyBinding::new([KeyEvent::Ctrl('x'), KeyEvent::Ctrl('w')], WriteFile),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
@@ -875,6 +876,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('r')]),
             KeyResolution::Command(FindFileReadOnly)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('v')]),
+            KeyResolution::Command(RevertBuffer)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('t')]),

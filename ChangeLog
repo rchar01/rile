@@ -1,5 +1,25 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Implement revert-buffer and not-modified.
+
+	* src/file.rs (Document::mark_clean, Document::reload_from_disk): New methods.
+	* src/minibuffer.rs (PromptKind): Add RevertBuffer.
+	* src/command.rs (Command): Add NotModified and RevertBuffer.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind C-x C-v.
+	* src/editor.rs (Editor::command_not_modified, Editor::command_revert_buffer)
+	(Editor::start_revert_buffer, Editor::submit_revert_buffer)
+	(Editor::revert_current_buffer, Editor::not_modified, clamp_position_to_buffer):
+	New file-state command logic.
+	* tests/pty_open.rs (revert_buffer_reloads_file_after_confirmation)
+	(not_modified_clears_dirty_marker_without_saving): New tests.
+	* README.md: Document C-x C-v and not-modified.
+	* NEWS: Mention the new commands.
+	* docs/development.md: Record behavior and scope.
+	* docs/kg-emacs-gap-plan.md: Mark the slice complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Implement cursor position and window-line commands.
 
 	* src/command.rs (Command): Add MoveToWindowLineTopBottom and

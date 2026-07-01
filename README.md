@@ -113,6 +113,8 @@ Basic editor keys:
 - `C-k` kills to the end of the line, or the line break at end of line.
 - `C-_` undoes the latest edit in the current buffer.
 - `C-x C-s` saves the current file.
+- `C-x C-v` reverts the current file-backed buffer from disk, prompting before
+  discarding unsaved changes.
 - `C-x C-w` prompts for a file path and writes the current buffer there.
 - `C-x C-f` prompts for a file path with completion, starts from the current
   buffer's directory, and opens it; Tab inserts the selected path, Enter accepts
@@ -158,6 +160,8 @@ Basic editor keys:
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.
+- `M-x not-modified` clears the current normal buffer's modified flag without
+  saving.
 - `C-x C-c` quits, prompting for `yes` before exiting when normal buffers have
   unsaved changes.
 - `M-x` runs a command by name with completion; `C-n`/Down and `C-p`/Up move

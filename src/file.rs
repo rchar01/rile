@@ -208,6 +208,10 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.buffer.is_dirty()
     }
 
+    pub fn mark_clean(&mut self) {
+        self.buffer.mark_clean();
+    }
+
     pub fn missing_on_open(&self) -> bool {
         self.missing_on_open
     }
@@ -241,6 +245,26 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.path = Some(path);
         self.name = None;
         self.missing_on_open = false;
+        Ok(())
+    }
+
+    pub fn reload_from_disk(&mut self) -> Result<()> {
+        if self.kind != DocumentKind::Normal {
+            return Err(RileError::InvalidInput(
+                "cannot revert a special buffer".to_owned(),
+            ));
+        }
+        let Some(path) = self.path.clone() else {
+            return Err(RileError::InvalidInput(
+                "cannot revert unnamed buffer without a path".to_owned(),
+            ));
+        };
+        let read_only = self.read_only;
+        let backup_on_save = self.backup_on_save;
+        let mut reloaded = Self::open(&path)?;
+        reloaded.read_only = read_only;
+        reloaded.backup_on_save = backup_on_save;
+        *self = reloaded;
         Ok(())
     }
 

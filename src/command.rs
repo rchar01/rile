@@ -65,6 +65,7 @@ pub enum Command {
     ListBuffers,
     MoveToWindowLineTopBottom,
     NewlineAndIndent,
+    NotModified,
     KillLine,
     KillBuffer,
     KillRegion,
@@ -86,6 +87,7 @@ pub enum Command {
     RectangleMarkMode,
     RectangleNumberLines,
     Recenter,
+    RevertBuffer,
     SaveBuffer,
     SaveBuffersKillTerminal,
     SetMarkCommand,
@@ -239,7 +241,9 @@ impl CommandCategory {
             | UpcaseWord
             | Yank
             | YankPop => Self::Editing,
-            FindFile | FindFileReadOnly | InsertFile | SaveBuffer | WriteFile => Self::Files,
+            FindFile | FindFileReadOnly | InsertFile | RevertBuffer | SaveBuffer | WriteFile => {
+                Self::Files
+            }
             BufferListSelect | KillBuffer | ListBuffers | QuitBufferList | SwitchToBuffer => {
                 Self::Buffers
             }
@@ -262,7 +266,8 @@ impl CommandCategory {
             AboutRile | DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
             | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
             | QuitMessagesWindow | ViewEchoAreaMessages | WhatCursorPosition => Self::Help,
-            ToggleLineNumbers
+            NotModified
+            | ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
             | ToggleSyntaxHighlighting => Self::Configuration,
@@ -339,6 +344,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
             "Move point to the middle, top, or bottom visible window line."
         }
         NewlineAndIndent => "Insert a newline using the current plain-text indentation policy.",
+        NotModified => "Clear the current buffer's modified flag without saving.",
         KillLine => "Kill text from point to the line end, or kill the line break at EOL.",
         KillBuffer => "Prompt for a buffer name and kill the selected buffer.",
         KillRegion => "Kill the active region and save it in the kill ring.",
@@ -364,6 +370,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         RectangleMarkMode => "Activate rectangle mark mode for column-oriented region commands.",
         RectangleNumberLines => "Insert formatted line numbers down the active rectangle.",
         Recenter => "Cycle point between center, top, and bottom of the selected window.",
+        RevertBuffer => "Replace the current buffer contents with the visited file on disk.",
         SaveBuffer => "Write the current file-backed buffer to disk.",
         SaveBuffersKillTerminal => "Quit Rile, prompting before exit when buffers are modified.",
         SetMarkCommand => "Set mark at point and activate the region.",
@@ -910,6 +917,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             NewlineAndIndent,
         )
         .with_handler(crate::editor::Editor::command_newline_and_indent),
+        CommandSpec::new(
+            "not-modified",
+            "Clear buffer modified flag",
+            true,
+            NotModified,
+        )
+        .with_handler(crate::editor::Editor::command_not_modified),
         CommandSpec::new("kill-buffer", "Kill a buffer by name", true, KillBuffer)
             .with_handler(crate::editor::Editor::command_kill_buffer),
         CommandSpec::new("kill-line", "Kill text to end of line", true, KillLine)
@@ -1024,6 +1038,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             Recenter,
         )
         .with_handler(crate::editor::Editor::command_recenter),
+        CommandSpec::new(
+            "revert-buffer",
+            "Revert current buffer from disk",
+            true,
+            RevertBuffer,
+        )
+        .with_handler(crate::editor::Editor::command_revert_buffer),
         CommandSpec::new("save-buffer", "Save current buffer", true, SaveBuffer)
             .with_handler(crate::editor::Editor::command_save_buffer),
         CommandSpec::new(
@@ -1255,6 +1276,7 @@ mod tests {
         assert!(registry.contains("list-buffers"));
         assert!(registry.contains("move-to-window-line-top-bottom"));
         assert!(registry.contains("newline-and-indent"));
+        assert!(registry.contains("not-modified"));
         assert!(registry.contains("number-to-register"));
         assert!(registry.contains("point-to-register"));
         assert!(registry.contains("quoted-insert"));
@@ -1282,6 +1304,7 @@ mod tests {
         assert!(registry.contains("rectangle-mark-mode"));
         assert!(registry.contains("rectangle-number-lines"));
         assert!(registry.contains("recenter"));
+        assert!(registry.contains("revert-buffer"));
         assert!(registry.contains("scroll-page-backward"));
         assert!(registry.contains("scroll-page-forward"));
         assert!(registry.contains("set-mark-command"));

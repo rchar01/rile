@@ -25,8 +25,8 @@ it is not a source-porting guide or a behavior oracle.
 | --- | --- | --- | --- |
 | Cursor position report | `M-x what-cursor-position` | `what-cursor-position`, usually `C-x =` | Implement with Emacs-style command name and Rile-specific UTF-8 position details. |
 | Window-line movement | `M-r` | `move-to-window-line-top-bottom`, `M-r` | Implement `M-r`, preserving Rile window/view state. |
-| Revert current buffer | `M-x revert-buffer` | `revert-buffer` | Implement for file-backed normal buffers with dirty confirmation. |
-| Clear dirty flag | `M-x not-modified` | `not-modified` | Implement without changing file contents or undo history. |
+| Revert current buffer | `M-x revert-buffer` | `revert-buffer` | Implemented for file-backed normal buffers with dirty confirmation. |
+| Clear dirty flag | `M-x not-modified` | `not-modified` | Implemented without changing file contents or undo history. |
 | Save modified buffers | `C-x s` | `save-some-buffers` | Implement `C-x s`; preserve special-buffer and read-only safety. |
 | Per-buffer auto revert | `M-x auto-revert-mode` | `auto-revert-mode` | Implement only for clean file-backed buffers; never discard dirty edits. |
 | Global auto revert | `M-x global-auto-revert-mode` | `global-auto-revert-mode` | Implement as an editor-wide toggle reusing the clean-buffer safety rule. |
@@ -43,7 +43,7 @@ it is not a source-porting guide or a behavior oracle.
 ## Implementation Order
 
 - [x] Add `what-cursor-position` and `move-to-window-line-top-bottom`.
-- [ ] Add `revert-buffer` and `not-modified`.
+- [x] Add `revert-buffer` and `not-modified`.
 - [ ] Add `save-some-buffers` on `C-x s`.
 - [ ] Add safe `auto-revert-mode` and `global-auto-revert-mode`.
 - [ ] Add safe default-compatible key aliases after input parser tests.

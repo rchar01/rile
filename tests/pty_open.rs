@@ -91,3 +91,53 @@ fn toggles_file_read_only_and_writable() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn revert_buffer_reloads_file_after_confirmation() -> Result<()> {
+    let file = fixtures::named_temp_file("before\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("before")?;
+    std::fs::write(file.path(), "after\n")?;
+    rile.send("x", b"x")?;
+    rile.assert_screen_contains("xbefore")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("C-v", keys::control('v'))?;
+    rile.assert_screen_contains("Buffer modified; revert anyway?")?;
+    rile.send("yes", b"yes")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("after")?;
+    rile.assert_screen_contains("Reverted")?;
+    if rile.snapshot_text().contains("xbefore") {
+        anyhow::bail!(
+            "revert did not replace dirty contents\n{}",
+            rile.screen_dump()
+        );
+    }
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn not_modified_clears_dirty_marker_without_saving() -> Result<()> {
+    let file = fixtures::named_temp_file("clean\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("clean")?;
+    rile.send("x", b"x")?;
+    rile.assert_screen_contains("modified:true")?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("not-modified", b"not-modified")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.assert_screen_contains("Modification flag cleared")?;
+    rile.assert_screen_contains("modified:false")?;
+    assert_eq!(std::fs::read_to_string(file.path())?, "clean\n");
+
+    rile.quit()?;
+    Ok(())
+}

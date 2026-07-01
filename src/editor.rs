@@ -1499,6 +1499,7 @@ impl Editor {
             PromptKind::KillDirtyBuffer => Ok(self.submit_kill_dirty_buffer(input.trim())),
             PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
             PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
+            PromptKind::RevertBuffer => Ok(self.submit_revert_buffer(input.trim())),
             PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
             PromptKind::RectangleNumberFormat => self.submit_rectangle_number_format(input),
             PromptKind::RectangleNumberStart => self.submit_rectangle_number_start(input.trim()),
@@ -2087,6 +2088,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_not_modified(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.not_modified()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_kill_rectangle(
         &mut self,
         _context: CommandContext,
@@ -2245,6 +2254,15 @@ impl Editor {
     pub(crate) fn command_recenter(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.recenter()?;
         Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_revert_buffer(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        Ok(command_outcome_for_editor_outcome(
+            self.start_revert_buffer()?,
+        ))
     }
 
     pub(crate) fn command_save_buffer(
@@ -2819,6 +2837,56 @@ impl Editor {
                 EditorOutcome::Continue
             }
         }
+    }
+
+    fn start_revert_buffer(&mut self) -> Result<EditorOutcome> {
+        self.clear_insert_group();
+        if self.document().kind() != DocumentKind::Normal || self.document().path().is_none() {
+            self.minibuffer
+                .set_error("revert-buffer requires a file-backed normal buffer");
+            return Ok(EditorOutcome::Continue);
+        }
+        if self.document().is_dirty() {
+            self.minibuffer.start_prompt(
+                PromptKind::RevertBuffer,
+                "Buffer modified; revert anyway? (yes or no) ",
+            );
+            return Ok(EditorOutcome::Continue);
+        }
+        self.revert_current_buffer()
+    }
+
+    fn submit_revert_buffer(&mut self, input: &str) -> EditorOutcome {
+        match input.to_ascii_lowercase().as_str() {
+            "yes" => self.revert_current_buffer().unwrap_or_else(|error| {
+                self.minibuffer.set_error(format!("revert failed: {error}"));
+                EditorOutcome::Continue
+            }),
+            "no" | "" => {
+                self.minibuffer.set_message("Revert canceled");
+                EditorOutcome::Continue
+            }
+            _ => {
+                self.minibuffer.start_prompt(
+                    PromptKind::RevertBuffer,
+                    "Buffer modified; revert anyway? (yes or no) ",
+                );
+                EditorOutcome::Continue
+            }
+        }
+    }
+
+    fn revert_current_buffer(&mut self) -> Result<EditorOutcome> {
+        let name = self.current_buffer_name().to_owned();
+        self.document_mut().reload_from_disk()?;
+        self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
+        self.goal_display_column = None;
+        self.region = None;
+        self.undo_stack.clear();
+        self.refresh_visible_buffer_list();
+        self.sync_current_window();
+        self.minibuffer.set_message(format!("Reverted {name}"));
+        Ok(EditorOutcome::Continue)
     }
 
     fn has_dirty_normal_buffers(&self) -> bool {
@@ -4772,6 +4840,18 @@ impl Editor {
             }
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
+        Ok(())
+    }
+
+    fn not_modified(&mut self) -> Result<()> {
+        if self.document().kind() != DocumentKind::Normal {
+            self.minibuffer
+                .set_error("not-modified requires a normal buffer");
+            return Ok(());
+        }
+        self.document_mut().mark_clean();
+        self.refresh_visible_buffer_list();
+        self.minibuffer.set_message("Modification flag cleared");
         Ok(())
     }
 
@@ -7019,6 +7099,15 @@ fn position_to_absolute(buffer: &Buffer, position: Position) -> Result<usize> {
     Ok(prefix_len + position.byte)
 }
 
+fn clamp_position_to_buffer(buffer: &Buffer, position: Position) -> Position {
+    let line = position.line.min(buffer.line_count().saturating_sub(1));
+    let byte = buffer
+        .line(line)
+        .map(|text| position.byte.min(text.len()))
+        .unwrap_or(0);
+    Position::new(line, byte)
+}
+
 fn absolute_to_position(text: &str, absolute: usize) -> Position {
     let absolute = absolute.min(text.len());
     let mut line_start = 0;
@@ -7652,6 +7741,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::KillDirtyBuffer => "Kill buffer anyway? ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
+        PromptKind::RevertBuffer => "Buffer modified; revert anyway? (yes or no) ",
         PromptKind::QuitDirtyBuffers => "Modified buffers exist; exit anyway? (yes or no) ",
         PromptKind::RectangleNumberFormat => "Format string: ",
         PromptKind::RectangleNumberStart => "Number to count from: ",
