@@ -150,6 +150,47 @@ fn sentence_movement_commands_update_cursor_and_status() -> Result<()> {
 }
 
 #[test]
+fn window_line_command_moves_to_middle_top_and_bottom() -> Result<()> {
+    let file = fixtures::named_temp_file(
+        "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\n",
+    )?;
+    let mut rile = RilePty::spawn(file.path(), 8, 80)?;
+
+    rile.wait_for_screen_contains("line 1")?;
+    rile.send("M-r", keys::meta('r'))?;
+    rile.assert_cursor(3, 0)?;
+    rile.assert_status_contains("Ln 004 Col 000")?;
+
+    rile.send("M-r", keys::meta('r'))?;
+    rile.assert_cursor(0, 0)?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+
+    rile.send("M-r", keys::meta('r'))?;
+    rile.assert_cursor(5, 0)?;
+    rile.assert_status_contains("Ln 006 Col 000")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn what_cursor_position_reports_location() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 10, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("=", b"=")?;
+
+    rile.assert_screen_contains("Line 2, column 1")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn back_to_indentation_moves_to_first_non_whitespace() -> Result<()> {
     let file = fixtures::named_temp_file("    alpha\n  beta\n    \nplain\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

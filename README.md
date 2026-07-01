@@ -55,6 +55,7 @@ Basic editor keys:
 - `C-n`/down arrow and `C-p`/up arrow move vertically.
 - `C-v`/PageDown and `M-v`/PageUp scroll by one visible page.
 - Repeated `C-l` cycles the current line through window center, top, and bottom.
+- `M-r` cycles point through the middle, top, and bottom visible window line.
 - `C-a`/Home and `C-e`/End move within the current line.
 - `M-<` and `M->` move to the beginning and end of the buffer.
 - `M-g g` prompts for a line or `line:column` and moves point there.
@@ -168,7 +169,8 @@ Basic editor keys:
   an interactive command with command-name completion, `C-h v`
   (`describe-variable`) describes a configuration option with option-name
   completion, `C-h m` (`describe-mode`) describes active modes, and
-  `M-x describe-buffer` describes the current buffer. `C-h C-a` (`about-rile`)
+  `M-x describe-buffer` describes the current buffer. `C-x =` reports the
+  current line, column, and point location. `C-h C-a` (`about-rile`)
   shows version, build, terminal, config, and runtime path information, and
   `C-h e` opens the read-only `*Messages*` message history, which updates while
   it is visible.

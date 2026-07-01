@@ -99,6 +99,7 @@ pub struct Editor {
     kill_ring: Vec<KillEntry>,
     yank_state: Option<YankState>,
     recenter_cycle_index: usize,
+    window_line_cycle_index: usize,
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
@@ -453,6 +454,7 @@ impl Editor {
             kill_ring: Vec::new(),
             yank_state: None,
             recenter_cycle_index: 0,
+            window_line_cycle_index: 0,
             last_command_was_kill: false,
             kill_recorded_this_command: false,
             undo_stack: Vec::new(),
@@ -1529,6 +1531,9 @@ impl Editor {
         if command_id != Command::Recenter {
             self.reset_recenter_cycle();
         }
+        if command_id != Command::MoveToWindowLineTopBottom {
+            self.reset_window_line_cycle();
+        }
         let kill_command = is_kill_command(command_id);
         let yank_command = is_yank_command(command_id);
         if kill_command {
@@ -1987,6 +1992,14 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_move_to_window_line_top_bottom(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.move_to_window_line_top_bottom()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_goto_line(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
         self.start_goto_line()?;
         Ok(CommandOutcome::StartedPrompt)
@@ -2429,6 +2442,14 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.open_messages_buffer()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_what_cursor_position(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.what_cursor_position()?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2956,6 +2977,55 @@ impl Editor {
 
     fn reset_recenter_cycle(&mut self) {
         self.recenter_cycle_index = 0;
+    }
+
+    fn move_to_window_line_top_bottom(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        self.sync_current_window();
+        let buffer = self.document().buffer();
+        let viewport = *self.windows.current().viewport();
+        let text_rows = viewport.text_rows.max(1);
+        let line_count = buffer.line_count();
+        let offset = match self.window_line_cycle_index % 3 {
+            0 => text_rows / 2,
+            1 => 0,
+            _ => text_rows.saturating_sub(1),
+        };
+        let target_line = viewport
+            .first_visible_line
+            .saturating_add(offset)
+            .min(line_count.saturating_sub(1));
+
+        self.cursor = Position::new(target_line, 0);
+        self.goal_display_column = None;
+        self.window_line_cycle_index = (self.window_line_cycle_index + 1) % 3;
+        self.sync_current_window();
+        Ok(())
+    }
+
+    fn reset_window_line_cycle(&mut self) {
+        self.window_line_cycle_index = 0;
+    }
+
+    fn what_cursor_position(&mut self) -> Result<()> {
+        self.clear_insert_group();
+        let buffer = self.document().buffer();
+        let absolute = position_to_absolute(buffer, self.cursor)?;
+        let total = buffer.serialize().len();
+        let column = buffer.display_column(self.cursor)?;
+        let percentage = absolute
+            .saturating_mul(100)
+            .checked_div(total)
+            .unwrap_or(100);
+        self.minibuffer.set_message(format!(
+            "Line {}, column {}, point {} of {} ({}%)",
+            self.cursor.line + 1,
+            column,
+            absolute + 1,
+            total + 1,
+            percentage
+        ));
+        Ok(())
     }
 
     fn move_beginning_of_buffer(&mut self) -> Result<()> {

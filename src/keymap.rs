@@ -284,6 +284,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new([KeyEvent::Meta('e')], ForwardSentence),
         KeyBinding::new([KeyEvent::Meta('f')], ForwardWord),
         KeyBinding::new([KeyEvent::Meta('q')], FillParagraph),
+        KeyBinding::new([KeyEvent::Meta('r')], MoveToWindowLineTopBottom),
         KeyBinding::new([KeyEvent::Meta(';')], CommentDwim),
         KeyBinding::new([KeyEvent::Meta('t')], TransposeWords),
         KeyBinding::new([KeyEvent::Meta('\\')], DeleteHorizontalSpace),
@@ -406,6 +407,10 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())],
             StartKeyboardMacro,
+        ),
+        KeyBinding::new(
+            [KeyEvent::Ctrl('x'), KeyEvent::Text("=".to_owned())],
+            WhatCursorPosition,
         ),
         KeyBinding::new(
             [KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())],
@@ -844,6 +849,10 @@ mod tests {
             KeyResolution::Command(GotoLine)
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('r')]),
+            KeyResolution::Command(MoveToWindowLineTopBottom)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Ctrl('s')]),
             KeyResolution::Command(SaveBuffer)
         );
@@ -886,6 +895,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("(".to_owned())]),
             KeyResolution::Command(StartKeyboardMacro)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text("=".to_owned())]),
+            KeyResolution::Command(WhatCursorPosition)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('x'), KeyEvent::Text(")".to_owned())]),

@@ -222,6 +222,13 @@ kill-ring entry: forward kills append text and backward kills prepend text so
 `C-y` restores the killed text in buffer order. A non-kill command or failed kill
 breaks the coalescing chain.
 
+Post-Milestone 14 movement polish adds `move-to-window-line-top-bottom` on
+`M-r`. It cycles point through the middle, top, and bottom visible text rows in
+the current window, places point at column zero, does not scroll, and leaves
+buffer text unchanged. `what-cursor-position` on `C-x =` reports the current
+one-based line, display column, and byte-oriented point position in the echo
+area.
+
 Post-Milestone 14 paragraph movement polish adds `forward-paragraph` on `M-}`
 and `backward-paragraph` on `M-{`. The first subset treats empty lines and lines
 containing only spaces, tabs, or formfeed characters as paragraph separators,

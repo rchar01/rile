@@ -16,7 +16,8 @@ Editing features:
 * Save through a same-directory temporary file and rename.
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, visible page, repeated C-l center/top/bottom
-  recentering, beginning/end of line, indentation, word, paragraph, and sentence.
+  recentering, M-r middle/top/bottom window-line movement, beginning/end of
+  line, indentation, word, paragraph, and sentence.
 * Delete characters, kill words and lines, set a mark, mark the whole buffer,
   kill/copy regions, yank coalesced consecutive kills, and rotate yanks with
   M-y.
@@ -73,6 +74,7 @@ Editing features:
   insertion on Tab, selected-candidate acceptance on Enter, and Emacs-style
   y-or-n-p dirty-buffer confirmation.
 * Prompt before C-x C-c exits when normal buffers have unsaved changes.
+* Report point location with C-x =.
 * Describe key bindings with C-h k, interactive commands with C-h f,
   configuration options with C-h v, active modes with C-h m, and the current
   buffer with M-x describe-buffer.  Command and key help use prose-first,

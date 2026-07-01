@@ -1,5 +1,25 @@
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
+	Implement cursor position and window-line commands.
+
+	* src/command.rs (Command): Add MoveToWindowLineTopBottom and
+	WhatCursorPosition.
+	(default_doc_for_command, default_commands): Register the new commands.
+	* src/keymap.rs (default_bindings): Bind M-r and C-x =.
+	* src/editor.rs (Editor): Add window_line_cycle_index.
+	(Editor::command_move_to_window_line_top_bottom)
+	(Editor::command_what_cursor_position, Editor::move_to_window_line_top_bottom)
+	(Editor::reset_window_line_cycle, Editor::what_cursor_position): New command
+	implementations.
+	* tests/pty_movement.rs (window_line_command_moves_to_middle_top_and_bottom)
+	(what_cursor_position_reports_location): New tests.
+	* README.md: Document M-r and C-x =.
+	* NEWS: Mention the new movement and reporting commands.
+	* docs/development.md: Record command behavior.
+	* docs/kg-emacs-gap-plan.md: Mark the slice complete.
+
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
 	Add kg and Emacs gap plan.
 
 	* docs/kg-emacs-gap-plan.md: New plan for kg-inspired command gaps using

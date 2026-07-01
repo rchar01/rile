@@ -42,7 +42,7 @@ it is not a source-porting guide or a behavior oracle.
 
 ## Implementation Order
 
-- [ ] Add `what-cursor-position` and `move-to-window-line-top-bottom`.
+- [x] Add `what-cursor-position` and `move-to-window-line-top-bottom`.
 - [ ] Add `revert-buffer` and `not-modified`.
 - [ ] Add `save-some-buffers` on `C-x s`.
 - [ ] Add safe `auto-revert-mode` and `global-auto-revert-mode`.

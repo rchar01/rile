@@ -63,6 +63,7 @@ pub enum Command {
     JustOneSpace,
     JumpToRegister,
     ListBuffers,
+    MoveToWindowLineTopBottom,
     NewlineAndIndent,
     KillLine,
     KillBuffer,
@@ -111,6 +112,7 @@ pub enum Command {
     UpcaseRegion,
     UpcaseWord,
     ViewEchoAreaMessages,
+    WhatCursorPosition,
     WriteFile,
     Yank,
     YankRectangle,
@@ -184,12 +186,26 @@ impl CommandCategory {
         use Command::*;
 
         match command {
-            BackToIndentation | BackwardChar | BackwardParagraph | BackwardSentence
-            | BackwardWord | BeginningOfBuffer | BeginningOfLine | EndOfBuffer | EndOfLine
-            | ForwardChar | ForwardParagraph | ForwardSentence | ForwardWord | GotoLine
-            | NextLine | PreviousLine | Recenter | ScrollPageBackward | ScrollPageForward => {
-                Self::Movement
-            }
+            BackToIndentation
+            | BackwardChar
+            | BackwardParagraph
+            | BackwardSentence
+            | BackwardWord
+            | BeginningOfBuffer
+            | BeginningOfLine
+            | EndOfBuffer
+            | EndOfLine
+            | ForwardChar
+            | ForwardParagraph
+            | ForwardSentence
+            | ForwardWord
+            | GotoLine
+            | MoveToWindowLineTopBottom
+            | NextLine
+            | PreviousLine
+            | Recenter
+            | ScrollPageBackward
+            | ScrollPageForward => Self::Movement,
             BackwardKillWord
             | CapitalizeWord
             | CommentDwim
@@ -245,7 +261,7 @@ impl CommandCategory {
             ExecuteExtendedCommand | UniversalArgument => Self::Commands,
             AboutRile | DescribeBindings | DescribeBuffer | DescribeFunction | DescribeKey
             | DescribeKeyBriefly | DescribeMode | DescribeVariable | QuitHelpWindow
-            | QuitMessagesWindow | ViewEchoAreaMessages => Self::Help,
+            | QuitMessagesWindow | ViewEchoAreaMessages | WhatCursorPosition => Self::Help,
             ToggleLineNumbers
             | ToggleReadOnly
             | ToggleSearchHighlighting
@@ -319,6 +335,9 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         JustOneSpace => "Collapse whitespace around point to a requested number of spaces.",
         JumpToRegister => "Move point to the position stored in a prompted register.",
         ListBuffers => "Show a read-only buffer list in another window.",
+        MoveToWindowLineTopBottom => {
+            "Move point to the middle, top, or bottom visible window line."
+        }
         NewlineAndIndent => "Insert a newline using the current plain-text indentation policy.",
         KillLine => "Kill text from point to the line end, or kill the line break at EOL.",
         KillBuffer => "Prompt for a buffer name and kill the selected buffer.",
@@ -371,6 +390,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         UpcaseRegion => "Convert the active region to upper case.",
         UpcaseWord => "Convert the following word or words to upper case.",
         ViewEchoAreaMessages => "Open the read-only message history buffer.",
+        WhatCursorPosition => "Show the current line, column, and buffer position.",
         WriteFile => "Prompt for a path and write the current buffer there.",
         Yank => "Insert the latest kill-ring entry at point.",
         YankRectangle => "Insert the latest killed rectangle at point.",
@@ -877,6 +897,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         CommandSpec::new("list-buffers", "List active buffers", true, ListBuffers)
             .with_handler(crate::editor::Editor::command_list_buffers),
         CommandSpec::new(
+            "move-to-window-line-top-bottom",
+            "Move point within visible window lines",
+            true,
+            MoveToWindowLineTopBottom,
+        )
+        .with_handler(crate::editor::Editor::command_move_to_window_line_top_bottom),
+        CommandSpec::new(
             "newline-and-indent",
             "Insert newline and indent according to mode",
             true,
@@ -1157,6 +1184,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             ViewEchoAreaMessages,
         )
         .with_handler(crate::editor::Editor::command_view_echo_area_messages),
+        CommandSpec::new(
+            "what-cursor-position",
+            "Show point location",
+            true,
+            WhatCursorPosition,
+        )
+        .with_handler(crate::editor::Editor::command_what_cursor_position),
         CommandSpec::new("write-file", "Write buffer to a new path", true, WriteFile)
             .with_handler(crate::editor::Editor::command_write_file),
         CommandSpec::new("yank", "Insert latest kill", true, Yank)
@@ -1219,6 +1253,7 @@ mod tests {
         assert!(registry.contains("just-one-space"));
         assert!(registry.contains("jump-to-register"));
         assert!(registry.contains("list-buffers"));
+        assert!(registry.contains("move-to-window-line-top-bottom"));
         assert!(registry.contains("newline-and-indent"));
         assert!(registry.contains("number-to-register"));
         assert!(registry.contains("point-to-register"));
@@ -1242,6 +1277,7 @@ mod tests {
         assert!(registry.contains("undo"));
         assert!(registry.contains("universal-argument"));
         assert!(registry.contains("view-echo-area-messages"));
+        assert!(registry.contains("what-cursor-position"));
         assert!(registry.contains("query-replace"));
         assert!(registry.contains("rectangle-mark-mode"));
         assert!(registry.contains("rectangle-number-lines"));
