@@ -14,6 +14,8 @@ This directory contains maintainer and contributor documentation for Rile.
 - [Development Notes](development.md): repository scope, milestone history, tooling, containers, release files, and CI expectations.
 - [Emacs Function Reference](emacs-function-reference.md): durable curated Emacs
   command behavior notes for completed and future Rile compatibility work.
+- [kg And Emacs Gap Plan](kg-emacs-gap-plan.md): remaining kg-inspired gaps to
+  close with Emacs-first behavior decisions.
 - [Performance Smoke Testing](performance.md): optional large-file and long-line
   timing comparisons against reference editors.
 - [Reference Testing](reference-testing.md): optional behavior-capture workflow for reference editors such as GNU Zile and kg.

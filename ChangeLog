@@ -1,3 +1,11 @@
+2026-07-01  Robert Charusta  <rch-public@posteo.net>
+
+	Add kg and Emacs gap plan.
+
+	* docs/kg-emacs-gap-plan.md: New plan for kg-inspired command gaps using
+	Emacs-first behavior decisions.
+	* docs/README.md: Link to the new plan.
+
 2026-06-30  Robert Charusta  <rch-public@posteo.net>
 
 	Make fill column configurable.
