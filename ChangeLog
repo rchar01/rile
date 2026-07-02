@@ -1,5 +1,12 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Fix M-\ documentation spelling.
+
+	* README.md: Render the delete-horizontal-space binding with one backslash.
+	* docs/development.md: Likewise.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Clarify incremental-search history recording.
 
 	* README.md: Say isearch history records searches accepted with Enter.

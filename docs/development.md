@@ -285,7 +285,7 @@ keep the adjusted active region, respect read-only buffers, and intentionally do
 not implement Emacs disabled-command confirmation.
 
 Post-Milestone 14 whitespace cleanup polish adds `delete-horizontal-space` on
-`M-\\`, `delete-blank-lines` on `C-x C-o`, `delete-trailing-whitespace` as an
+`M-\`, `delete-blank-lines` on `C-x C-o`, `delete-trailing-whitespace` as an
 unbound `M-x` command, and `just-one-space` as an unbound `M-x` command.
 Horizontal cleanup deletes ASCII spaces and tabs around point, or only before
 point with a prefix argument. `just-one-space` leaves a requested number of spaces
