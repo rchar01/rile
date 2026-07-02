@@ -1,3 +1,10 @@
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
+	Clarify regexp search release note.
+
+	* NEWS: Distinguish literal search and query replace from regexp incremental
+	search in the 0.1.0 release notes.
+
 2026-07-01  Robert Charusta  <rch-public@posteo.net>
 
 	Add regexp incremental search.
