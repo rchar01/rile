@@ -317,6 +317,8 @@ to input bounds, `C-f`/Right and `C-b`/Left move by grapheme, `M-f` and `M-b`
 move by word, insertion occurs at point, Backspace deletes before point, and
 `C-d`/Delete deletes after point. `C-k`, `M-d`, `M-Backspace`, and unambiguous
 CSI-u `C-Backspace` kill prompt text into the normal kill ring.
+Minibuffer prompt labels use the minibuffer face, while editable prompt input and
+ordinary echo-area messages use the default face; errors keep the error face.
 File prompts initialize the editable minibuffer input to the current buffer's
 directory when available, making the base path visible before typing. Long
 minibuffer prompt rendering follows the prompt cursor so the tail of deep paths

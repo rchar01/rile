@@ -45,6 +45,8 @@ Initial inspection scenarios:
   read-only, and writable states.
 - `modeline-undo-clean-core`: base Emacs mode-line modified state after undo
   returns to the saved text.
+- `minibuffer-prompt-faces-core`: base Emacs minibuffer prompt-face behavior
+  for prompts, generated prompt text, editable input, isearch, and prefix keys.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `case-region-core`: base Emacs `C-x C-l` and `C-x C-u` region case-conversion
   behavior and disabled-command prompts.

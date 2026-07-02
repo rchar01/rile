@@ -1,5 +1,32 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Render minibuffer prompt input with the default face.
+
+	* src/terminal/mod.rs (MinibufferVisibleLine): New type.
+	(minibuffer_visible_line, minibuffer_line_text_and_spans)
+	(prompt_supports_ido_candidates, byte_from_display_column)
+	(write_fixed_width_text_with_spans, text_clipped_to_display_width): New
+	helpers.
+	(draw_minibuffer): Style only prompt labels with the minibuffer face, keep
+	ordinary messages default-faced, and keep errors error-faced.
+	(text_from_display_column): Make test-only.
+	(tests): Cover M-x, find-file, describe-function, query-replace, isearch,
+	completion, clipping, combining input, and prefix-key prompt faces.
+	* README.md: Document minibuffer prompt/input face behavior.
+	* docs/development.md: Document minibuffer prompt/input face behavior.
+	* NEWS: Mention prompt label styling.
+	* docs/plans/emacs-undo-redo.md: Remove completed implementation plan.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
+	Add Emacs minibuffer prompt-face reference evidence.
+
+	* tools/reference/emacs/scenarios/minibuffer-prompt-faces-core.scenario: New
+	scenario.
+	* tools/reference/emacs/README.md: List it.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs-style undo and redo traversal.
 
 	* src/buffer/undo.rs (UndoRecord::inverse): New method.

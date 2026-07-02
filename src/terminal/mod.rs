@@ -11,6 +11,7 @@ use crate::config::{Config, ThemeName};
 use crate::editor::{Editor, EditorOutcome};
 use crate::file::Document;
 use crate::input::KeyReader;
+use crate::minibuffer::PromptKind;
 use crate::render::{Face, Span, clip_spans, merge_spans};
 use crate::window::{Viewport, WindowLayout};
 use crate::{Result, RileError};
@@ -402,16 +403,20 @@ fn draw_minibuffer<W: Write>(
     terminal.move_cursor(row as u16, 1)?;
     terminal.clear_line()?;
     let columns = usize::from(size.columns.max(1));
-    if let Some((text, _)) = minibuffer_visible_text_and_cursor(editor, columns) {
-        let face = if editor
-            .minibuffer_display_text()
-            .is_some_and(|text| text.starts_with("Error:"))
-        {
-            Face::Error
+    if let Some(line) = minibuffer_visible_line(editor, columns) {
+        if let Some(face) = line.face {
+            write_fixed_width_text_with_face(terminal, &line.text, columns, face, editor.theme())?;
+        } else if line.spans.is_empty() {
+            write_fixed_width_text(terminal, &line.text, columns)?;
         } else {
-            Face::Minibuffer
-        };
-        write_fixed_width_text_with_face(terminal, &text, columns, face, editor.theme())?;
+            write_fixed_width_text_with_spans(
+                terminal,
+                &line.text,
+                &line.spans,
+                columns,
+                editor.theme(),
+            )?;
+        }
     } else {
         write_fixed_width_text(terminal, "", columns)?;
     }
@@ -487,26 +492,113 @@ fn draw_completion_popup<W: Write>(
 }
 
 fn minibuffer_cursor_column(editor: &Editor, columns: usize) -> Option<usize> {
-    minibuffer_visible_text_and_cursor(editor, columns).and_then(|(_, cursor)| cursor)
+    minibuffer_visible_line(editor, columns).and_then(|line| line.cursor)
 }
 
-fn minibuffer_visible_text_and_cursor(
-    editor: &Editor,
-    columns: usize,
-) -> Option<(String, Option<usize>)> {
-    let text = editor.minibuffer_display_text()?;
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MinibufferVisibleLine {
+    text: String,
+    cursor: Option<usize>,
+    spans: Vec<Span>,
+    face: Option<Face>,
+}
+
+fn minibuffer_visible_line(editor: &Editor, columns: usize) -> Option<MinibufferVisibleLine> {
+    let (text, spans, face) = minibuffer_line_text_and_spans(editor)?;
     let cursor = raw_minibuffer_cursor_column(editor);
     let Some(cursor) = cursor else {
-        return Some((text, None));
+        return Some(MinibufferVisibleLine {
+            text,
+            cursor: None,
+            spans,
+            face,
+        });
     };
     if columns == 0 || cursor < columns {
-        return Some((text, Some(cursor)));
+        return Some(MinibufferVisibleLine {
+            text,
+            cursor: Some(cursor),
+            spans,
+            face,
+        });
     }
     let start_column = cursor + 1 - columns;
-    Some((
-        text_from_display_column(&text, start_column),
-        Some(columns - 1),
-    ))
+    let start_byte = byte_from_display_column(&text, start_column);
+    let text = text[start_byte..].to_owned();
+    let spans = spans
+        .into_iter()
+        .filter_map(|span| {
+            let start = span.start_byte.max(start_byte);
+            let end = span.end_byte.max(start).min(start_byte + text.len());
+            (start < end).then(|| Span::new(start - start_byte, end - start_byte, span.face))
+        })
+        .collect();
+    Some(MinibufferVisibleLine {
+        text,
+        cursor: Some(columns - 1),
+        spans,
+        face,
+    })
+}
+
+fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>, Option<Face>)> {
+    let Some(prompt) = editor.minibuffer().prompt() else {
+        let text = editor.minibuffer_display_text()?;
+        let face = text.starts_with("Error:").then_some(Face::Error);
+        return Some((text, Vec::new(), face));
+    };
+
+    let mut text = String::new();
+    if let Some(completion) = editor.completion()
+        && completion.style() == CompletionStyle::Vertical
+    {
+        let selected = completion.selected_match_number().unwrap_or(0);
+        text.push_str(&format!("{selected}/{}  ", completion.match_count()));
+    }
+
+    let prompt_start = text.len();
+    text.push_str(&prompt.label);
+    let prompt_end = text.len();
+    text.push_str(&prompt.input);
+
+    if let Some(completion) = editor.completion()
+        && completion.style() == CompletionStyle::Ido
+        && prompt_supports_ido_candidates(prompt.kind)
+    {
+        let candidates = if completion.has_matches() {
+            completion
+                .view_items()
+                .into_iter()
+                .map(|item| item.candidate.value.as_str())
+                .collect::<Vec<_>>()
+                .join(" | ")
+        } else {
+            "No match".to_owned()
+        };
+        text.push_str("  [");
+        text.push_str(&candidates);
+        text.push(']');
+    }
+
+    let spans = (prompt_start < prompt_end)
+        .then(|| Span::new(prompt_start, prompt_end, Face::Minibuffer))
+        .into_iter()
+        .collect();
+    Some((text, spans, None))
+}
+
+fn prompt_supports_ido_candidates(kind: PromptKind) -> bool {
+    matches!(
+        kind,
+        PromptKind::DescribeFunction
+            | PromptKind::DescribeVariable
+            | PromptKind::ExtendedCommand
+            | PromptKind::FindFile
+            | PromptKind::FindFileReadOnly
+            | PromptKind::InsertFile
+            | PromptKind::KillBuffer
+            | PromptKind::SwitchToBuffer
+    )
 }
 
 fn raw_minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
@@ -524,7 +616,12 @@ fn raw_minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
     Some(prompt_column)
 }
 
+#[cfg(test)]
 fn text_from_display_column(text: &str, start_column: usize) -> String {
+    text[byte_from_display_column(text, start_column)..].to_owned()
+}
+
+fn byte_from_display_column(text: &str, start_column: usize) -> usize {
     let mut column = 0;
     let mut start_byte = text.len();
     for (byte, character) in text.char_indices() {
@@ -535,7 +632,7 @@ fn text_from_display_column(text: &str, start_column: usize) -> String {
         }
         column = next_column;
     }
-    text[start_byte..].to_owned()
+    start_byte
 }
 
 fn move_cursor_to_minibuffer<W: Write>(
@@ -1117,6 +1214,36 @@ fn write_fixed_width_text_with_face<W: Write>(
     Ok(())
 }
 
+fn write_fixed_width_text_with_spans<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    text: &str,
+    spans: &[Span],
+    width: usize,
+    theme: ThemeName,
+) -> Result<()> {
+    let clipped = text_clipped_to_display_width(text, width);
+    let clipped_spans = clip_spans(spans, 0..clipped.len());
+    let used = write_line_with_spans(terminal, &clipped, &clipped_spans, 4, theme)?;
+    if used < width {
+        terminal.write_text(&" ".repeat(width - used))?;
+    }
+    Ok(())
+}
+
+fn text_clipped_to_display_width(text: &str, width: usize) -> String {
+    let mut clipped = String::new();
+    let mut used = 0;
+    for character in text.chars() {
+        let character_width = character.width().unwrap_or(0);
+        if used + character_width > width {
+            break;
+        }
+        clipped.push(character);
+        used += character_width;
+    }
+    clipped
+}
+
 fn clipped_text(text: &str, width: usize) -> String {
     if width == 0 {
         return String::new();
@@ -1461,8 +1588,9 @@ mod tests {
     use super::{
         AnsiTerminal, FrameOptions, LineRenderOptions, TerminalSize, clipped_text,
         draw_editor_frame, draw_editor_frame_with_options, format_completion_row,
-        mode_line_position, text_from_display_column, wrapped_help_cursor_position,
-        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
+        minibuffer_visible_line, mode_line_position, text_from_display_column,
+        wrapped_help_cursor_position, wrapped_help_visual_lines, write_buffer_line,
+        write_fixed_width_text_with_face, write_fixed_width_text_with_spans,
         write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
@@ -1528,6 +1656,41 @@ mod tests {
         .expect("render should succeed");
 
         assert_eq!(terminal.into_inner(), b"\x1b[7mmode\x1b[0m  ".to_vec());
+    }
+
+    #[test]
+    fn renders_fixed_width_text_with_spans_using_plain_minibuffer_clipping() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_fixed_width_text_with_spans(
+            &mut terminal,
+            "abcdef",
+            &[Span::new(0, 3, Face::Minibuffer)],
+            4,
+            ThemeName::Default,
+        )
+        .expect("render should succeed");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[36mabc\x1b[0md".to_vec());
+    }
+
+    #[test]
+    fn renders_fixed_width_text_with_spans_using_display_width() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_fixed_width_text_with_spans(
+            &mut terminal,
+            "\ta",
+            &[Span::new(0, 1, Face::Minibuffer)],
+            5,
+            ThemeName::Default,
+        )
+        .expect("render should succeed");
+
+        assert_eq!(
+            String::from_utf8(terminal.into_inner()).expect("output should be UTF-8"),
+            "\x1b[36m    \x1b[0ma"
+        );
     }
 
     #[test]
@@ -1818,6 +1981,300 @@ mod tests {
             rendered_cursor_position(&mut editor, size),
             Some((8, "M-x toggle-s".chars().count() + 1))
         );
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_does_not_cover_m_x_input() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("save-buffer".to_owned()))
+            .expect("prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+        assert_minibuffer_visible_line_matches_display(&editor, 80);
+        let line = minibuffer_visible_line(&editor, 80).expect("prompt should render");
+        let prompt_start = line
+            .text
+            .find("M-x ")
+            .expect("prompt label should be visible");
+        assert!(
+            prompt_start > 0,
+            "vertical completion prefix should precede prompt"
+        );
+        assert_eq!(line.spans[0].start_byte, prompt_start);
+
+        assert!(contains_bytes(&frame, b"\x1b[36mM-x \x1b[0msave-buffer"));
+        assert!(!contains_bytes(&frame, b"\x1b[36mM-x save-buffer\x1b[0m"));
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_does_not_cover_find_file_input() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 120,
+        };
+
+        editor
+            .execute_command_by_name("find-file")
+            .expect("find-file should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("target.txt".to_owned()))
+            .expect("prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+        assert_minibuffer_visible_line_matches_display(&editor, 120);
+
+        assert!(contains_bytes(&frame, b"\x1b[36mFind file: \x1b[0m"));
+        assert!(contains_bytes(&frame, b"target.txt"));
+        assert!(!contains_bytes(&frame, b"\x1b[36mFind file: target.txt"));
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_does_not_cover_describe_function_input() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 100,
+        };
+
+        editor
+            .execute_command_by_name("describe-function")
+            .expect("describe-function should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("find-file".to_owned()))
+            .expect("prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+        assert_minibuffer_visible_line_matches_display(&editor, 100);
+
+        assert!(contains_bytes(
+            &frame,
+            b"\x1b[36mDescribe function: \x1b[0mfind-file"
+        ));
+        assert!(!contains_bytes(
+            &frame,
+            b"\x1b[36mDescribe function: find-file\x1b[0m"
+        ));
+    }
+
+    #[test]
+    fn minibuffer_ido_candidates_keep_plain_display_parity() {
+        let mut editor = Editor::with_config(
+            Document::scratch(),
+            Config {
+                completion: CompletionConfig {
+                    style: CompletionStyle::Ido,
+                    ..CompletionConfig::default()
+                },
+                ..Config::default()
+            },
+        );
+        let size = TerminalSize {
+            rows: 8,
+            columns: 120,
+        };
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-s".to_owned()))
+            .expect("prompt input should update completion");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+        assert_minibuffer_visible_line_matches_display(&editor, 120);
+
+        assert!(contains_bytes(&frame, b"\x1b[36mM-x \x1b[0mtoggle-s  ["));
+        assert!(!contains_bytes(&frame, b"\x1b[36mM-x toggle-s"));
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_covers_generated_query_replace_label_only() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "red one\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Meta('%'))
+            .expect("query-replace should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("red".to_owned()))
+            .expect("search prompt input should insert");
+        editor
+            .handle_key(KeyEvent::Special(crate::input::SpecialKey::Enter))
+            .expect("query-replace search should submit");
+        editor
+            .handle_key(KeyEvent::Text("green".to_owned()))
+            .expect("replacement prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(
+            &frame,
+            b"\x1b[36mQuery replace red with: \x1b[0mgreen"
+        ));
+        assert!(!contains_bytes(
+            &frame,
+            b"\x1b[36mQuery replace red with: green\x1b[0m"
+        ));
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_does_not_cover_isearch_input() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "red one\n")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("isearch should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("red".to_owned()))
+            .expect("isearch prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(&frame, b"\x1b[36mI-search: \x1b[0mred"));
+        assert!(!contains_bytes(&frame, b"\x1b[36mI-search: red\x1b[0m"));
+    }
+
+    #[test]
+    fn minibuffer_prefix_key_echo_uses_default_face() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("prefix key should update minibuffer");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(&frame, b"C-x-"));
+        assert!(!contains_bytes(&frame, b"\x1b[36mC-x-\x1b[0m"));
+    }
+
+    #[test]
+    fn minibuffer_visible_line_clips_prompt_span_after_prompt_start() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("1234567890".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 20).expect("prompt should render");
+
+        assert_eq!(line.text, "to line: 1234567890");
+        assert_eq!(
+            line.spans,
+            vec![Span::new(0, "to line: ".len(), Face::Minibuffer)]
+        );
+        assert_eq!(line.cursor, Some(19));
+    }
+
+    #[test]
+    fn minibuffer_visible_line_clips_prompt_span_at_input_boundary() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("12345".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 6).expect("prompt should render");
+
+        assert_eq!(line.text, "12345");
+        assert!(line.spans.is_empty());
+        assert_eq!(line.cursor, Some(5));
+    }
+
+    #[test]
+    fn minibuffer_visible_line_clips_prompt_span_inside_input() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("12345".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 3).expect("prompt should render");
+
+        assert_eq!(line.text, "45");
+        assert!(line.spans.is_empty());
+        assert_eq!(line.cursor, Some(2));
+    }
+
+    #[test]
+    fn minibuffer_visible_line_keeps_combining_input_when_clipping_inside_it() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("e\u{301}abc".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 5).expect("prompt should render");
+
+        assert_eq!(line.text, "e\u{301}abc");
+        assert!(line.spans.is_empty());
+        assert_eq!(line.cursor, Some(4));
+    }
+
+    #[test]
+    fn minibuffer_prompt_face_renders_combining_input_without_coloring_it() {
+        let mut editor = Editor::new(Document::scratch());
+        let size = TerminalSize {
+            rows: 8,
+            columns: 40,
+        };
+
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("e\u{301}".to_owned()))
+            .expect("prompt input should insert");
+
+        let frame = rendered_frame_bytes(&mut editor, size);
+
+        assert!(contains_bytes(
+            &frame,
+            "\x1b[36mGoto line: \x1b[0me\u{301}".as_bytes()
+        ));
+        assert!(!contains_bytes(
+            &frame,
+            "\x1b[36mGoto line: e\u{301}".as_bytes()
+        ));
     }
 
     #[test]
@@ -2200,6 +2657,16 @@ mod tests {
         haystack
             .windows(needle.len())
             .any(|window| window == needle)
+    }
+
+    fn assert_minibuffer_visible_line_matches_display(editor: &Editor, columns: usize) {
+        let line = minibuffer_visible_line(editor, columns).expect("minibuffer should be visible");
+        assert_eq!(
+            line.text,
+            editor
+                .minibuffer_display_text()
+                .expect("plain display text")
+        );
     }
 
     fn last_cursor_position(output: &[u8]) -> Option<(usize, usize)> {

@@ -1,0 +1,97 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=minibuffer-prompt-faces-core
+SCENARIO_DESCRIPTION='Observe base Emacs minibuffer prompt faces versus editable input.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=minibuffer-prompt-faces-core.txt
+FIXTURE_CONTENT=$'red one
+blue two
+red three
+'
+
+setup_reference_files() {
+  local capture_dir=$1
+  printf '%s\n' 'target file' > "$capture_dir/target-file.txt"
+}
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /red one/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Escape
+Type "x"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-m-x-prompt.png
+Sleep 500ms
+Type "save-buffer"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-m-x-typed-command.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-find-file-base-input.png
+Sleep 500ms
+Type "target-file.txt"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-find-file-typed-input.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+H
+Type "f"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-describe-function-prompt.png
+Sleep 500ms
+Type "find-file"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-describe-function-typed-input.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Escape
+Type "%"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-query-replace-search-prompt.png
+Sleep 500ms
+Type "red"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-query-replace-search-typed.png
+Sleep 500ms
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-query-replace-replacement-prompt.png
+Sleep 500ms
+Type "green"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-query-replace-replacement-typed.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+S
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/11-isearch-prompt.png
+Sleep 500ms
+Type "red"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/12-isearch-typed-input.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Sleep 1500ms
+Screenshot {{FRAME_DIR}}/13-prefix-key-echo.png
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
