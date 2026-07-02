@@ -156,9 +156,10 @@ Basic editor keys:
 - `C-M-s` and `C-M-r` start forward and backward regexp incremental search.
   The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`, escaped
   metacharacters, and character classes such as `[abc]`, `[^abc]`, and `[a-z]`.
-- `M-p` and `M-n` move through search history while an incremental-search prompt
-  is active. Literal search and regexp search keep separate histories; forward
-  and backward search share history within each kind.
+- `M-p` and `M-n` move through accepted search history while an
+  incremental-search prompt is active. Accept a search with Enter to record it.
+  Literal search and regexp search keep separate histories; forward and backward
+  search share history within each kind.
 - `M-}` and `M-{` move forward and backward by blank-line-separated paragraphs.
 - `M-e` and `M-a` move forward and backward by sentence using Rile's documented
   default sentence-boundary subset.
@@ -197,7 +198,8 @@ Basic editor keys:
   control; resuming the process redraws the editor.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,
   goto-line, rectangle, shell-command, describe-function, describe-variable, and
-  incremental-search minibuffer prompts.
+  incremental-search minibuffer prompts. Incremental-search history records
+  searches accepted with Enter.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search uses Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and no search command matches across line breaks yet.

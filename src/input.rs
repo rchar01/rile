@@ -423,6 +423,8 @@ mod tests {
     #[test]
     fn parses_meta_key() {
         assert_eq!(parse(b"\x1bf").event, KeyEvent::Meta('f'));
+        assert_eq!(parse(b"\x1bp").event, KeyEvent::Meta('p'));
+        assert_eq!(parse(b"\x1bn").event, KeyEvent::Meta('n'));
         assert_eq!(parse(b"\x1b!").event, KeyEvent::Meta('!'));
         assert_eq!(parse(b"\x1b|").event, KeyEvent::Meta('|'));
         assert_eq!(parse("\u{1b}é".as_bytes()).event, KeyEvent::Meta('é'));
@@ -461,6 +463,8 @@ mod tests {
         );
         assert_eq!(parse(b"\x1b[8;5u").event, KeyEvent::Ctrl('h'));
         assert_eq!(parse(b"\x1b[102;3u").event, KeyEvent::Meta('f'));
+        assert_eq!(parse(b"\x1b[112;3u").event, KeyEvent::Meta('p'));
+        assert_eq!(parse(b"\x1b[110;3u").event, KeyEvent::Meta('n'));
         assert_eq!(parse(b"\x1b[65;5u").event, KeyEvent::Ctrl('a'));
         assert_eq!(parse(b"\x1b[115;7u").event, KeyEvent::CtrlMeta('s'));
         let fallback = parse(b"\x1b[x;5u");

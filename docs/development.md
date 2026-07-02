@@ -355,9 +355,11 @@ command, describe-function, describe-variable, and incremental-search
 minibuffer prompts. Prompt history is stored per prompt kind, preserves the
 current draft while navigating, avoids consecutive duplicate entries, and
 refreshes completion candidates after recalling history in completion-enabled
-prompts. Incremental search uses separate literal and regexp histories, shared
-between forward and backward search within each kind. Query-replace history
-remains deferred because its prompts have a separate interaction model.
+prompts. Incremental search records accepted searches when Enter exits the
+prompt; canceled searches and invalid regexps are not recorded. It uses separate
+literal and regexp histories, shared between forward and backward search within
+each kind. Query-replace history remains deferred because its prompts have a
+separate interaction model.
 
 Post-Milestone 14 self-documentation work made commands, keymaps, options,
 modes, buffers, messages, and runtime metadata inspectable from inside Rile.

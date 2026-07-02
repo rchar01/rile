@@ -1,5 +1,15 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Clarify incremental-search history recording.
+
+	* README.md: Say isearch history records searches accepted with Enter.
+	* NEWS: Clarify accepted search-string history.
+	* docs/development.md: Document skipped canceled and invalid regexp searches.
+	* docs/emacs-function-reference.md: Clarify regexp history wording.
+	* src/input.rs (tests): Assert exact M-p and M-n encodings.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Add incremental-search history navigation.
 
 	* src/editor/search_history.rs: New search history helper module.
