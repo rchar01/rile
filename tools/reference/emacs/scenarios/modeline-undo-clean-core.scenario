@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=modeline-undo-clean-core
+SCENARIO_DESCRIPTION='Observe base Emacs mode-line modified state after undo returns to the saved text.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=modeline-undo-clean-core.txt
+FIXTURE_CONTENT=$'alpha\nbeta\ngamma\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-clean.png
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-modified.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-undo-clean.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}

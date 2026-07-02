@@ -43,6 +43,8 @@ Initial inspection scenarios:
 - `baseline-ui-modern`: modern Emacs screen layout with Vertico/Marginalia.
 - `modeline-state-core`: core Emacs mode-line clean, modified, saved,
   read-only, and writable states.
+- `modeline-undo-clean-core`: base Emacs mode-line modified state after undo
+  returns to the saved text.
 - `back-to-indentation-core`: base Emacs `M-m` back-to-indentation behavior.
 - `case-region-core`: base Emacs `C-x C-l` and `C-x C-u` region case-conversion
   behavior and disabled-command prompts.

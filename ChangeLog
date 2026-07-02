@@ -1,5 +1,13 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs undo-clean mode-line reference scenario.
+
+	* tools/reference/emacs/scenarios/modeline-undo-clean-core.scenario: New
+	scenario.
+	* tools/reference/emacs/README.md: List it.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Fix M-\ documentation spelling.
 
 	* README.md: Render the delete-horizontal-space binding with one backslash.
