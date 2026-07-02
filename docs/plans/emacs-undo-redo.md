@@ -87,11 +87,11 @@ later `undo` should be able to redo by undoing the recorded undo sequence.
 
 ## Open Questions
 
-- [ ] Should `undo-redo` have a default key binding in the first pass, or only be
+- [x] Should `undo-redo` have a default key binding in the first pass, or only be
   available as `M-x undo-redo`?
-- [ ] Should Rile add aliases for `C-/` and `C-x u` at the same time as redo, or
+- [x] Should Rile add aliases for `C-/` and `C-x u` at the same time as redo, or
   keep only the existing `C-_` binding initially?
-- [ ] Should active-region selective undo be a follow-up plan or a later phase in
+- [x] Should active-region selective undo be a follow-up plan or a later phase in
   this plan?
 
 ## Phase 1: Reference And Planning
@@ -123,14 +123,14 @@ Goal: Add internal helpers that can represent undoing an undo.
 
 Tasks:
 
-- [ ] Add a helper to invert one `UndoRecord`.
-- [ ] Add `Batch` inversion that preserves user-visible command order.
-- [ ] Add unit tests for each record kind and batch inversion.
-- [ ] Keep record inversion independent from editor command dispatch.
+- [x] Add a helper to invert one `UndoRecord`.
+- [x] Add `Batch` inversion that preserves user-visible command order.
+- [x] Add unit tests for each record kind and batch inversion.
+- [x] Keep record inversion independent from editor command dispatch.
 
 Validation gate:
 
-- [ ] Focused unit tests prove insert, delete, replace, and batch inversion.
+- [x] Focused unit tests prove insert, delete, replace, and batch inversion.
 
 ## Phase 3: Undo Sequence State
 
@@ -138,17 +138,17 @@ Goal: Track active undo sequences without exposing redo commands yet.
 
 Tasks:
 
-- [ ] Add editor state for the currently active undo sequence.
-- [ ] When `undo` applies a normal edit record, collect the inverse record in the
+- [x] Add editor state for the currently active undo sequence.
+- [x] When `undo` applies a normal edit record, collect the inverse record in the
   active sequence instead of discarding it.
-- [ ] Add a command-boundary helper that finalizes the active sequence into the
+- [x] Add a command-boundary helper that finalizes the active sequence into the
   undo stack when a non-undo command runs.
-- [ ] Ensure buffer switching keeps per-buffer sequence state correct.
-- [ ] Ensure buffer killing clears stale active sequence state.
+- [x] Ensure buffer switching keeps per-buffer sequence state correct.
+- [x] Ensure buffer killing clears stale active sequence state.
 
 Validation gate:
 
-- [ ] Unit tests show a non-undo command after undo creates a redoable entry.
+- [x] Unit tests show a non-undo command after undo creates a redoable entry.
 
 ## Phase 4: Core Redo Via Undo
 
@@ -156,16 +156,16 @@ Goal: Make plain `undo` redo after an undo sequence is broken.
 
 Tasks:
 
-- [ ] Teach `undo` to apply finalized undo-sequence entries as redo operations.
-- [ ] Preserve repeated redo order for multi-edit undo sequences.
-- [ ] Keep new typing after undo as a branch that is undone before older redo
+- [x] Teach `undo` to apply finalized undo-sequence entries as redo operations.
+- [x] Preserve repeated redo order for multi-edit undo sequences.
+- [x] Keep new typing after undo as a branch that is undone before older redo
   entries.
-- [ ] Keep normal typing grouping behavior intact.
+- [x] Keep normal typing grouping behavior intact.
 
 Validation gate:
 
-- [ ] Unit tests match the one-edit, multi-edit, and branch reference scenarios.
-- [ ] PTY tests cover visible text and mode-line status for the main path.
+- [x] Unit tests match the one-edit, multi-edit, and branch reference scenarios.
+- [x] PTY tests cover visible text and mode-line status for the main path.
 
 ## Phase 5: Modified-State Tracking
 
@@ -173,15 +173,15 @@ Goal: Preserve clean/dirty behavior through undo and redo metadata changes.
 
 Tasks:
 
-- [ ] Revisit `clean_undo_depths` after sequence finalization.
-- [ ] Update clean depths when metadata depth changes but clean text does not.
-- [ ] Verify save, `write-file`, `not-modified`, revert, opened file, and scratch
+- [x] Revisit `clean_undo_depths` after sequence finalization.
+- [x] Update clean depths when metadata depth changes but clean text does not.
+- [x] Verify save, `write-file`, `not-modified`, revert, opened file, and scratch
   replacement behavior through undo and redo.
 
 Validation gate:
 
-- [ ] Existing undo-to-clean tests still pass.
-- [ ] New tests cover redo away from and back toward clean text.
+- [x] Existing undo-to-clean tests still pass.
+- [x] New tests cover redo away from clean text.
 
 ## Phase 6: Undo-Only And Undo-Redo Commands
 
@@ -189,14 +189,14 @@ Goal: Add explicit Emacs command variants.
 
 Tasks:
 
-- [ ] Add `undo-only` command.
-- [ ] Add `undo-redo` command.
-- [ ] Decide and implement key bindings or keep the commands `M-x` only.
-- [ ] Document command descriptions in the command registry.
+- [x] Add `undo-only` command.
+- [x] Add `undo-redo` command.
+- [x] Decide and implement key bindings or keep the commands `M-x` only.
+- [x] Document command descriptions in the command registry.
 
 Validation gate:
 
-- [ ] Unit and PTY tests match the `undo-only` and `undo-redo` reference
+- [x] Unit and PTY tests match the `undo-only` and `undo-redo` reference
   scenario.
 
 ## Phase 7: Documentation
@@ -205,15 +205,15 @@ Goal: Replace current limitation notes with implemented behavior.
 
 Tasks:
 
-- [ ] Update `README.md` undo behavior.
-- [ ] Update `docs/development.md` undo architecture notes.
-- [ ] Update `docs/emacs-function-reference.md` if command coverage changes.
-- [ ] Add `NEWS` release note.
-- [ ] Add `ChangeLog` entries.
+- [x] Update `README.md` undo behavior.
+- [x] Update `docs/development.md` undo architecture notes.
+- [x] Confirm `docs/emacs-function-reference.md` needs no update for this slice.
+- [x] Add `NEWS` release note.
+- [x] Add `ChangeLog` entries.
 
 Validation gate:
 
-- [ ] Docs no longer claim redo is missing after implementation lands.
+- [x] Docs no longer claim redo is missing after implementation lands.
 
 ## Phase 8: Full Verification
 
@@ -221,11 +221,11 @@ Goal: Prove the feature is complete and repository-clean.
 
 Tasks:
 
-- [ ] Run focused unit tests for undo/redo.
-- [ ] Run focused PTY tests for undo/redo and modified status.
-- [ ] Run the new reference captures when scenario behavior changes.
-- [ ] Run `git diff --check`.
-- [ ] Run `make verify`.
+- [x] Run focused unit tests for undo/redo.
+- [x] Run focused PTY tests for undo/redo and modified status.
+- [x] Run the new reference captures when scenario behavior changes.
+- [x] Run `git diff --check`.
+- [x] Run `make verify`.
 
 ## Progress Log
 
@@ -234,6 +234,8 @@ Tasks:
 | 2026-07-02 | Plan created before Rile undo code changes. | User requested all edge cases documented before implementation. |
 | 2026-07-02 | Added and captured first-pass Emacs undo/redo reference scenarios. | `make reference-capture REF_EDITOR=emacs REF_SCENARIO=undo-redo-single-core`, `undo-redo-multiple-core`, `undo-redo-branch-core`, and `undo-family-core` passed. |
 | 2026-07-02 | Updated `undo-only` edge cases after visual capture review. | `undo-family-core` shows immediate `undo-only` continuing to an earlier edit and boundary `undo-only` reporting no further undo in the single-edit case. |
+| 2026-07-02 | Implemented undo record inversion, active undo sequences, redo via undo traversal, `undo-only`, and `undo-redo`. | Focused `undo_`, inversion, and `pty_statusline undo_redo_reapplies_edit_and_marks_modified_status` tests passed. |
+| 2026-07-02 | Full verification passed. | `make verify` passed. |
 
 ## Decision Log
 
@@ -241,3 +243,5 @@ Tasks:
 | --- | --- | --- |
 | 2026-07-02 | Plan first, then reference scenarios, then implementation. | Avoid coding redo mechanics before edge cases are explicit. |
 | 2026-07-02 | Target user-visible Emacs behavior, not internal undo-list compatibility. | Rile can stay smaller while matching terminal editing behavior. |
+| 2026-07-02 | Keep `undo-redo` and `undo-only` as `M-x` commands initially. | Captured reference evidence covered command behavior, not default key aliases. |
+| 2026-07-02 | Defer `C-/`, `C-x u`, and selective region undo. | They need separate reference coverage and should not be mixed into redo traversal. |

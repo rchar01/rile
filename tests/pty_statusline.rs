@@ -74,3 +74,31 @@ fn undo_to_opened_file_contents_clears_modified_status() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn undo_redo_reapplies_edit_and_marks_modified_status() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\nbeta\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("insert dirty marker", b"!")?;
+    rile.wait_for_screen_contains("!alpha")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-_", b"\x1f")?;
+    rile.wait_for_screen_contains("alpha")?;
+    assert!(!rile.snapshot_text().contains("!alpha"));
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("undo-redo", b"undo-redo")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("!alpha")?;
+    rile.assert_screen_contains("Redo")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}

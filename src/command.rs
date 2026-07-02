@@ -116,6 +116,8 @@ pub enum Command {
     TransposeLines,
     TransposeWords,
     Undo,
+    UndoOnly,
+    UndoRedo,
     UncommentRegion,
     UniversalArgument,
     UpcaseRegion,
@@ -244,6 +246,8 @@ impl CommandCategory {
             | TransposeLines
             | TransposeWords
             | Undo
+            | UndoOnly
+            | UndoRedo
             | UncommentRegion
             | UpcaseRegion
             | UpcaseWord
@@ -417,6 +421,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         TransposeLines => "Transpose the previous line past the current line or lines.",
         TransposeWords => "Transpose the word before or containing point with another word.",
         Undo => "Undo the latest edit recorded for the current buffer.",
+        UndoOnly => "Undo an edit without redoing previous undo commands.",
+        UndoRedo => "Redo a change that was just undone.",
         UncommentRegion => "Remove line comment markers from the active region.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
         UpcaseRegion => "Convert the active region to upper case.",
@@ -1239,6 +1245,10 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_transpose_words),
         CommandSpec::new("undo", "Undo last edit", true, Undo)
             .with_handler(crate::editor::Editor::command_undo),
+        CommandSpec::new("undo-only", "Undo without redo", true, UndoOnly)
+            .with_handler(crate::editor::Editor::command_undo_only),
+        CommandSpec::new("undo-redo", "Redo last undo", true, UndoRedo)
+            .with_handler(crate::editor::Editor::command_undo_redo),
         CommandSpec::new(
             "uncomment-region",
             "Uncomment active region",
@@ -1371,6 +1381,8 @@ mod tests {
         assert!(registry.contains("yank-rectangle"));
         assert!(registry.contains("yank-pop"));
         assert!(registry.contains("undo"));
+        assert!(registry.contains("undo-only"));
+        assert!(registry.contains("undo-redo"));
         assert!(registry.contains("universal-argument"));
         assert!(registry.contains("view-echo-area-messages"));
         assert!(registry.contains("what-cursor-position"));
@@ -1640,6 +1652,8 @@ mod tests {
             Command::TransposeLines,
             Command::TransposeWords,
             Command::Undo,
+            Command::UndoOnly,
+            Command::UndoRedo,
             Command::UncommentRegion,
             Command::UpcaseRegion,
             Command::UpcaseWord,

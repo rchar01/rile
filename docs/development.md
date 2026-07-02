@@ -364,9 +364,12 @@ separate interaction model.
 Undo dirty-state tracking stores a per-buffer undo save point. Opening, saving,
 reverting, and `not-modified` record the current undo depth as clean; undoing
 back to that depth clears the modified flag, while undoing past a saved edit
-makes the buffer modified again. Saving and `not-modified` also break normal
-typing undo grouping so subsequent typing cannot merge into a pre-save undo
-record.
+makes the buffer modified again. Undo traversal records active undo sequences as
+redoable undo-stack entries when a non-undo command boundary is reached. Saving,
+`not-modified`, and undo-sequence finalization also break normal typing undo
+grouping so subsequent typing cannot merge into an earlier undo record. Explicit
+`undo-only` and `undo-redo` commands are available through `M-x`; `C-/`, `C-x u`,
+and selective region undo remain deferred.
 
 Post-Milestone 14 self-documentation work made commands, keymaps, options,
 modes, buffers, messages, and runtime metadata inspectable from inside Rile.
@@ -489,10 +492,9 @@ Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: there is no prompt cursor movement, no
-incremental-search/query-replace prompt history, no shell-command process
-timeout/cancellation, no message-log retention limit or persistence across
-sessions, and no redo or advanced Emacs undo traversal yet.
+Current limitations: there is no query-replace prompt history, no shell-command
+process timeout/cancellation, no message-log retention limit or persistence
+across sessions, and no selective region undo yet.
 Literal search and query replace are exact line-local substring matching. Regexp
 incremental search uses Rile's built-in line-local subset: `.`, `*`, `+`, `?`,
 `^`, `$`, escaped metacharacters, and character classes with ranges and

@@ -111,6 +111,7 @@ pub struct Editor {
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
+    active_undo_sequence: Option<ActiveUndoSequence>,
     clean_undo_depths: HashMap<BufferId, usize>,
     grouping_insert: bool,
     syntax_enabled: bool,
@@ -280,6 +281,19 @@ impl KillEntry {
 struct UndoEntry {
     buffer: BufferId,
     record: UndoRecord,
+    kind: UndoEntryKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UndoEntryKind {
+    Edit,
+    UndoSequence,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveUndoSequence {
+    buffer: BufferId,
+    records: Vec<UndoRecord>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -493,6 +507,7 @@ impl Editor {
             last_command_was_kill: false,
             kill_recorded_this_command: false,
             undo_stack: Vec::new(),
+            active_undo_sequence: None,
             clean_undo_depths,
             grouping_insert: false,
             syntax_enabled: config.syntax_highlighting,
@@ -797,6 +812,7 @@ impl Editor {
 
         if key == KeyEvent::Ctrl('g') {
             self.reset_recenter_cycle();
+            self.finalize_active_undo_sequence();
             self.quit_current_operation();
             return Ok(EditorOutcome::Continue);
         }
@@ -829,6 +845,7 @@ impl Editor {
                 self.clear_key_sequence();
                 self.universal_argument = None;
                 self.clear_insert_group();
+                self.finalize_active_undo_sequence();
                 self.reset_recenter_cycle();
                 self.last_command_was_kill = false;
                 self.yank_state = None;
@@ -840,6 +857,7 @@ impl Editor {
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
+                self.finalize_active_undo_sequence();
                 self.insert_text_with_argument(&text, true, argument)?;
                 Ok(EditorOutcome::Continue)
             }
@@ -849,6 +867,7 @@ impl Editor {
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
+                self.finalize_active_undo_sequence();
                 self.insert_text_with_argument("\n", false, argument)?;
                 Ok(EditorOutcome::Continue)
             }
@@ -858,6 +877,7 @@ impl Editor {
                 self.last_command_was_kill = false;
                 self.yank_state = None;
                 let argument = self.take_universal_argument();
+                self.finalize_active_undo_sequence();
                 self.insert_text_with_argument("\t", false, argument)?;
                 Ok(EditorOutcome::Continue)
             }
@@ -893,6 +913,10 @@ impl Editor {
         }
         self.undo_stack
             .retain(|entry| !reverted.contains(&entry.buffer));
+        for buffer in &reverted {
+            self.discard_active_undo_sequence_for_buffer(*buffer);
+            self.remember_clean_undo_depth(*buffer);
+        }
         for buffer in &reverted {
             if *buffer == self.current_buffer {
                 self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
@@ -1622,6 +1646,9 @@ impl Editor {
         argument: Option<i32>,
     ) -> Result<EditorOutcome> {
         let command_id = command.command;
+        if !is_undo_family_command(command_id) {
+            self.finalize_active_undo_sequence();
+        }
         if command_id != Command::Recenter {
             self.reset_recenter_cycle();
         }
@@ -2580,6 +2607,16 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_undo_only(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.undo_only()?;
+        Ok(CommandOutcome::Continue)
+    }
+
+    pub(crate) fn command_undo_redo(&mut self, _context: CommandContext) -> Result<CommandOutcome> {
+        self.undo_redo()?;
+        Ok(CommandOutcome::Continue)
+    }
+
     pub(crate) fn command_uncomment_region(
         &mut self,
         _context: CommandContext,
@@ -3042,6 +3079,7 @@ impl Editor {
         self.region = None;
         let buffer = self.current_buffer;
         self.undo_stack.retain(|entry| entry.buffer != buffer);
+        self.discard_active_undo_sequence_for_buffer(buffer);
         self.remember_clean_undo_depth(buffer);
         self.refresh_visible_buffer_list();
         self.sync_current_window();
@@ -4933,6 +4971,53 @@ impl Editor {
             .count()
     }
 
+    fn finalize_active_undo_sequence(&mut self) {
+        let Some(sequence) = self.active_undo_sequence.take() else {
+            return;
+        };
+        if sequence.records.is_empty() {
+            return;
+        }
+
+        let was_clean = self
+            .buffers
+            .document(sequence.buffer)
+            .is_some_and(|document| !document.is_dirty());
+        for record in sequence.records {
+            self.undo_stack.push(UndoEntry {
+                buffer: sequence.buffer,
+                record,
+                kind: UndoEntryKind::UndoSequence,
+            });
+        }
+        if was_clean {
+            self.remember_clean_undo_depth(sequence.buffer);
+        }
+        self.refresh_visible_buffer_list();
+    }
+
+    fn record_active_undo(&mut self, buffer: BufferId, record: UndoRecord) {
+        match &mut self.active_undo_sequence {
+            Some(sequence) if sequence.buffer == buffer => sequence.records.push(record),
+            _ => {
+                self.active_undo_sequence = Some(ActiveUndoSequence {
+                    buffer,
+                    records: vec![record],
+                });
+            }
+        }
+    }
+
+    fn discard_active_undo_sequence_for_buffer(&mut self, buffer: BufferId) {
+        if self
+            .active_undo_sequence
+            .as_ref()
+            .is_some_and(|sequence| sequence.buffer == buffer)
+        {
+            self.active_undo_sequence = None;
+        }
+    }
+
     fn remember_clean_undo_depth(&mut self, buffer: BufferId) {
         let depth = self.undo_depth_for_buffer(buffer);
         self.clean_undo_depths.insert(buffer, depth);
@@ -4948,6 +5033,73 @@ impl Editor {
     }
 
     fn undo(&mut self) -> Result<()> {
+        self.undo_matching(|_| true, true, "No undo information", "Undone")
+    }
+
+    fn undo_only(&mut self) -> Result<()> {
+        self.undo_matching(
+            |entry| entry.kind == UndoEntryKind::Edit,
+            true,
+            "No further undo information",
+            "Undone",
+        )
+    }
+
+    fn undo_redo(&mut self) -> Result<()> {
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        self.clear_insert_group();
+        let buffer = self.current_buffer;
+        if let Some(record) = self
+            .active_undo_sequence
+            .as_mut()
+            .filter(|sequence| sequence.buffer == buffer)
+            .and_then(|sequence| sequence.records.pop())
+        {
+            self.redo_record(buffer, record)?;
+            return Ok(());
+        }
+
+        let Some(index) = self
+            .undo_stack
+            .iter()
+            .rposition(|entry| entry.buffer == buffer && entry.kind == UndoEntryKind::UndoSequence)
+        else {
+            self.minibuffer.set_message("No undone changes to redo");
+            return Ok(());
+        };
+        let entry = self.undo_stack.remove(index);
+        self.redo_record(buffer, entry.record)?;
+        Ok(())
+    }
+
+    fn redo_record(&mut self, buffer: BufferId, record: UndoRecord) -> Result<()> {
+        if self
+            .buffers
+            .document(buffer)
+            .is_some_and(|document| !document.is_dirty())
+        {
+            self.remember_clean_undo_depth(buffer);
+        }
+        let inverse = record.inverse();
+        self.undo_record(record)?;
+        self.undo_stack.push(UndoEntry {
+            buffer,
+            record: inverse,
+            kind: UndoEntryKind::Edit,
+        });
+        self.finish_undo_command("Redo");
+        Ok(())
+    }
+
+    fn undo_matching(
+        &mut self,
+        matches_entry: impl Fn(&UndoEntry) -> bool,
+        record_inverse: bool,
+        empty_message: &'static str,
+        success_message: &'static str,
+    ) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
         }
@@ -4956,20 +5108,27 @@ impl Editor {
         let Some(index) = self
             .undo_stack
             .iter()
-            .rposition(|entry| entry.buffer == buffer)
+            .rposition(|entry| entry.buffer == buffer && matches_entry(entry))
         else {
-            self.minibuffer.set_message("No undo information");
+            self.minibuffer.set_message(empty_message);
             return Ok(());
         };
         let entry = self.undo_stack.remove(index);
+        if record_inverse {
+            self.record_active_undo(buffer, entry.record.inverse());
+        }
         self.undo_record(entry.record)?;
         self.sync_dirty_state_after_undo(buffer);
+        self.finish_undo_command(success_message);
+        Ok(())
+    }
+
+    fn finish_undo_command(&mut self, message: &'static str) {
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
         self.refresh_visible_buffer_list();
-        self.minibuffer.set_message("Undone");
-        Ok(())
+        self.minibuffer.set_message(message);
     }
 
     fn undo_record(&mut self, record: UndoRecord) -> Result<()> {
@@ -5966,6 +6125,7 @@ impl Editor {
                 self.buffer_viewports.remove(&target);
                 self.clean_undo_depths.remove(&target);
                 self.undo_stack.retain(|entry| entry.buffer != target);
+                self.discard_active_undo_sequence_for_buffer(target);
                 let clean_depth = self.undo_depth_for_buffer(next_current);
                 self.clean_undo_depths
                     .entry(next_current)
@@ -6717,6 +6877,7 @@ impl Editor {
         self.undo_stack.push(UndoEntry {
             buffer: self.current_buffer,
             record: UndoRecord::Batch(records),
+            kind: UndoEntryKind::Edit,
         });
         self.clear_insert_group();
         self.refresh_visible_buffer_list();
@@ -6774,8 +6935,10 @@ impl Editor {
                         cursor_after,
                         ..
                     },
+                kind,
             }) = self.undo_stack.last_mut()
             && *buffer == self.current_buffer
+            && *kind == UndoEntryKind::Edit
             && *cursor_after == start
         {
             range.end = end;
@@ -6793,6 +6956,7 @@ impl Editor {
                 cursor_before: start,
                 cursor_after: end,
             },
+            kind: UndoEntryKind::Edit,
         });
         self.grouping_insert = group_with_previous && !text.contains('\n');
         self.refresh_visible_buffer_list();
@@ -6816,6 +6980,7 @@ impl Editor {
                 cursor_before,
                 cursor_after,
             },
+            kind: UndoEntryKind::Edit,
         });
         self.clear_insert_group();
         self.refresh_visible_buffer_list();
@@ -6841,6 +7006,7 @@ impl Editor {
                 cursor_before,
                 cursor_after,
             },
+            kind: UndoEntryKind::Edit,
         });
         self.clear_insert_group();
         self.refresh_visible_buffer_list();
@@ -7810,6 +7976,13 @@ fn blank_line_run(lines: &[String], line_index: usize) -> (usize, usize) {
 
 fn is_yank_command(command: Command) -> bool {
     matches!(command, Command::Yank | Command::YankPop)
+}
+
+fn is_undo_family_command(command: Command) -> bool {
+    matches!(
+        command,
+        Command::Undo | Command::UndoOnly | Command::UndoRedo
+    )
 }
 
 fn editor_outcome_for_command_outcome(outcome: CommandOutcome) -> EditorOutcome {
@@ -17083,6 +17256,239 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should remove grouped typing");
         assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn undo_then_command_boundary_then_undo_redoes_edit() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("text should insert");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .execute_command_by_name("forward-char")
+            .expect("movement should break undo sequence");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should redo edit after boundary");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+    }
+
+    #[test]
+    fn repeated_undo_redoes_multiple_edits_in_emacs_order() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("first edit should insert");
+        editor.clear_insert_group();
+        editor
+            .handle_key(KeyEvent::Text("B".to_owned()))
+            .expect("second edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "AB");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove second edit");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove first edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .execute_command_by_name("forward-char")
+            .expect("movement should break undo sequence");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should redo first edit");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should redo second edit");
+        assert_eq!(editor.document().buffer().serialize(), "AB");
+    }
+
+    #[test]
+    fn typing_after_undo_creates_branch_before_redo_entry() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("original edit should insert");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove original edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .handle_key(KeyEvent::Text("B".to_owned()))
+            .expect("branch edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "B");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove branch edit first");
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn undo_only_continues_undo_without_redoing() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("first edit should insert");
+        editor.clear_insert_group();
+        editor
+            .handle_key(KeyEvent::Text("B".to_owned()))
+            .expect("second edit should insert");
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove second edit");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        editor
+            .execute_command_by_name("undo-only")
+            .expect("undo-only should remove first edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn undo_only_after_boundary_does_not_redo() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("edit should insert");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit");
+        editor
+            .execute_command_by_name("forward-char")
+            .expect("movement should break undo sequence");
+
+        editor
+            .execute_command_by_name("undo-only")
+            .expect("undo-only should not redo");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No further undo information")
+        );
+    }
+
+    #[test]
+    fn undo_redo_reapplies_without_recording_itself() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("edit should insert");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .execute_command_by_name("undo-redo")
+            .expect("undo-redo should reapply edit");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Redo"));
+
+        editor
+            .execute_command_by_name("undo-redo")
+            .expect("second undo-redo should not oscillate");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No undone changes to redo")
+        );
+    }
+
+    #[test]
+    fn undo_redo_reapplied_edit_can_be_undone_again() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("edit should insert");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit");
+        editor
+            .execute_command_by_name("undo-redo")
+            .expect("undo-redo should reapply edit");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove redone edit");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
+    fn redo_after_undo_to_clean_marks_buffer_dirty() {
+        let directory = TestDir::new();
+        let path = directory.path().join("redo-clean.txt");
+        fs::write(&path, "alpha\n").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("text should insert");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should return to clean text");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .execute_command_by_name("forward-char")
+            .expect("movement should break undo sequence");
+        assert!(!editor.document().is_dirty());
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should redo edit");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha\n");
+        assert!(editor.document().is_dirty());
+    }
+
+    #[test]
+    fn auto_revert_resets_clean_undo_depth_after_dropping_undo_history() {
+        let directory = TestDir::new();
+        let path = directory.path().join("auto-revert-undo.txt");
+        fs::write(&path, "before\n").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("edit should insert");
+        editor
+            .execute_command_by_name("save-buffer")
+            .expect("save should establish undo history and clean depth");
+        assert!(!editor.document().is_dirty());
+        editor
+            .execute_command_by_name("auto-revert-mode")
+            .expect("auto-revert should enable");
+
+        fs::write(&path, "after\nchanged\n").expect("fixture should change on disk");
+        assert!(editor.poll_auto_revert().expect("poll should succeed"));
+        assert_eq!(editor.document().buffer().serialize(), "after\nchanged\n");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("post-revert edit should insert");
+        assert!(editor.document().is_dirty());
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should return to auto-reverted clean text");
+        assert_eq!(editor.document().buffer().serialize(), "after\nchanged\n");
+        assert!(!editor.document().is_dirty());
     }
 
     #[test]

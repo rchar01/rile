@@ -1,5 +1,39 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs-style undo and redo traversal.
+
+	* src/buffer/undo.rs (UndoRecord::inverse): New method.
+	(position_after_text): New helper.
+	(tests): Cover insert, delete, replace, and batch inversion.
+	* src/command.rs (Command): Add UndoOnly and UndoRedo.
+	(CommandCategory::for_command, Command::doc): Handle them.
+	(default_command_specs): Register undo-only and undo-redo.
+	(tests): Cover their command handlers.
+	* src/editor.rs (Editor): Track active undo sequences.
+	(UndoEntryKind, ActiveUndoSequence): New types.
+	(finalize_active_undo_sequence, record_active_undo)
+	(discard_active_undo_sequence_for_buffer): New helpers.
+	(undo, undo_only, undo_redo, undo_matching, redo_record)
+	(finish_undo_command): Support redo via finalized undo sequences and explicit
+	undo-family commands.
+	(execute_command, handle_key): Finalize undo sequences at non-undo command
+	boundaries and before self insertion.
+	(poll_auto_revert): Discard stale active undo sequences and reset clean undo
+	depths after dropping undo history.
+	(revert_current_buffer, finish_kill_buffer_with_message): Discard stale active
+	undo sequences.
+	(is_undo_family_command): New helper.
+	(tests): Cover redo traversal, branching, undo-only, undo-redo, explicit redo
+	followed by undo, auto-revert, and clean-state interaction.
+	* tests/pty_statusline.rs (undo_redo_reapplies_edit_and_marks_modified_status):
+	New test.
+	* README.md: Document undo traversal and undo-family commands.
+	* NEWS: Mention user-visible undo traversal support.
+	* docs/development.md: Document undo sequence tracking and remaining limits.
+	* docs/plans/emacs-undo-redo.md: Record implementation progress and decisions.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Plan Emacs-style undo and redo traversal.
 
 	* docs/plans/emacs-undo-redo.md: New plan.
