@@ -1,5 +1,26 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Clear modified state when undo returns to save point.
+
+	* src/editor.rs (Editor): Track clean undo depths per buffer.
+	(undo_depth_for_buffer, remember_clean_undo_depth)
+	(sync_dirty_state_after_undo): New helpers.
+	(undo): Mark the current buffer clean after undo reaches its clean depth.
+	(save_buffer, save_buffer_by_id, write_file, not_modified): Record clean undo
+	depth and break typing undo grouping.
+	(start_save_some_buffers, start_write_file): Break typing undo grouping at
+	prompt start.
+	(revert_current_buffer, open_file_path, finish_kill_buffer_with_message):
+	Maintain clean undo depths across buffer lifecycle changes.
+	(tests): Cover undo-to-clean and save-point dirty-state behavior.
+	* tests/pty_statusline.rs (undo_to_opened_file_contents_clears_modified_status):
+	New test.
+	* README.md: Document undo clean-state behavior.
+	* NEWS: Likewise.
+	* docs/development.md: Document undo save-point tracking.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs undo-clean mode-line reference scenario.
 
 	* tools/reference/emacs/scenarios/modeline-undo-clean-core.scenario: New

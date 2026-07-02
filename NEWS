@@ -63,7 +63,8 @@ Editing features:
 * Recall accepted incremental-search strings with M-p and M-n.  Literal search
   and regexp search keep separate histories, and forward/backward search share
   history within each kind.
-* Undo current-buffer edits with grouped normal typing.
+* Undo current-buffer edits with grouped normal typing.  Undoing back to the
+  saved state clears the modified flag.
 * Run commands through M-x with command-name completion.
 * Run shell commands with M-!, display captured stdout/stderr by default, and
   insert stdout with C-u M-!.  Use M-| to send the active region to stdin and

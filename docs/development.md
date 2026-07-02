@@ -361,6 +361,13 @@ literal and regexp histories, shared between forward and backward search within
 each kind. Query-replace history remains deferred because its prompts have a
 separate interaction model.
 
+Undo dirty-state tracking stores a per-buffer undo save point. Opening, saving,
+reverting, and `not-modified` record the current undo depth as clean; undoing
+back to that depth clears the modified flag, while undoing past a saved edit
+makes the buffer modified again. Saving and `not-modified` also break normal
+typing undo grouping so subsequent typing cannot merge into a pre-save undo
+record.
+
 Post-Milestone 14 self-documentation work made commands, keymaps, options,
 modes, buffers, messages, and runtime metadata inspectable from inside Rile.
 The implemented architecture is documented in

@@ -116,7 +116,8 @@ Basic editor keys:
 - `M-y` immediately after `C-y` or another `M-y` rotates through earlier kill-ring
   entries.
 - `C-k` kills to the end of the line, or the line break at end of line.
-- `C-_` undoes the latest edit in the current buffer.
+- `C-_` undoes the latest edit in the current buffer. Undoing back to the saved
+  contents clears the modified flag.
 - `C-x C-s` saves the current file.
 - `C-x s` offers to save each modified file-backed buffer, skipping special,
   read-only, and unnamed buffers.
@@ -206,7 +207,7 @@ Current literal search and query replace use exact UTF-8 substring matching with
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Empty rows are left blank rather than filled with marker characters.
-Undo is buffer-local for current-buffer edits and groups normal typing, but does not yet provide redo or advanced Emacs undo traversal.
+Undo is buffer-local for current-buffer edits, groups normal typing, and tracks the saved state so undoing back to that point clears the modified flag. It does not yet provide redo or advanced Emacs undo traversal.
 
 ## Configuration
 

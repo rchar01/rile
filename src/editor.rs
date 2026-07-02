@@ -111,6 +111,7 @@ pub struct Editor {
     last_command_was_kill: bool,
     kill_recorded_this_command: bool,
     undo_stack: Vec<UndoEntry>,
+    clean_undo_depths: HashMap<BufferId, usize>,
     grouping_insert: bool,
     syntax_enabled: bool,
     search_highlighting: bool,
@@ -440,6 +441,7 @@ impl Editor {
         let current_buffer = buffers.entries()[0].id();
         let mut buffer_viewports = HashMap::new();
         buffer_viewports.insert(current_buffer, Viewport::new(current_buffer));
+        let clean_undo_depths = HashMap::from([(current_buffer, 0)]);
         Self {
             windows: WindowSet::new(current_buffer),
             buffers,
@@ -491,6 +493,7 @@ impl Editor {
             last_command_was_kill: false,
             kill_recorded_this_command: false,
             undo_stack: Vec::new(),
+            clean_undo_depths,
             grouping_insert: false,
             syntax_enabled: config.syntax_highlighting,
             search_highlighting: config.search_highlighting,
@@ -3037,7 +3040,9 @@ impl Editor {
         self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
         self.goal_display_column = None;
         self.region = None;
-        self.undo_stack.clear();
+        let buffer = self.current_buffer;
+        self.undo_stack.retain(|entry| entry.buffer != buffer);
+        self.remember_clean_undo_depth(buffer);
         self.refresh_visible_buffer_list();
         self.sync_current_window();
         self.minibuffer.set_message(format!("Reverted {name}"));
@@ -4921,21 +4926,44 @@ impl Editor {
         Ok(())
     }
 
+    fn undo_depth_for_buffer(&self, buffer: BufferId) -> usize {
+        self.undo_stack
+            .iter()
+            .filter(|entry| entry.buffer == buffer)
+            .count()
+    }
+
+    fn remember_clean_undo_depth(&mut self, buffer: BufferId) {
+        let depth = self.undo_depth_for_buffer(buffer);
+        self.clean_undo_depths.insert(buffer, depth);
+    }
+
+    fn sync_dirty_state_after_undo(&mut self, buffer: BufferId) {
+        let depth = self.undo_depth_for_buffer(buffer);
+        if self.clean_undo_depths.get(&buffer) == Some(&depth)
+            && let Some(document) = self.buffers.document_mut(buffer)
+        {
+            document.mark_clean();
+        }
+    }
+
     fn undo(&mut self) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
         }
         self.clear_insert_group();
+        let buffer = self.current_buffer;
         let Some(index) = self
             .undo_stack
             .iter()
-            .rposition(|entry| entry.buffer == self.current_buffer)
+            .rposition(|entry| entry.buffer == buffer)
         else {
             self.minibuffer.set_message("No undo information");
             return Ok(());
         };
         let entry = self.undo_stack.remove(index);
         self.undo_record(entry.record)?;
+        self.sync_dirty_state_after_undo(buffer);
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
@@ -4987,8 +5015,11 @@ impl Editor {
     }
 
     fn save_buffer(&mut self) -> Result<()> {
+        let buffer = self.current_buffer;
+        self.clear_insert_group();
         match self.document_mut().save() {
             Ok(()) => {
+                self.remember_clean_undo_depth(buffer);
                 self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Wrote {}", self.document().display_name()));
@@ -4999,6 +5030,7 @@ impl Editor {
     }
 
     fn start_save_some_buffers(&mut self) -> EditorOutcome {
+        self.clear_insert_group();
         let pending = self
             .buffers
             .entries()
@@ -5097,10 +5129,15 @@ impl Editor {
     }
 
     fn save_buffer_by_id(&mut self, buffer: BufferId) -> Result<()> {
+        if buffer == self.current_buffer {
+            self.clear_insert_group();
+        }
         let Some(document) = self.buffers.document_mut(buffer) else {
             return Ok(());
         };
-        document.save()
+        document.save()?;
+        self.remember_clean_undo_depth(buffer);
+        Ok(())
     }
 
     fn not_modified(&mut self) -> Result<()> {
@@ -5110,6 +5147,8 @@ impl Editor {
             return Ok(());
         }
         self.document_mut().mark_clean();
+        self.clear_insert_group();
+        self.remember_clean_undo_depth(self.current_buffer);
         self.refresh_visible_buffer_list();
         self.minibuffer.set_message("Modification flag cleared");
         Ok(())
@@ -5135,6 +5174,7 @@ impl Editor {
     }
 
     fn start_write_file(&mut self) -> Result<()> {
+        self.clear_insert_group();
         self.minibuffer
             .start_prompt(PromptKind::WriteFile, "Write file: ");
         Ok(())
@@ -5685,6 +5725,10 @@ impl Editor {
         };
         match result {
             Ok(opened) => {
+                let clean_depth = self.undo_depth_for_buffer(opened.id);
+                self.clean_undo_depths
+                    .entry(opened.id)
+                    .or_insert(clean_depth);
                 self.remember_buffer_transition(opened.id);
                 self.current_buffer = opened.id;
                 self.cursor = Position::new(0, 0);
@@ -5732,8 +5776,11 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         }
 
+        let buffer = self.current_buffer;
+        self.clear_insert_group();
         match self.document_mut().save_as(path) {
             Ok(()) => {
+                self.remember_clean_undo_depth(buffer);
                 self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Wrote {}", self.document().display_name()));
@@ -5917,6 +5964,12 @@ impl Editor {
         match result {
             Ok(next_current) => {
                 self.buffer_viewports.remove(&target);
+                self.clean_undo_depths.remove(&target);
+                self.undo_stack.retain(|entry| entry.buffer != target);
+                let clean_depth = self.undo_depth_for_buffer(next_current);
+                self.clean_undo_depths
+                    .entry(next_current)
+                    .or_insert(clean_depth);
                 self.windows.replace_buffer(target, next_current);
                 if target == self.current_buffer {
                     self.current_buffer = next_current;
@@ -13683,6 +13736,18 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.minibuffer().message.as_deref(),
             Some(expected_message.as_str())
         );
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("post-save text should insert");
+        assert_eq!(editor.document().buffer().serialize(), "saved!");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should return to write-file save point");
+        assert_eq!(editor.document().buffer().serialize(), "saved");
+        assert!(!editor.document().is_dirty());
     }
 
     #[test]
@@ -13701,6 +13766,68 @@ M-g g           goto-line                      Go to line or line:column\n"
             Some("Error: missing file name")
         );
         assert_eq!(editor.document().path(), None);
+    }
+
+    #[test]
+    fn save_some_buffers_skip_breaks_typing_undo_group() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save-some-skip.txt");
+        fs::write(&path, "alpha").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Text("s".to_owned()))
+            .expect("save-some-buffers should prompt");
+        submit_prompt_text(&mut editor, "no");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("post-prompt edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!?alpha");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should not cross save-some-buffers prompt");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha");
+        assert!(editor.document().is_dirty());
+    }
+
+    #[test]
+    fn failed_save_buffer_breaks_typing_undo_group() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first edit should insert");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x prefix should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("save-buffer should report unnamed buffer error");
+        assert_eq!(editor.document().buffer().serialize(), "!");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("post-error edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!?");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should not cross failed save-buffer command");
+        assert_eq!(editor.document().buffer().serialize(), "!");
+        assert!(editor.document().is_dirty());
     }
 
     #[test]
@@ -16956,6 +17083,153 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should remove grouped typing");
         assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn undo_to_opened_file_contents_marks_buffer_clean() {
+        let directory = TestDir::new();
+        let path = directory.path().join("undo-clean.txt");
+        fs::write(&path, "alpha\n").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("text should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha\n");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore opened contents");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
+        assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
+    fn undo_tracks_save_point_and_dirty_state() {
+        let directory = TestDir::new();
+        let path = directory.path().join("undo-save-point.txt");
+        fs::write(&path, "alpha\n").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first edit should insert");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start prefix");
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("C-x C-s should save");
+        assert_eq!(
+            fs::read_to_string(&path).expect("saved file should read"),
+            "!alpha\n"
+        );
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("second edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!?alpha\n");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should return to save point");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha\n");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo past save point should edit buffer");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
+        assert!(editor.document().is_dirty());
+    }
+
+    #[test]
+    fn undo_to_replacement_scratch_contents_marks_buffer_clean() {
+        let mut editor = Editor::new(Document::scratch());
+        let original = editor.current_buffer_id();
+
+        editor
+            .finish_kill_buffer(original, false)
+            .expect("clean last buffer should be killed");
+        assert_ne!(editor.current_buffer_id(), original);
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("text should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should restore replacement scratch");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
+    fn undo_tracks_not_modified_clean_point() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first edit should insert");
+        assert!(editor.document().is_dirty());
+        editor
+            .execute_command_by_name("not-modified")
+            .expect("not-modified should mark current text clean");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("second edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!?");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should return to not-modified clean point");
+        assert_eq!(editor.document().buffer().serialize(), "!");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo past not-modified point should edit buffer");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(editor.document().is_dirty());
+    }
+
+    #[test]
+    fn undo_tracks_revert_clean_point() {
+        let directory = TestDir::new();
+        let path = directory.path().join("undo-revert.txt");
+        fs::write(&path, "alpha").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first edit should insert");
+        editor
+            .execute_command_by_name("revert-buffer")
+            .expect("dirty revert should prompt");
+        submit_prompt_text(&mut editor, "yes");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert!(!editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("post-revert edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "a?lpha");
+        assert!(editor.document().is_dirty());
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should return to reverted clean point");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert!(!editor.document().is_dirty());
     }
 
     #[test]
