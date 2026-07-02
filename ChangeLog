@@ -1,5 +1,20 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Add incremental-search history navigation.
+
+	* src/editor/search_history.rs: New search history helper module.
+	* src/editor.rs (Editor): Track search history.
+	(handle_search_prompt_key): Handle M-p and M-n in isearch prompts.
+	(recall_search_history): New helper.
+	* tests/pty_search.rs (incremental_search_history_recalls_with_meta_keys):
+	New test.
+	* README.md: Document search history keys and sharing.
+	* NEWS: Mention user-visible isearch history navigation.
+	* docs/development.md: Update prompt-history status.
+	* docs/emacs-function-reference.md: Document regexp isearch history.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Clarify regexp search release note.
 
 	* NEWS: Distinguish literal search and query replace from regexp incremental

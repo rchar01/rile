@@ -351,12 +351,13 @@ completion config keys are `completion_style`, `completion_max_candidates`,
 
 Post-Milestone 14 prompt-history polish adds in-session `M-p` and `M-n` history
 navigation for command, file, buffer, write-file, goto-line, rectangle, shell
-command, describe-function, and describe-variable minibuffer prompts. Prompt
-history is stored per prompt kind, preserves the current draft while navigating,
-avoids consecutive duplicate entries, and refreshes completion candidates after
-recalling history in completion-enabled prompts. Incremental search and
-query-replace history remain deferred because they have separate interaction
-models.
+command, describe-function, describe-variable, and incremental-search
+minibuffer prompts. Prompt history is stored per prompt kind, preserves the
+current draft while navigating, avoids consecutive duplicate entries, and
+refreshes completion candidates after recalling history in completion-enabled
+prompts. Incremental search uses separate literal and regexp histories, shared
+between forward and backward search within each kind. Query-replace history
+remains deferred because its prompts have a separate interaction model.
 
 Post-Milestone 14 self-documentation work made commands, keymaps, options,
 modes, buffers, messages, and runtime metadata inspectable from inside Rile.

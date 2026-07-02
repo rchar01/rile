@@ -60,6 +60,9 @@ Editing features:
   Rile's built-in line-local regexp subset supports `.`, `*`, `+`, `?`, `^`,
   `$`, escaped metacharacters, and character classes including ranges and
   negation.
+* Recall previous incremental-search strings with M-p and M-n.  Literal search
+  and regexp search keep separate histories, and forward/backward search share
+  history within each kind.
 * Undo current-buffer edits with grouped normal typing.
 * Run commands through M-x with command-name completion.
 * Run shell commands with M-!, display captured stdout/stderr by default, and
@@ -158,6 +161,7 @@ Search and replacement:
 
 * Incremental forward and backward search with visible matches and explicit
   wrap-after-failure behavior.
+* Search-history navigation with M-p and M-n during incremental search.
 * Interactive query replace with y, n, !, q, Escape, and C-g choices.
 * Literal incremental search and query replace are exact UTF-8 substring
   matching within individual lines.  Regexp incremental search uses Rile's

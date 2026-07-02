@@ -79,3 +79,27 @@ fn regexp_incremental_search_matches_and_repeats() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn incremental_search_history_recalls_with_meta_keys() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\nbar\nféo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.send("bar", b"bar")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-r", keys::control('r'))?;
+    rile.send("draft", b"draft")?;
+    rile.assert_screen_contains("Failing I-search backward: draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("I-search backward: bar")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Failing I-search backward: draft")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}

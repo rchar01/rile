@@ -158,7 +158,8 @@ Purpose: search forward or backward incrementally using a regular expression.
 Prompt flow: the regexp query updates the current match live. Enter accepts the
 current match, and `C-g` cancels and restores the original point. Repeating with
 `C-s` or `C-r` moves to the next or previous match and wraps after an explicit
-boundary failure.
+boundary failure. `M-p` and `M-n` recall earlier regexp search strings from a
+history separate from literal isearch history.
 
 Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
 `^`, `$`, escaped metacharacters, and character classes such as `[abc]`,

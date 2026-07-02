@@ -36,6 +36,7 @@ mod completion_policy;
 mod help;
 mod prompt_history;
 mod search;
+mod search_history;
 
 use completion_policy::{
     CompletionAcceptContext, accepted_completion_input, directory_completion_to_enter,
@@ -49,6 +50,7 @@ use help::{
 };
 use prompt_history::PromptHistoryStore;
 use search::{find_match, search_start_after, search_start_before};
+use search_history::SearchHistoryStore;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -87,6 +89,7 @@ pub struct Editor {
     completion_return: Option<Viewport>,
     completion_config: CompletionConfig,
     prompt_history: PromptHistoryStore,
+    search_history: SearchHistoryStore,
     recording_keyboard_macro: Option<Vec<KeyEvent>>,
     last_keyboard_macro: Option<Vec<KeyEvent>>,
     replaying_keyboard_macro: bool,
@@ -466,6 +469,7 @@ impl Editor {
             completion_return: None,
             completion_config: config.completion,
             prompt_history: PromptHistoryStore::new(),
+            search_history: SearchHistoryStore::new(),
             recording_keyboard_macro: None,
             last_keyboard_macro: None,
             replaying_keyboard_macro: false,
@@ -6143,10 +6147,26 @@ impl Editor {
     fn handle_search_prompt_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
         match key {
             KeyEvent::Special(SpecialKey::Enter) => {
+                if let Some((kind, query, valid)) = self.search.as_ref().map(|search| {
+                    (
+                        search.kind,
+                        self.minibuffer
+                            .prompt_input()
+                            .unwrap_or_default()
+                            .to_owned(),
+                        search.pattern.is_some(),
+                    )
+                }) && valid
+                {
+                    self.search_history.record(kind, &query);
+                }
                 self.minibuffer.clear();
                 self.search = None;
             }
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
+                if let Some(search) = &self.search {
+                    self.search_history.reset(search.kind);
+                }
                 if let Some(search) = self.search.take() {
                     self.cursor = search.origin;
                     self.goal_display_column = None;
@@ -6156,14 +6176,22 @@ impl Editor {
             }
             KeyEvent::Special(SpecialKey::Backspace) => {
                 if self.minibuffer.delete_prompt_grapheme_backward() {
+                    if let Some(search) = &self.search {
+                        self.search_history.reset(search.kind);
+                    }
                     self.update_incremental_search()?;
                 }
                 self.record_prompt_non_kill_key();
             }
+            KeyEvent::Meta('p') => self.recall_search_history(-1)?,
+            KeyEvent::Meta('n') => self.recall_search_history(1)?,
             KeyEvent::Ctrl('s') => self.repeat_incremental_search(SearchDirection::Forward)?,
             KeyEvent::Ctrl('r') => self.repeat_incremental_search(SearchDirection::Backward)?,
             KeyEvent::Text(text) => {
                 self.minibuffer.insert_prompt_text(&text);
+                if let Some(search) = &self.search {
+                    self.search_history.reset(search.kind);
+                }
                 self.update_incremental_search()?;
                 self.record_prompt_non_kill_key();
             }
@@ -6172,11 +6200,28 @@ impl Editor {
                 if let PromptEditOutcome::Handled { changed } = self.handle_prompt_edit_key(&key)
                     && changed
                 {
+                    if let Some(search) = &self.search {
+                        self.search_history.reset(search.kind);
+                    }
                     self.update_incremental_search()?;
                 }
             }
         }
         Ok(EditorOutcome::Continue)
+    }
+
+    fn recall_search_history(&mut self, direction: isize) -> Result<()> {
+        let Some(kind) = self.search.as_ref().map(|search| search.kind) else {
+            return Ok(());
+        };
+        let Some(current) = self.minibuffer.prompt_input().map(str::to_owned) else {
+            return Ok(());
+        };
+        if let Some(input) = self.search_history.recall(kind, &current, direction) {
+            self.minibuffer.set_prompt_input(input);
+            self.update_incremental_search()?;
+        }
+        Ok(())
     }
 
     fn update_incremental_search(&mut self) -> Result<()> {
@@ -17745,6 +17790,178 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.minibuffer().display_text().as_deref(),
             Some("Failing I-search backward: z")
         );
+    }
+
+    #[test]
+    fn incremental_search_history_is_shared_across_directions() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo\nbar\nfoo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("forward search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("bar".to_owned()))
+            .expect("query should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("search should accept");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('r'))
+            .expect("backward search should prompt");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall search history");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("bar"));
+    }
+
+    #[test]
+    fn incremental_search_history_preserves_current_draft() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha beta gamma")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("alpha".to_owned()))
+            .expect("query should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("search should accept");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt again");
+        editor
+            .handle_key(KeyEvent::Text("draft".to_owned()))
+            .expect("draft should update");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall history");
+        assert_eq!(editor.minibuffer().prompt_input(), Some("alpha"));
+        editor
+            .handle_key(KeyEvent::Meta('n'))
+            .expect("M-n should restore draft");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some("draft"));
+    }
+
+    #[test]
+    fn incremental_search_history_is_not_shared_with_m_x() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "toggle-line-numbers")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('x'))
+            .expect("M-x should prompt");
+        editor
+            .handle_key(KeyEvent::Text("toggle-line-numbers".to_owned()))
+            .expect("command input should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("command should run");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("search should prompt");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should not recall command history");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
+    }
+
+    #[test]
+    fn regexp_incremental_search_history_is_separate_from_literal_history() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo\nféo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("literal search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("foo".to_owned()))
+            .expect("literal query should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("literal search should accept");
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("f.o".to_owned()))
+            .expect("regexp query should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("regexp search should accept");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('s'))
+            .expect("literal search should prompt again");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall literal history");
+        assert_eq!(editor.minibuffer().prompt_input(), Some("foo"));
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("literal search should cancel");
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('r'))
+            .expect("regexp backward search should prompt");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should recall regexp history");
+        assert_eq!(editor.minibuffer().prompt_input(), Some("f.o"));
+    }
+
+    #[test]
+    fn regexp_incremental_search_history_skips_invalid_patterns() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt");
+        editor
+            .handle_key(KeyEvent::Text("[".to_owned()))
+            .expect("invalid regexp should update");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("invalid regexp accept should exit search");
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('s'))
+            .expect("regexp search should prompt again");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should not recall invalid regexp");
+
+        assert_eq!(editor.minibuffer().prompt_input(), Some(""));
     }
 
     #[test]
