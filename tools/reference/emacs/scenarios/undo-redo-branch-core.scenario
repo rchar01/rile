@@ -1,0 +1,48 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=undo-redo-branch-core
+SCENARIO_DESCRIPTION='Observe base Emacs branch behavior when typing after undo.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=undo-redo-branch-core.txt
+FIXTURE_CONTENT=$'alpha\nbeta\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Type "A"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-original-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-undo-original-edit.png
+Sleep 500ms
+Type "B"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-branch-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-undo-branch-edit.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

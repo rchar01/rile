@@ -1,0 +1,92 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=undo-family-core
+SCENARIO_DESCRIPTION='Observe base Emacs undo-only and undo-redo command behavior.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=undo-family-core.txt
+FIXTURE_CONTENT=$'alpha\nbeta\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open.png
+Sleep 500ms
+Type "A"
+Ctrl+E
+Type "B"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-two-edits.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-undo-latest-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo-only"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-immediate-undo-only.png
+Sleep 500ms
+Type "D"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-boundary-test-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Ctrl+F
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-boundary-break.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo-only"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-boundary-undo-only.png
+Sleep 500ms
+Ctrl+E
+Type "E"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/07-after-redo-test-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/08-after-undo-redo-test-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo-redo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/09-after-undo-redo.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo-redo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/10-after-second-undo-redo.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+Sleep 500ms
+Type "n"
+Sleep 500ms
+Type "yes"
+Enter
+EOF
+}

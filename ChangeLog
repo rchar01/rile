@@ -1,5 +1,19 @@
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
+	Plan Emacs-style undo and redo traversal.
+
+	* docs/plans/emacs-undo-redo.md: New plan.
+	* tools/reference/emacs/scenarios/undo-redo-single-core.scenario: New
+	scenario.
+	* tools/reference/emacs/scenarios/undo-redo-multiple-core.scenario: New
+	scenario.
+	* tools/reference/emacs/scenarios/undo-redo-branch-core.scenario: New
+	scenario.
+	* tools/reference/emacs/scenarios/undo-family-core.scenario: New scenario.
+	* tools/reference/emacs/README.md: List them.
+
+2026-07-02  Robert Charusta  <rch-public@posteo.net>
+
 	Clear modified state when undo returns to save point.
 
 	* src/editor.rs (Editor): Track clean undo depths per buffer.

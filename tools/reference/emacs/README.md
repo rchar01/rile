@@ -106,6 +106,11 @@ Initial inspection scenarios:
 - `toggle-read-only-core`: base Emacs `C-x C-q` toggle-read-only behavior.
 - `transpose-core`: base Emacs `C-t`, `M-t`, and `C-x C-t` transpose behavior
   with undo.
+- `undo-family-core`: base Emacs `undo-only` and `undo-redo` command behavior.
+- `undo-redo-branch-core`: base Emacs branch behavior when typing after undo.
+- `undo-redo-multiple-core`: base Emacs redo order after undoing multiple edits.
+- `undo-redo-single-core`: base Emacs redo by undoing an undo after a command
+  boundary.
 - `universal-argument-core`: base Emacs `C-u` universal-argument behavior.
 - `whitespace-cleanup-core`: base Emacs `C-x C-o` and
   `delete-trailing-whitespace` cleanup behavior.
