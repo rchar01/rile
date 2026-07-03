@@ -1,5 +1,14 @@
 2026-07-03  Robert Charusta  <rch-public@posteo.net>
 
+	Use Emacs-style undo messages.
+
+	* src/editor.rs (undo, undo_only): Report "Undo" on success and
+	"undo-more: No further undo information" when undo information is exhausted.
+	(tests): Cover undo, undo-only, and exhausted undo message text.
+	* NEWS: Mention Emacs-style undo message wording.
+
+2026-07-03  Robert Charusta  <rch-public@posteo.net>
+
 	Style minibuffer completion counters as prompt text.
 
 	* src/terminal/mod.rs (minibuffer_line_text_and_spans): Include vertical

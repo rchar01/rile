@@ -5033,15 +5033,20 @@ impl Editor {
     }
 
     fn undo(&mut self) -> Result<()> {
-        self.undo_matching(|_| true, true, "No undo information", "Undone")
+        self.undo_matching(
+            |_| true,
+            true,
+            "undo-more: No further undo information",
+            "Undo",
+        )
     }
 
     fn undo_only(&mut self) -> Result<()> {
         self.undo_matching(
             |entry| entry.kind == UndoEntryKind::Edit,
             true,
-            "No further undo information",
-            "Undone",
+            "undo-more: No further undo information",
+            "Undo",
         )
     }
 
@@ -17256,6 +17261,21 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('_'))
             .expect("undo should remove grouped typing");
         assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+    }
+
+    #[test]
+    fn undo_reports_emacs_style_exhausted_message() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should report missing undo information");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("undo-more: No further undo information")
+        );
     }
 
     #[test]
@@ -17356,6 +17376,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .execute_command_by_name("undo-only")
             .expect("undo-only should remove first edit");
         assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
     }
 
     #[test]
@@ -17377,7 +17398,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.document().buffer().serialize(), "");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("No further undo information")
+            Some("undo-more: No further undo information")
         );
     }
 
