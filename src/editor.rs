@@ -5036,8 +5036,11 @@ impl Editor {
         self.undo_matching(
             |_| true,
             true,
-            "undo-more: No further undo information",
-            "Undo",
+            "No further undo information",
+            |entry| match entry.kind {
+                UndoEntryKind::UndoSequence => "Redo",
+                UndoEntryKind::Edit => "Undo",
+            },
         )
     }
 
@@ -5045,8 +5048,8 @@ impl Editor {
         self.undo_matching(
             |entry| entry.kind == UndoEntryKind::Edit,
             true,
-            "undo-more: No further undo information",
-            "Undo",
+            "No further undo information",
+            |_| "Undo",
         )
     }
 
@@ -5103,7 +5106,7 @@ impl Editor {
         matches_entry: impl Fn(&UndoEntry) -> bool,
         record_inverse: bool,
         empty_message: &'static str,
-        success_message: &'static str,
+        success_message_for_entry: impl Fn(&UndoEntry) -> &'static str,
     ) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
@@ -5119,6 +5122,7 @@ impl Editor {
             return Ok(());
         };
         let entry = self.undo_stack.remove(index);
+        let success_message = success_message_for_entry(&entry);
         if record_inverse {
             self.record_active_undo(buffer, entry.record.inverse());
         }
@@ -17274,7 +17278,11 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("undo-more: No further undo information")
+            Some("No further undo information")
+        );
+        assert_eq!(
+            editor.minibuffer().messages_text(),
+            "No further undo information\n"
         );
     }
 
@@ -17289,6 +17297,8 @@ M-g g           goto-line                      Go to line or line:column\n"
             .execute_command_by_name("undo")
             .expect("undo should remove edit");
         assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+        assert_eq!(editor.minibuffer().messages_text(), "Undo\n");
 
         editor
             .execute_command_by_name("forward-char")
@@ -17299,6 +17309,8 @@ M-g g           goto-line                      Go to line or line:column\n"
             .execute_command_by_name("undo")
             .expect("undo should redo edit after boundary");
         assert_eq!(editor.document().buffer().serialize(), "A");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Redo"));
+        assert_eq!(editor.minibuffer().messages_text(), "Undo\nRedo\n");
     }
 
     #[test]
@@ -17398,7 +17410,11 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(editor.document().buffer().serialize(), "");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
-            Some("undo-more: No further undo information")
+            Some("No further undo information")
+        );
+        assert_eq!(
+            editor.minibuffer().messages_text(),
+            "Undo\nNo further undo information\n"
         );
     }
 
