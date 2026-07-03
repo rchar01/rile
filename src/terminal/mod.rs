@@ -549,6 +549,7 @@ fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>,
     };
 
     let mut text = String::new();
+    let prompt_face_start = text.len();
     if let Some(completion) = editor.completion()
         && completion.style() == CompletionStyle::Vertical
     {
@@ -556,7 +557,6 @@ fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>,
         text.push_str(&format!("{selected}/{}  ", completion.match_count()));
     }
 
-    let prompt_start = text.len();
     text.push_str(&prompt.label);
     let prompt_end = text.len();
     text.push_str(&prompt.input);
@@ -580,8 +580,8 @@ fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>,
         text.push(']');
     }
 
-    let spans = (prompt_start < prompt_end)
-        .then(|| Span::new(prompt_start, prompt_end, Face::Minibuffer))
+    let spans = (prompt_face_start < prompt_end)
+        .then(|| Span::new(prompt_face_start, prompt_end, Face::Minibuffer))
         .into_iter()
         .collect();
     Some((text, spans, None))
@@ -2001,17 +2001,18 @@ mod tests {
         let frame = rendered_frame_bytes(&mut editor, size);
         assert_minibuffer_visible_line_matches_display(&editor, 80);
         let line = minibuffer_visible_line(&editor, 80).expect("prompt should render");
-        let prompt_start = line
+        let input_start = line
             .text
-            .find("M-x ")
-            .expect("prompt label should be visible");
-        assert!(
-            prompt_start > 0,
-            "vertical completion prefix should precede prompt"
+            .find("save-buffer")
+            .expect("prompt input should be visible");
+        assert!(line.text[..input_start].contains("M-x "));
+        assert_eq!(
+            line.spans,
+            vec![Span::new(0, input_start, Face::Minibuffer)]
         );
-        assert_eq!(line.spans[0].start_byte, prompt_start);
 
-        assert!(contains_bytes(&frame, b"\x1b[36mM-x \x1b[0msave-buffer"));
+        let faced_prompt = format!("\x1b[36m{}\x1b[0msave-buffer", &line.text[..input_start]);
+        assert!(contains_bytes(&frame, faced_prompt.as_bytes()));
         assert!(!contains_bytes(&frame, b"\x1b[36mM-x save-buffer\x1b[0m"));
     }
 
@@ -2032,8 +2033,17 @@ mod tests {
 
         let frame = rendered_frame_bytes(&mut editor, size);
         assert_minibuffer_visible_line_matches_display(&editor, 120);
+        let line = minibuffer_visible_line(&editor, 120).expect("prompt should render");
+        let prompt_end = line
+            .text
+            .find("Find file: ")
+            .map(|start| start + "Find file: ".len())
+            .expect("prompt label should be visible");
 
-        assert!(contains_bytes(&frame, b"\x1b[36mFind file: \x1b[0m"));
+        assert!(line.text[prompt_end..].contains("target.txt"));
+        assert_eq!(line.spans, vec![Span::new(0, prompt_end, Face::Minibuffer)]);
+        let faced_prompt = format!("\x1b[36m{}\x1b[0m", &line.text[..prompt_end]);
+        assert!(contains_bytes(&frame, faced_prompt.as_bytes()));
         assert!(contains_bytes(&frame, b"target.txt"));
         assert!(!contains_bytes(&frame, b"\x1b[36mFind file: target.txt"));
     }
@@ -2055,11 +2065,19 @@ mod tests {
 
         let frame = rendered_frame_bytes(&mut editor, size);
         assert_minibuffer_visible_line_matches_display(&editor, 100);
+        let line = minibuffer_visible_line(&editor, 100).expect("prompt should render");
+        let input_start = line
+            .text
+            .find("find-file")
+            .expect("prompt input should be visible");
 
-        assert!(contains_bytes(
-            &frame,
-            b"\x1b[36mDescribe function: \x1b[0mfind-file"
-        ));
+        assert!(line.text[..input_start].contains("Describe function: "));
+        assert_eq!(
+            line.spans,
+            vec![Span::new(0, input_start, Face::Minibuffer)]
+        );
+        let faced_prompt = format!("\x1b[36m{}\x1b[0mfind-file", &line.text[..input_start]);
+        assert!(contains_bytes(&frame, faced_prompt.as_bytes()));
         assert!(!contains_bytes(
             &frame,
             b"\x1b[36mDescribe function: find-file\x1b[0m"

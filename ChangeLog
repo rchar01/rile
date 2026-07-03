@@ -1,3 +1,15 @@
+2026-07-03  Robert Charusta  <rch-public@posteo.net>
+
+	Style minibuffer completion counters as prompt text.
+
+	* src/terminal/mod.rs (minibuffer_line_text_and_spans): Include vertical
+	completion counters in the minibuffer-face span.
+	(tests): Expect completion counters and prompt labels to share minibuffer
+	styling while prompt input stays default-faced.
+	* README.md: Document completion counter styling.
+	* docs/development.md: Likewise.
+	* NEWS: Mention completion counter styling.
+
 2026-07-02  Robert Charusta  <rch-public@posteo.net>
 
 	Render minibuffer prompt input with the default face.
