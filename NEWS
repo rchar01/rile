@@ -66,7 +66,8 @@ Editing features:
 * Undo current-buffer edits with grouped normal typing.  Undoing back to the
   saved state clears the modified flag, and Emacs-style undo traversal can redo
   finalized undo sequences.  M-x undo-only and M-x undo-redo are available for
-  explicit undo-family behavior.  Undo, redo, and exhausted-undo live
+  explicit undo-family behavior.  Repeated undo and redo cycles can return to
+  the original saved file state.  Undo, redo, and exhausted-undo live
   minibuffer messages use Emacs-style wording.
 * Run commands through M-x with command-name completion.
 * Run shell commands with M-!, display captured stdout/stderr by default, and

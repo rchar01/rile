@@ -368,7 +368,9 @@ Undo dirty-state tracking stores a per-buffer undo save point. Opening, saving,
 reverting, and `not-modified` record the current undo depth as clean; undoing
 back to that depth clears the modified flag, while undoing past a saved edit
 makes the buffer modified again. Undo traversal records active undo sequences as
-redoable undo-stack entries when a non-undo command boundary is reached. Saving,
+redoable undo-stack entries when a non-undo command boundary is reached, and
+records redo-generated undo entries back as ordinary edits so repeated
+undo/redo traversal can return to the original saved text. Saving,
 `not-modified`, and undo-sequence finalization also break normal typing undo
 grouping so subsequent typing cannot merge into an earlier undo record. Explicit
 `undo-only` and `undo-redo` commands are available through `M-x`; `C-/`, `C-x u`,

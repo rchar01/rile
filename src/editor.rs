@@ -294,6 +294,7 @@ enum UndoEntryKind {
 struct ActiveUndoSequence {
     buffer: BufferId,
     records: Vec<UndoRecord>,
+    kind: UndoEntryKind,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4987,7 +4988,7 @@ impl Editor {
             self.undo_stack.push(UndoEntry {
                 buffer: sequence.buffer,
                 record,
-                kind: UndoEntryKind::UndoSequence,
+                kind: sequence.kind,
             });
         }
         if was_clean {
@@ -4996,13 +4997,16 @@ impl Editor {
         self.refresh_visible_buffer_list();
     }
 
-    fn record_active_undo(&mut self, buffer: BufferId, record: UndoRecord) {
+    fn record_active_undo(&mut self, buffer: BufferId, record: UndoRecord, kind: UndoEntryKind) {
         match &mut self.active_undo_sequence {
-            Some(sequence) if sequence.buffer == buffer => sequence.records.push(record),
+            Some(sequence) if sequence.buffer == buffer && sequence.kind == kind => {
+                sequence.records.push(record)
+            }
             _ => {
                 self.active_undo_sequence = Some(ActiveUndoSequence {
                     buffer,
                     records: vec![record],
+                    kind,
                 });
             }
         }
@@ -5123,11 +5127,25 @@ impl Editor {
         };
         let entry = self.undo_stack.remove(index);
         let success_message = success_message_for_entry(&entry);
+        if entry.kind == UndoEntryKind::UndoSequence
+            && self
+                .buffers
+                .document(buffer)
+                .is_some_and(|document| !document.is_dirty())
+        {
+            self.remember_clean_undo_depth(buffer);
+        }
         if record_inverse {
-            self.record_active_undo(buffer, entry.record.inverse());
+            let active_kind = match entry.kind {
+                UndoEntryKind::Edit => UndoEntryKind::UndoSequence,
+                UndoEntryKind::UndoSequence => UndoEntryKind::Edit,
+            };
+            self.record_active_undo(buffer, entry.record.inverse(), active_kind);
         }
         self.undo_record(entry.record)?;
-        self.sync_dirty_state_after_undo(buffer);
+        if entry.kind == UndoEntryKind::Edit {
+            self.sync_dirty_state_after_undo(buffer);
+        }
         self.finish_undo_command(success_message);
         Ok(())
     }
@@ -17464,6 +17482,152 @@ M-g g           goto-line                      Go to line or line:column\n"
             .execute_command_by_name("undo")
             .expect("undo should remove redone edit");
         assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
+    fn repeated_undo_redo_cycle_can_return_to_original_text() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("edit should insert");
+
+        for _ in 0..3 {
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should remove edit");
+            assert_eq!(editor.document().buffer().serialize(), "");
+            assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+
+            editor
+                .execute_command_by_name("undo-redo")
+                .expect("undo-redo should reapply edit");
+            assert_eq!(editor.document().buffer().serialize(), "A");
+            assert_eq!(editor.minibuffer().message.as_deref(), Some("Redo"));
+        }
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit after repeated redo cycles");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+    }
+
+    #[test]
+    fn repeated_ordinary_undo_cycle_can_return_to_original_text() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("edit should insert");
+
+        for _ in 0..3 {
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should remove edit");
+            assert_eq!(editor.document().buffer().serialize(), "");
+            assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+
+            editor
+                .execute_command_by_name("forward-char")
+                .expect("movement should break undo sequence");
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should redo edit after boundary");
+            assert_eq!(editor.document().buffer().serialize(), "A");
+            assert_eq!(editor.minibuffer().message.as_deref(), Some("Redo"));
+
+            editor
+                .execute_command_by_name("forward-char")
+                .expect("movement should break undo sequence");
+        }
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove edit after repeated ordinary redo cycles");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.minibuffer().message.as_deref(), Some("Undo"));
+    }
+
+    #[test]
+    fn repeated_multi_edit_undo_redo_cycle_can_return_to_original_text() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("A".to_owned()))
+            .expect("first edit should insert");
+        editor.clear_insert_group();
+        editor
+            .handle_key(KeyEvent::Text("B".to_owned()))
+            .expect("second edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "AB");
+
+        for _ in 0..2 {
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should remove second edit");
+            assert_eq!(editor.document().buffer().serialize(), "A");
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should remove first edit");
+            assert_eq!(editor.document().buffer().serialize(), "");
+
+            editor
+                .execute_command_by_name("undo-redo")
+                .expect("undo-redo should reapply first edit");
+            assert_eq!(editor.document().buffer().serialize(), "A");
+            editor
+                .execute_command_by_name("undo-redo")
+                .expect("undo-redo should reapply second edit");
+            assert_eq!(editor.document().buffer().serialize(), "AB");
+        }
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove second edit after repeated redo cycles");
+        assert_eq!(editor.document().buffer().serialize(), "A");
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should remove first edit after repeated redo cycles");
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn repeated_ordinary_undo_cycle_returns_to_opened_clean_state() {
+        let directory = TestDir::new();
+        let path = directory.path().join("undo-cycle-clean.txt");
+        fs::write(&path, "alpha\n").expect("fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("edit should insert");
+        assert_eq!(editor.document().buffer().serialize(), "!alpha\n");
+        assert!(editor.document().is_dirty());
+
+        for _ in 0..3 {
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should return to opened text");
+            assert_eq!(editor.document().buffer().serialize(), "alpha\n");
+            assert!(!editor.document().is_dirty());
+
+            editor
+                .execute_command_by_name("forward-char")
+                .expect("movement should break undo sequence");
+            editor
+                .execute_command_by_name("undo")
+                .expect("undo should redo dirty edit after boundary");
+            assert_eq!(editor.document().buffer().serialize(), "!alpha\n");
+            assert!(editor.document().is_dirty());
+
+            editor
+                .execute_command_by_name("forward-char")
+                .expect("movement should break undo sequence");
+        }
+
+        editor
+            .execute_command_by_name("undo")
+            .expect("undo should return to opened text after repeated cycles");
+        assert_eq!(editor.document().buffer().serialize(), "alpha\n");
         assert!(!editor.document().is_dirty());
     }
 

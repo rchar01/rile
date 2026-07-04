@@ -42,6 +42,11 @@ Navigation comparison scenarios:
 - `recenter`: Rile repeated `C-l` recenter behavior in short and long buffers,
   aligned with the Emacs core `recenter-core` scenario.
 
+Editing comparison scenarios:
+
+- `undo-cycle`: Rile repeated undo and redo cycles returning to the original
+  clean text, aligned with the Emacs core `undo-cycle-core` scenario.
+
 Completion comparison scenarios:
 
 - `m-x-completion-modern`: Rile command completion frames aligned with the

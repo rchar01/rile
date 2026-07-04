@@ -99,6 +99,25 @@ fn undo_redo_reapplies_edit_and_marks_modified_status() -> Result<()> {
     rile.assert_screen_contains("Redo")?;
     rile.assert_status_contains("modified:true")?;
 
+    rile.send("C-_", b"\x1f")?;
+    rile.wait_for_screen_contains("alpha")?;
+    assert!(!rile.snapshot_text().contains("!alpha"));
+    rile.assert_screen_contains("Undo")?;
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("undo-redo", b"undo-redo")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("!alpha")?;
+    rile.assert_screen_contains("Redo")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-_", b"\x1f")?;
+    rile.wait_for_screen_contains("alpha")?;
+    assert!(!rile.snapshot_text().contains("!alpha"));
+    rile.assert_screen_contains("Undo")?;
+    rile.assert_status_contains("modified:false")?;
+
     rile.quit()?;
     Ok(())
 }
@@ -121,6 +140,14 @@ fn undo_after_command_boundary_reports_redo_prompt() -> Result<()> {
 
     rile.wait_for_screen_contains("!alpha")?;
     rile.assert_screen_contains("Redo")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-_", b"\x1f")?;
+    rile.wait_for_screen_contains("alpha")?;
+    rile.assert_screen_contains("Undo")?;
+    rile.assert_status_contains("modified:false")?;
+    assert!(!rile.snapshot_text().contains("!alpha"));
 
     rile.quit()?;
     Ok(())

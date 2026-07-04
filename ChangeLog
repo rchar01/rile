@@ -1,3 +1,27 @@
+2026-07-04  Robert Charusta  <rch-public@posteo.net>
+
+	Preserve undo traversal back to saved text.
+
+	* src/editor.rs (ActiveUndoSequence): Track the kind to use when finalizing
+	generated undo records.
+	(finalize_active_undo_sequence, record_active_undo, undo_matching): Preserve
+	ordinary edit versus undo-sequence direction across repeated undo/redo cycles.
+	Do not sync clean state while applying redo-via-undo, but keep the clean depth
+	needed by the following undo.
+	(tests): Cover repeated explicit redo cycles, ordinary redo-via-undo cycles,
+	multiple-edit cycles, and returning to opened clean state.
+	* tests/pty_statusline.rs (undo_after_command_boundary_reports_redo_prompt):
+	Also verify returning to clean visible text and modified:false after another
+	undo.
+	(undo_redo_reapplies_edit_and_marks_modified_status): Cover repeated explicit
+	undo-redo traversal returning to modified:false.
+	* tools/reference/emacs/scenarios/undo-cycle-core.scenario: New scenario.
+	* tools/reference/rile/scenarios/undo-cycle.scenario: New scenario.
+	* tools/reference/emacs/README.md: List undo-cycle-core.
+	* tools/reference/rile/README.md: List undo-cycle.
+	* docs/development.md: Document repeated undo/redo traversal bookkeeping.
+	* NEWS: Mention repeated undo/redo cycles returning to saved state.
+
 2026-07-03  Robert Charusta  <rch-public@posteo.net>
 
 	Correct live undo prompt text.

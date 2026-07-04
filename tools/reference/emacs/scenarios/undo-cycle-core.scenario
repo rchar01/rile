@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+SCENARIO_NAME=undo-cycle-core
+SCENARIO_DESCRIPTION='Observe base Emacs repeated undo and redo returning to clean text.'
+EMACS_PROFILE=core
+WIDTH=100
+HEIGHT=24
+FIXTURE_NAME=undo-cycle-core.txt
+FIXTURE_CONTENT=$'alpha\nbeta\n'
+
+vhs_steps() {
+  cat <<'EOF'
+Wait+Screen /alpha/
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/00-open-clean.png
+Sleep 500ms
+Type "!"
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/01-after-edit.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/02-after-undo-clean.png
+Sleep 500ms
+Ctrl+F
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/03-after-ordinary-redo.png
+Sleep 500ms
+Ctrl+F
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/04-after-second-undo-clean.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo-redo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/05-after-explicit-redo.png
+Sleep 500ms
+Escape
+Type "x"
+Type "undo"
+Enter
+Sleep 500ms
+Screenshot {{FRAME_DIR}}/06-after-final-undo-clean.png
+Sleep 500ms
+Ctrl+X
+Ctrl+C
+EOF
+}
