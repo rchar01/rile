@@ -13,8 +13,14 @@ terminal-native, UTF-8-capable Emacs-style editor written in Rust.
 Editing features:
 
 * Open existing UTF-8 files and create missing files from the terminal.
-* Save through a same-directory temporary file and rename.  Use C-x s to offer
-  to save each modified file-backed buffer.
+* Save through a same-directory temporary file and rename.  Existing file
+  permissions are preserved across replacement, and stale temporary-name
+  collisions are retried.  Use C-x s to offer to save each modified
+  file-backed buffer.
+* Keep save backups disabled by default.  When `backup_on_save = true`, Rile
+  writes one persistent backup of the original file contents per buffer visit.
+  Empty `backup_directory` uses sibling `file~` backups; otherwise path-based
+  mapped backup names are written into the configured directory.
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, visible page, repeated C-l center/top/bottom
   recentering, M-r middle/top/bottom window-line movement, beginning/end of

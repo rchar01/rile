@@ -506,8 +506,14 @@ incremental search uses Rile's built-in line-local subset: `.`, `*`, `+`, `?`,
 negation. Search wraps only after an explicit boundary failure, query replace
 does not wrap, and no search command matches across line breaks.
 
-Milestone 15 hardening has started with binary-file detection: files containing NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail with an explicit message.
-The optional `backup_on_save = true` config setting writes the previous contents of an existing file to a sibling `file~` backup before saving the new contents.
+Milestone 15 hardening has started with binary-file detection: files containing
+NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail
+with an explicit message.  Backups remain disabled by default.  The optional
+`backup_on_save = true` config setting writes one persistent backup per buffer
+visit before the first successful save of an existing file.  Empty
+`backup_directory` uses a sibling `file~` backup; a configured backup directory
+uses mapped path-based names and is checked when the backup is written.  Backup
+creation failures block the save so the original file contents remain intact.
 
 Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY tests assert parsed `vt100` screen state instead of raw escape bytes.
 
@@ -519,7 +525,12 @@ The current file policy preserves carriage return bytes as ordinary text. CRLF f
 
 ## Save Safety
 
-Saves use a same-directory temporary file followed by `rename`, then best-effort parent-directory sync. This is intended to avoid partially written target files on common Unix filesystems. Permission, directory, and missing-parent errors propagate as `I/O error` values and failed saves keep the buffer dirty.
+Saves use a same-directory temporary file followed by `rename`, then best-effort
+parent-directory sync.  This is intended to avoid partially written target files
+on common Unix filesystems.  Rile preserves existing file permissions across the
+replacement and retries stale temporary-name collisions before failing.
+Permission, directory, and missing-parent errors propagate as `I/O error` values
+and failed saves keep the buffer dirty.
 
 ## Terminal Decision
 

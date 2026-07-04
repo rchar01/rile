@@ -38,6 +38,8 @@ pub struct Document {
     read_only: bool,
     missing_on_open: bool,
     backup_on_save: bool,
+    backup_directory: Option<PathBuf>,
+    backup_written: bool,
     file_stamp: Option<FileStamp>,
 }
 
@@ -51,6 +53,8 @@ impl Document {
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -69,6 +73,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -82,6 +88,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -95,6 +103,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -108,6 +118,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -121,6 +133,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -134,6 +148,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             read_only: false,
             missing_on_open: false,
             backup_on_save: false,
+            backup_directory: None,
+            backup_written: false,
             file_stamp: None,
         }
     }
@@ -152,6 +168,8 @@ Rile is free software under GPL-3.0-or-later.\n",
                     read_only: false,
                     missing_on_open: false,
                     backup_on_save: false,
+                    backup_directory: None,
+                    backup_written: false,
                     file_stamp,
                 })
             }
@@ -163,6 +181,8 @@ Rile is free software under GPL-3.0-or-later.\n",
                 read_only: false,
                 missing_on_open: true,
                 backup_on_save: false,
+                backup_directory: None,
+                backup_written: false,
                 file_stamp: None,
             }),
             Err(error) => Err(error.into()),
@@ -242,6 +262,14 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.backup_on_save = enabled;
     }
 
+    pub fn backup_directory(&self) -> Option<&Path> {
+        self.backup_directory.as_deref()
+    }
+
+    pub fn set_backup_directory(&mut self, directory: Option<PathBuf>) {
+        self.backup_directory = directory;
+    }
+
     pub fn file_changed_on_disk(&self) -> Result<bool> {
         if self.kind != DocumentKind::Normal || self.path.is_none() {
             return Ok(false);
@@ -268,7 +296,14 @@ Rile is free software under GPL-3.0-or-later.\n",
             return Err(RileError::InvalidInput("buffer is read-only".to_owned()));
         }
         let path = path.as_ref().to_path_buf();
-        self.write_to_path(&path)?;
+        let previous_backup_written = self.backup_written;
+        if self.path.as_ref() != Some(&path) {
+            self.backup_written = false;
+        }
+        if let Err(error) = self.write_to_path(&path) {
+            self.backup_written = previous_backup_written;
+            return Err(error);
+        }
         self.path = Some(path);
         self.name = None;
         self.missing_on_open = false;
@@ -288,9 +323,11 @@ Rile is free software under GPL-3.0-or-later.\n",
         };
         let read_only = self.read_only;
         let backup_on_save = self.backup_on_save;
+        let backup_directory = self.backup_directory.clone();
         let mut reloaded = Self::open(&path)?;
         reloaded.read_only = read_only;
         reloaded.backup_on_save = backup_on_save;
+        reloaded.backup_directory = backup_directory;
         *self = reloaded;
         Ok(())
     }
@@ -311,8 +348,9 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     fn write_to_path(&mut self, path: &Path) -> Result<()> {
-        if self.backup_on_save {
-            write_backup(path)?;
+        if self.backup_on_save && !self.backup_written {
+            write_backup(path, self.backup_directory.as_deref())?;
+            self.backup_written = true;
         }
         safe_write(path, self.buffer.serialize().as_bytes())?;
         self.buffer.mark_clean();
@@ -363,19 +401,18 @@ fn decode_text_file_bytes(path: &Path, bytes: Vec<u8>) -> Result<String> {
 }
 
 pub fn safe_write(path: &Path, bytes: &[u8]) -> Result<()> {
-    let temporary = temporary_path(path);
-    let write_result = write_temporary_then_rename(&temporary, path, bytes);
-    if write_result.is_err() {
-        let _ = fs::remove_file(&temporary);
-    }
-    write_result
+    write_temporary_then_rename(path, bytes)
 }
 
-fn write_backup(path: &Path) -> Result<()> {
+fn write_backup(path: &Path, backup_directory: Option<&Path>) -> Result<()> {
     match fs::metadata(path) {
         Ok(metadata) if metadata.is_file() => {
             let bytes = fs::read(path)?;
-            safe_write(&backup_path(path), &bytes)
+            safe_write_with_permissions(
+                &backup_path(path, backup_directory),
+                &bytes,
+                Some(metadata.permissions()),
+            )
         }
         Ok(_) => Ok(()),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -383,7 +420,14 @@ fn write_backup(path: &Path) -> Result<()> {
     }
 }
 
-fn backup_path(path: &Path) -> PathBuf {
+fn backup_path(path: &Path, backup_directory: Option<&Path>) -> PathBuf {
+    match backup_directory {
+        Some(directory) => directory.join(mapped_backup_name(path)),
+        None => sibling_backup_path(path),
+    }
+}
+
+fn sibling_backup_path(path: &Path) -> PathBuf {
     let mut backup = PathBuf::from(path);
     let mut file_name = path
         .file_name()
@@ -394,17 +438,78 @@ fn backup_path(path: &Path) -> PathBuf {
     backup
 }
 
-fn write_temporary_then_rename(temporary: &Path, path: &Path, bytes: &[u8]) -> Result<()> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(temporary)?;
-    file.write_all(bytes)?;
-    file.sync_all()?;
-    drop(file);
-    fs::rename(temporary, path)?;
-    sync_parent_directory(path);
-    Ok(())
+fn mapped_backup_name(path: &Path) -> String {
+    let mut name = String::new();
+    for character in path.display().to_string().chars() {
+        match character {
+            '/' => name.push('!'),
+            '!' => name.push_str("!!"),
+            _ => name.push(character),
+        }
+    }
+    if name.is_empty() {
+        name.push_str("rile-buffer");
+    }
+    name.push('~');
+    name
+}
+
+fn write_temporary_then_rename(path: &Path, bytes: &[u8]) -> Result<()> {
+    let permissions = existing_file_permissions(path)?;
+    safe_write_with_permissions(path, bytes, permissions)
+}
+
+fn safe_write_with_permissions(
+    path: &Path,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+) -> Result<()> {
+    let (temporary, mut file) = create_temporary_file(path)?;
+    let result = (|| -> Result<()> {
+        file.write_all(bytes)?;
+        if let Some(permissions) = permissions {
+            file.set_permissions(permissions)?;
+        }
+        file.sync_all()?;
+        drop(file);
+        fs::rename(&temporary, path)?;
+        sync_parent_directory(path);
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+fn existing_file_permissions(path: &Path) -> Result<Option<fs::Permissions>> {
+    match fs::metadata(path) {
+        Ok(metadata) if metadata.is_file() => Ok(Some(metadata.permissions())),
+        Ok(_) => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn create_temporary_file(path: &Path) -> Result<(PathBuf, fs::File)> {
+    let mut last_error = None;
+    for _ in 0..16 {
+        let temporary = temporary_path(path);
+        match OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temporary)
+        {
+            Ok(file) => return Ok((temporary, file)),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                last_error = Some(error);
+            }
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Err(last_error
+        .unwrap_or_else(|| std::io::Error::other("temporary path collision"))
+        .into())
 }
 
 fn temporary_path(path: &Path) -> PathBuf {
@@ -439,7 +544,7 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{Document, DocumentKind};
+    use super::{Document, DocumentKind, SAVE_COUNTER, backup_path, safe_write, temporary_path};
     use crate::buffer::Position;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -643,6 +748,36 @@ mod tests {
     }
 
     #[test]
+    fn backup_on_save_writes_one_backup_per_document_visit() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " first")
+            .expect("insert should succeed");
+        document.save().expect("first save should succeed");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 9), " second")
+            .expect("second insert should succeed");
+        document.save().expect("second save should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old first second"
+        );
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+    }
+
+    #[test]
     fn save_does_not_write_backup_by_default() {
         let directory = TestDir::new();
         let path = directory.path().join("save.txt");
@@ -657,6 +792,91 @@ mod tests {
         document.save().expect("save should succeed");
 
         assert!(!backup.exists());
+    }
+
+    #[test]
+    fn backup_directory_maps_path_to_backup_file() {
+        let directory = TestDir::new();
+        let backup_directory = directory.path().join("backups");
+        fs::create_dir(&backup_directory).expect("backup directory should create");
+        let path = directory.path().join("nested").join("save.txt");
+        fs::create_dir(path.parent().expect("path should have parent"))
+            .expect("nested directory should create");
+        fs::write(&path, "old").expect("file should be written");
+        let backup = backup_path(&path, Some(&backup_directory));
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document.set_backup_directory(Some(backup_directory.clone()));
+
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+        document.save().expect("save should succeed");
+
+        assert!(backup.starts_with(&backup_directory));
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old new"
+        );
+    }
+
+    #[test]
+    fn backup_failure_blocks_save_and_keeps_buffer_dirty() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let missing_backup_directory = directory.path().join("missing-backups");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document.set_backup_directory(Some(missing_backup_directory));
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+
+        let error = document
+            .save()
+            .expect_err("missing backup directory should fail");
+
+        assert!(error.to_string().contains("I/O error"));
+        assert_eq!(fs::read_to_string(&path).expect("file should read"), "old");
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn save_as_new_path_gets_a_new_backup_cycle() {
+        let directory = TestDir::new();
+        let first = directory.path().join("first.txt");
+        let second = directory.path().join("second.txt");
+        fs::write(&first, "first old").expect("first file should be written");
+        fs::write(&second, "second old").expect("second file should be written");
+        let mut document = Document::open(&first).expect("first file should open");
+        document.set_backup_on_save(true);
+
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 9), " saved")
+            .expect("insert should succeed");
+        document.save().expect("first save should succeed");
+        document
+            .save_as(&second)
+            .expect("write-file should succeed");
+
+        assert_eq!(
+            fs::read_to_string(directory.path().join("first.txt~"))
+                .expect("first backup should read"),
+            "first old"
+        );
+        assert_eq!(
+            fs::read_to_string(directory.path().join("second.txt~"))
+                .expect("second backup should read"),
+            "second old"
+        );
     }
 
     #[test]
@@ -747,6 +967,73 @@ mod tests {
         assert!(error.to_string().contains("I/O error"));
         assert!(document.is_dirty());
         assert_eq!(document.path(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_write_preserves_existing_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("mode.txt");
+        fs::write(&path, "old").expect("file should be written");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640))
+            .expect("permissions should be set");
+
+        safe_write(&path, b"new").expect("safe write should succeed");
+
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+        assert_eq!(fs::read_to_string(&path).expect("file should read"), "new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_write_preserves_read_only_permissions_after_writing() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("read-only-mode.txt");
+        fs::write(&path, "old").expect("file should be written");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o444))
+            .expect("permissions should be set");
+
+        safe_write(&path, b"new").expect("safe write should succeed");
+
+        assert_eq!(fs::read_to_string(&path).expect("file should read"), "new");
+        assert_eq!(
+            fs::metadata(&path)
+                .expect("metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o444
+        );
+    }
+
+    #[test]
+    fn safe_write_retries_stale_temporary_path_collisions() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        fs::write(&path, "old").expect("file should be written");
+        SAVE_COUNTER.store(0, Ordering::Relaxed);
+        let stale = temporary_path(&path);
+        fs::write(&stale, "stale temp").expect("stale temp should be written");
+        SAVE_COUNTER.store(0, Ordering::Relaxed);
+
+        safe_write(&path, b"new").expect("safe write should retry after temp collision");
+
+        assert_eq!(fs::read_to_string(&path).expect("file should read"), "new");
+        assert_eq!(
+            fs::read_to_string(&stale).expect("stale temp should remain untouched"),
+            "stale temp"
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::buffer::BufferId;
 use crate::file::Document;
@@ -90,29 +90,32 @@ impl BufferManager {
     }
 
     pub fn open_path(&mut self, path: impl AsRef<Path>) -> Result<OpenBufferResult> {
-        self.open_path_with_backup(path, false)
+        self.open_path_with_backup(path, false, None)
     }
 
     pub fn open_path_with_backup(
         &mut self,
         path: impl AsRef<Path>,
         backup_on_save: bool,
+        backup_directory: Option<PathBuf>,
     ) -> Result<OpenBufferResult> {
-        self.open_path_with_options(path, backup_on_save, false)
+        self.open_path_with_options(path, backup_on_save, backup_directory, false)
     }
 
     pub fn open_path_read_only(
         &mut self,
         path: impl AsRef<Path>,
         backup_on_save: bool,
+        backup_directory: Option<PathBuf>,
     ) -> Result<OpenBufferResult> {
-        self.open_path_with_options(path, backup_on_save, true)
+        self.open_path_with_options(path, backup_on_save, backup_directory, true)
     }
 
     fn open_path_with_options(
         &mut self,
         path: impl AsRef<Path>,
         backup_on_save: bool,
+        backup_directory: Option<PathBuf>,
         read_only: bool,
     ) -> Result<OpenBufferResult> {
         let path = path.as_ref();
@@ -132,6 +135,7 @@ impl BufferManager {
 
         let mut document = Document::open(path)?;
         document.set_backup_on_save(backup_on_save);
+        document.set_backup_directory(backup_directory);
         document.set_read_only(read_only);
         let id = self.push(document);
         Ok(OpenBufferResult { id, created: true })

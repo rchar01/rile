@@ -31,6 +31,7 @@ pub struct Config {
     pub syntax_highlighting: bool,
     pub search_highlighting: bool,
     pub backup_on_save: bool,
+    pub backup_directory: Option<PathBuf>,
     pub theme: ThemeName,
     pub completion: CompletionConfig,
 }
@@ -41,7 +42,7 @@ impl Default for Config {
         let mut config = Self::empty_for_registry_defaults();
         for option in registry.options() {
             config
-                .apply_option_value(option.id, option.default)
+                .apply_option_value(option.id, option.default.clone())
                 .expect("default option values should match config fields");
         }
         config
@@ -99,6 +100,12 @@ impl Config {
             OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_highlighting),
             OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
             OptionId::BackupOnSave => OptionValue::Boolean(self.backup_on_save),
+            OptionId::BackupDirectory => OptionValue::String(
+                self.backup_directory
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default(),
+            ),
             OptionId::Theme => OptionValue::Choice(self.theme.name()),
             OptionId::CompletionStyle => OptionValue::Choice(self.completion.style.name()),
             OptionId::CompletionMaxCandidates => {
@@ -119,6 +126,7 @@ impl Config {
             syntax_highlighting: false,
             search_highlighting: false,
             backup_on_save: false,
+            backup_directory: None,
             theme: ThemeName::Default,
             completion: CompletionConfig {
                 style: CompletionStyle::Vertical,
@@ -145,6 +153,13 @@ impl Config {
                 self.search_highlighting = value;
             }
             (OptionId::BackupOnSave, OptionValue::Boolean(value)) => self.backup_on_save = value,
+            (OptionId::BackupDirectory, OptionValue::String(value)) => {
+                self.backup_directory = if value.is_empty() {
+                    None
+                } else {
+                    Some(PathBuf::from(value))
+                };
+            }
             (OptionId::Theme, OptionValue::Choice("default")) => self.theme = ThemeName::Default,
             (OptionId::Theme, OptionValue::Choice("mono")) => self.theme = ThemeName::Mono,
             (OptionId::CompletionStyle, OptionValue::Choice("vertical")) => {
@@ -208,6 +223,8 @@ fn config_error(line_number: usize, message: impl Into<String>) -> RileError {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::{CompletionMatching, CompletionStyle, Config, ThemeName};
     use crate::option::{OptionId, OptionRegistry, OptionValue};
 
@@ -222,6 +239,7 @@ mod tests {
             syntax_highlighting = false
             search_highlighting = false
             backup_on_save = true
+            backup_directory = "/tmp/rile-backups"
             theme = "mono"
             completion_style = "ido"
             completion_max_candidates = 5
@@ -237,6 +255,10 @@ mod tests {
         assert!(!config.syntax_highlighting);
         assert!(!config.search_highlighting);
         assert!(config.backup_on_save);
+        assert_eq!(
+            config.backup_directory,
+            Some(PathBuf::from("/tmp/rile-backups"))
+        );
         assert_eq!(config.theme, ThemeName::Mono);
         assert_eq!(config.completion.style, CompletionStyle::Ido);
         assert_eq!(config.completion.max_candidates, 5);

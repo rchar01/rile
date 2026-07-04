@@ -120,6 +120,7 @@ pub struct Editor {
     tab_width: usize,
     fill_column: usize,
     backup_on_save: bool,
+    backup_directory: Option<PathBuf>,
     theme: ThemeName,
 }
 
@@ -452,6 +453,7 @@ impl Editor {
 
     pub fn with_config(mut document: Document, config: Config) -> Self {
         document.set_backup_on_save(config.backup_on_save);
+        document.set_backup_directory(config.backup_directory.clone());
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
         let mut buffer_viewports = HashMap::new();
@@ -517,6 +519,7 @@ impl Editor {
             tab_width: config.tab_width,
             fill_column: config.fill_column,
             backup_on_save: config.backup_on_save,
+            backup_directory: config.backup_directory,
             theme: config.theme,
         }
     }
@@ -5496,6 +5499,12 @@ impl Editor {
             OptionId::SyntaxHighlighting => OptionValue::Boolean(self.syntax_enabled),
             OptionId::SearchHighlighting => OptionValue::Boolean(self.search_highlighting),
             OptionId::BackupOnSave => OptionValue::Boolean(self.backup_on_save),
+            OptionId::BackupDirectory => OptionValue::String(
+                self.backup_directory
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default(),
+            ),
             OptionId::Theme => OptionValue::Choice(self.theme.name()),
             OptionId::CompletionStyle => OptionValue::Choice(self.completion_config.style.name()),
             OptionId::CompletionMaxCandidates => {
@@ -5904,10 +5913,17 @@ impl Editor {
 
         let path = self.resolve_find_file_path(path);
         let result = if read_only {
-            self.buffers.open_path_read_only(&path, self.backup_on_save)
+            self.buffers.open_path_read_only(
+                &path,
+                self.backup_on_save,
+                self.backup_directory.clone(),
+            )
         } else {
-            self.buffers
-                .open_path_with_backup(&path, self.backup_on_save)
+            self.buffers.open_path_with_backup(
+                &path,
+                self.backup_on_save,
+                self.backup_directory.clone(),
+            )
         };
         match result {
             Ok(opened) => {
@@ -18010,6 +18026,7 @@ M-g g           goto-line                      Go to line or line:column\n"
 
     #[test]
     fn editor_applies_config_options_and_toggle_commands() {
+        let backup_directory = PathBuf::from("/tmp/rile-backups");
         let mut editor = Editor::with_config(
             Document::scratch(),
             Config {
@@ -18019,6 +18036,7 @@ M-g g           goto-line                      Go to line or line:column\n"
                 syntax_highlighting: false,
                 search_highlighting: false,
                 backup_on_save: true,
+                backup_directory: Some(backup_directory.clone()),
                 theme: ThemeName::Mono,
                 completion: Default::default(),
             },
@@ -18033,6 +18051,10 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert!(!editor.syntax_enabled());
         assert!(!editor.search_highlighting());
         assert!(editor.document().backup_on_save());
+        assert_eq!(
+            editor.document().backup_directory(),
+            Some(backup_directory.as_path())
+        );
         assert_eq!(editor.theme(), ThemeName::Mono);
 
         editor

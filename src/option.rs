@@ -11,6 +11,7 @@ pub enum OptionId {
     SyntaxHighlighting,
     SearchHighlighting,
     BackupOnSave,
+    BackupDirectory,
     Theme,
     CompletionStyle,
     CompletionMaxCandidates,
@@ -22,6 +23,7 @@ pub enum OptionId {
 pub enum OptionType {
     Boolean,
     Integer,
+    String,
     Choice(&'static [&'static str]),
 }
 
@@ -30,15 +32,17 @@ impl OptionType {
         match self {
             Self::Boolean => "boolean",
             Self::Integer => "integer",
+            Self::String => "string",
             Self::Choice(_) => "choice",
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OptionValue {
     Boolean(bool),
     Integer(usize),
+    String(String),
     Choice(&'static str),
 }
 
@@ -47,12 +51,13 @@ impl fmt::Display for OptionValue {
         match self {
             Self::Boolean(value) => write!(formatter, "{value}"),
             Self::Integer(value) => write!(formatter, "{value}"),
+            Self::String(value) => write!(formatter, "{value}"),
             Self::Choice(value) => write!(formatter, "{value}"),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct OptionSpec {
     pub id: OptionId,
     pub name: &'static str,
@@ -79,6 +84,7 @@ impl OptionSpec {
                 .parse::<usize>()
                 .map(OptionValue::Integer)
                 .map_err(|_| self.parse_error)?,
+            OptionType::String => OptionValue::String(unquote(text).to_owned()),
             OptionType::Choice(choices) => {
                 let unquoted = unquote(text);
                 let Some(choice) = choices.iter().copied().find(|choice| *choice == unquoted)
@@ -88,12 +94,12 @@ impl OptionSpec {
                 OptionValue::Choice(choice)
             }
         };
-        self.validate_value(value)?;
+        self.validate_value(&value)?;
         Ok(value)
     }
 
-    pub fn validate_value(&self, value: OptionValue) -> std::result::Result<(), &'static str> {
-        if (self.validator)(&value) {
+    pub fn validate_value(&self, value: &OptionValue) -> std::result::Result<(), &'static str> {
+        if (self.validator)(value) {
             Ok(())
         } else {
             Err(self.validation_error)
@@ -142,7 +148,7 @@ impl OptionRegistry {
                     spec.name
                 ));
             }
-            spec.validate_value(spec.default).map_err(|message| {
+            spec.validate_value(&spec.default).map_err(|message| {
                 format!("option `{}` default is invalid: {message}", spec.name)
             })?;
             for other in self.specs.iter().skip(index + 1) {
@@ -237,13 +243,25 @@ fn default_options() -> Vec<OptionSpec> {
             id: OptionId::BackupOnSave,
             name: "backup_on_save",
             summary: "Backup on save",
-            doc: "Whether saving an existing file writes a sibling file~ backup first.",
+            doc: "Whether saving an existing file writes one persistent backup for each buffer visit.",
             value_type: OptionType::Boolean,
             default: OptionValue::Boolean(false),
             valid_values: "true or false",
             validator: valid_boolean,
             parse_error: "expected true or false",
             validation_error: "expected true or false",
+        }),
+        option_spec(OptionSpecData {
+            id: OptionId::BackupDirectory,
+            name: "backup_directory",
+            summary: "Backup directory",
+            doc: "Directory for backup_on_save files. Empty keeps file~ backups beside the saved file. A non-empty directory is checked when a backup is written; backup files there use mapped path-based names.",
+            value_type: OptionType::String,
+            default: OptionValue::String(String::new()),
+            valid_values: "directory path string, or empty string for sibling backups",
+            validator: valid_string,
+            parse_error: "backup_directory must be a string",
+            validation_error: "backup_directory must be a string",
         }),
         option_spec(OptionSpecData {
             id: OptionId::Theme,
@@ -341,6 +359,10 @@ fn valid_boolean(value: &OptionValue) -> bool {
     matches!(value, OptionValue::Boolean(_))
 }
 
+fn valid_string(value: &OptionValue) -> bool {
+    matches!(value, OptionValue::String(_))
+}
+
 fn valid_tab_width(value: &OptionValue) -> bool {
     matches!(value, OptionValue::Integer(width) if (1..=16).contains(width))
 }
@@ -387,7 +409,7 @@ mod tests {
         let registry = OptionRegistry::default();
 
         assert_eq!(registry.validate(), Ok(()));
-        assert_eq!(registry.options().count(), 11);
+        assert_eq!(registry.options().count(), 12);
     }
 
     #[test]
@@ -399,7 +421,7 @@ mod tests {
             assert!(!option.doc.is_empty());
             assert!(!option.value_type.label().is_empty());
             assert!(!option.valid_values.is_empty());
-            assert_eq!(option.validate_value(option.default), Ok(()));
+            assert_eq!(option.validate_value(&option.default), Ok(()));
         }
     }
 
@@ -419,7 +441,7 @@ mod tests {
             validation_error: "expected true or false",
         };
 
-        assert!(OptionRegistry::new(vec![option, option]).is_err());
+        assert!(OptionRegistry::new(vec![option.clone(), option]).is_err());
     }
 
     #[test]
@@ -481,6 +503,13 @@ mod tests {
                 .expect("theme option should exist")
                 .parse_value("\"mono\""),
             Ok(OptionValue::Choice("mono"))
+        );
+        assert_eq!(
+            registry
+                .get("backup_directory")
+                .expect("backup_directory option should exist")
+                .parse_value("\"/tmp/rile-backups\""),
+            Ok(OptionValue::String("/tmp/rile-backups".to_owned()))
         );
     }
 

@@ -1,5 +1,36 @@
 2026-07-04  Robert Charusta  <rch-public@posteo.net>
 
+	Harden save backups and temporary writes.
+
+	* src/option.rs (OptionId, OptionType, OptionValue): Add string option
+	values and the backup_directory option.
+	(OptionSpec::parse_value, OptionSpec::validate_value): Handle owned string
+	values.
+	* src/config.rs (Config): Add backup_directory parsing and option exposure.
+	* src/file.rs (Document): Track backup directory and per-visit backup state.
+	(save_as, write_to_path): Start a fresh backup cycle when write-file changes
+	the visited path, and block saves when requested backups fail.
+	(safe_write, write_backup, backup_path, safe_write_with_permissions)
+	(existing_file_permissions, create_temporary_file): Preserve existing file
+	permissions, retry stale temporary-name collisions, and support mapped backup
+	directory names.
+	(tests): Cover default-off backups, one backup per visit, backup-directory
+	mapping, backup failures, write-file backup cycles, permission preservation,
+	and temporary-name collision retries.
+	* src/buffers.rs (open_path_with_backup, open_path_read_only)
+	(open_path_with_options): Propagate backup directories to opened documents.
+	* src/editor.rs (Editor): Store backup_directory and pass it to opened
+	documents.
+	(tests): Cover backup-directory config propagation.
+	* src/editor/help.rs (format_describe_variable_help): Clone owned option
+	defaults for help text.
+	* README.md: Document backup_directory and default-off backup behavior.
+	* docs/development.md: Document save hardening and backup policy.
+	* NEWS: Mention save permission preservation, temp collision retries, and
+	backup-directory behavior.
+
+2026-07-04  Robert Charusta  <rch-public@posteo.net>
+
 	Preserve undo traversal back to saved text.
 
 	* src/editor.rs (ActiveUndoSequence): Track the kind to use when finalizing

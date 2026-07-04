@@ -217,7 +217,7 @@ pub(super) fn format_describe_variable_help(
     append_option_field(&mut text, "Name", option.name);
     append_option_field(&mut text, "Config key", option.config_key);
     append_option_field(&mut text, "Current value", current_value);
-    append_option_field(&mut text, "Default value", option.default);
+    append_option_field(&mut text, "Default value", option.default.clone());
     append_option_field(&mut text, "Type", option.value_type.label());
     append_option_field(&mut text, "Valid values", option.valid_values);
     append_option_field(&mut text, "Summary", option.summary);

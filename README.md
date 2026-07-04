@@ -226,7 +226,8 @@ fill_column = 70
 line_numbers = false
 syntax_highlighting = true
 search_highlighting = true
-backup_on_save = false # when true, save previous contents to file~
+backup_on_save = false # when true, save one backup per buffer visit
+backup_directory = "" # empty uses sibling file~ backups
 theme = "default" # or "mono"
 completion_style = "vertical" # "completions-buffer" or "ido"
 completion_max_candidates = 8
@@ -235,6 +236,12 @@ completion_matching = "orderless" # "orderless", "prefix", or "substring"
 ```
 
 `fill_column` accepts integer values from 20 through 200.
+
+Backups are disabled by default.  When `backup_on_save` is true, saving an
+existing file first writes a persistent backup of the original contents.  With
+an empty `backup_directory`, backups live beside the file as `file~`; otherwise
+Rile writes path-based mapped backup names into the configured directory.  That
+directory is checked when a backup is written and must exist before saving.
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and
