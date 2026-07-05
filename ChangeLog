@@ -1,5 +1,12 @@
 2026-07-05  Robert Charusta  <rch-public@posteo.net>
 
+	Document current backup and auto-save implementation.
+
+	* docs/backups-and-auto-save.md: New guide.
+	* docs/README.md: Link backups and auto-save guide.
+
+2026-07-05  Robert Charusta  <rch-public@posteo.net>
+
 	Remove completed auto-save research note.
 
 	* docs/auto-save-research.md: Remove completed implementation research note.
