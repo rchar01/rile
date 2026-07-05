@@ -1,5 +1,12 @@
 2026-07-05  Robert Charusta  <rch-public@posteo.net>
 
+	Remove completed auto-save research note.
+
+	* docs/auto-save-research.md: Remove completed implementation research note.
+	* docs/README.md: Remove link to auto-save research note.
+
+2026-07-05  Robert Charusta  <rch-public@posteo.net>
+
 	Add default-off Emacs-style auto-save.
 
 	* src/option.rs (OptionId): Add auto-save option identifiers.
