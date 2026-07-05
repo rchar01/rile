@@ -514,6 +514,13 @@ visit before the first successful save of an existing file.  Empty
 `backup_directory` uses a sibling `file~` backup; a configured backup directory
 uses mapped path-based names and is checked when the backup is written.  Backup
 creation failures block the save so the original file contents remain intact.
+Auto-save is a separate default-off feature.  When `auto_save = true`, dirty
+file-visiting buffers write Emacs-style `#file#` auto-save files after the
+configured handled-key interval or idle timeout.  Auto-save writes do not mark
+buffers clean and do not modify visited files.  Explicit saves delete matching
+current-session auto-save files by default while preserving pre-existing
+recovery files, and opening a file with a newer auto-save file emits a warning
+so the auto-save file can be opened manually for recovery.
 
 Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY tests assert parsed `vt100` screen state instead of raw escape bytes.
 

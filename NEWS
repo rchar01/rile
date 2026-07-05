@@ -21,6 +21,12 @@ Editing features:
   writes one persistent backup of the original file contents per buffer visit.
   Empty `backup_directory` uses sibling `file~` backups; otherwise path-based
   mapped backup names are written into the configured directory.
+* Keep Emacs-style auto-save disabled by default.  When `auto_save = true`, Rile
+  writes dirty file-visiting buffers to `#file#` auto-save files after the
+  configured key-event interval or idle timeout.  Explicit saves delete
+  current-session auto-save files by default, while preserving pre-existing
+  recovery files; opening a file with a newer auto-save file warns so it can be
+  opened manually for recovery.
 * Insert printable UTF-8 text, tabs, and new lines.
 * Move by character, line, visible page, repeated C-l center/top/bottom
   recentering, M-r middle/top/bottom window-line movement, beginning/end of

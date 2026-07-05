@@ -228,6 +228,11 @@ syntax_highlighting = true
 search_highlighting = true
 backup_on_save = false # when true, save one backup per buffer visit
 backup_directory = "" # empty uses sibling file~ backups
+auto_save = false # when true, write Emacs-style #file# auto-save files
+auto_save_interval = 300 # handled key events between auto-save writes
+auto_save_timeout_seconds = 30 # idle seconds before auto-save writes
+auto_save_directory = "" # empty uses sibling #file# auto-save files
+delete_auto_save_files = true # remove auto-save files after successful save
 theme = "default" # or "mono"
 completion_style = "vertical" # "completions-buffer" or "ido"
 completion_max_candidates = 8
@@ -242,6 +247,15 @@ existing file first writes a persistent backup of the original contents.  With
 an empty `backup_directory`, backups live beside the file as `file~`; otherwise
 Rile writes path-based mapped backup names into the configured directory.  That
 directory is checked when a backup is written and must exist before saving.
+
+Auto-save is also disabled by default.  When `auto_save` is true, dirty
+file-visiting buffers write Emacs-style auto-save files without marking the
+buffer clean or changing the visited file.  Empty `auto_save_directory` uses
+sibling `#file#` names; otherwise Rile writes mapped path-based names wrapped in
+`#...#` into the configured directory.  Successful explicit saves delete
+auto-save files written by the current session when `delete_auto_save_files` is
+true; pre-existing recovery files are preserved.  Opening a file with a newer
+auto-save file warns so the auto-save file can be opened manually for recovery.
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and

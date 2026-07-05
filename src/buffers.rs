@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use crate::buffer::BufferId;
-use crate::file::Document;
+use crate::file::{Document, DocumentSettings};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,32 +90,29 @@ impl BufferManager {
     }
 
     pub fn open_path(&mut self, path: impl AsRef<Path>) -> Result<OpenBufferResult> {
-        self.open_path_with_backup(path, false, None)
+        self.open_path_with_settings(path, DocumentSettings::default())
     }
 
-    pub fn open_path_with_backup(
+    pub fn open_path_with_settings(
         &mut self,
         path: impl AsRef<Path>,
-        backup_on_save: bool,
-        backup_directory: Option<PathBuf>,
+        settings: DocumentSettings,
     ) -> Result<OpenBufferResult> {
-        self.open_path_with_options(path, backup_on_save, backup_directory, false)
+        self.open_path_with_options(path, settings, false)
     }
 
     pub fn open_path_read_only(
         &mut self,
         path: impl AsRef<Path>,
-        backup_on_save: bool,
-        backup_directory: Option<PathBuf>,
+        settings: DocumentSettings,
     ) -> Result<OpenBufferResult> {
-        self.open_path_with_options(path, backup_on_save, backup_directory, true)
+        self.open_path_with_options(path, settings, true)
     }
 
     fn open_path_with_options(
         &mut self,
         path: impl AsRef<Path>,
-        backup_on_save: bool,
-        backup_directory: Option<PathBuf>,
+        settings: DocumentSettings,
         read_only: bool,
     ) -> Result<OpenBufferResult> {
         let path = path.as_ref();
@@ -134,8 +131,7 @@ impl BufferManager {
         }
 
         let mut document = Document::open(path)?;
-        document.set_backup_on_save(backup_on_save);
-        document.set_backup_directory(backup_directory);
+        document.apply_settings(&settings);
         document.set_read_only(read_only);
         let id = self.push(document);
         Ok(OpenBufferResult { id, created: true })

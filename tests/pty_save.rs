@@ -35,6 +35,34 @@ fn save_buffer_writes_disk_contents_and_clears_dirty_state() -> Result<()> {
 }
 
 #[test]
+fn auto_save_writes_hash_file_from_loaded_config() -> Result<()> {
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(
+        config_dir.join("config.toml"),
+        "auto_save = true\nauto_save_interval = 1\nauto_save_timeout_seconds = 0\n",
+    )?;
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("notes.txt");
+    fs::write(&path, "alpha\n")?;
+    let auto_save = directory.path().join("#notes.txt#");
+    let mut rile = RilePty::spawn_with_loaded_config(&path, 12, 80, home)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("insert text", b"saved ")?;
+    rile.wait_for_screen_contains("Auto-saved")?;
+
+    let contents = fs::read_to_string(&auto_save)
+        .with_context(|| format!("failed to read auto-save file {}", auto_save.display()))?;
+    assert_eq!(contents, "saved alpha\n");
+    assert_eq!(fs::read_to_string(&path)?, "alpha\n");
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn write_file_saves_as_new_path_and_clears_dirty_state() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
     let target = tempfile::NamedTempFile::new().context("failed to create target file")?;

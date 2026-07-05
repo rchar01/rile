@@ -40,7 +40,32 @@ pub struct Document {
     backup_on_save: bool,
     backup_directory: Option<PathBuf>,
     backup_written: bool,
+    auto_save: bool,
+    auto_save_directory: Option<PathBuf>,
+    delete_auto_save_files: bool,
+    auto_save_written: bool,
     file_stamp: Option<FileStamp>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DocumentSettings {
+    pub backup_on_save: bool,
+    pub backup_directory: Option<PathBuf>,
+    pub auto_save: bool,
+    pub auto_save_directory: Option<PathBuf>,
+    pub delete_auto_save_files: bool,
+}
+
+impl Default for DocumentSettings {
+    fn default() -> Self {
+        Self {
+            backup_on_save: false,
+            backup_directory: None,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+        }
+    }
 }
 
 impl Document {
@@ -55,6 +80,10 @@ impl Document {
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -75,6 +104,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -90,6 +123,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -105,6 +142,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -120,6 +161,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -135,6 +180,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -150,6 +199,10 @@ Rile is free software under GPL-3.0-or-later.\n",
             backup_on_save: false,
             backup_directory: None,
             backup_written: false,
+            auto_save: false,
+            auto_save_directory: None,
+            delete_auto_save_files: true,
+            auto_save_written: false,
             file_stamp: None,
         }
     }
@@ -170,6 +223,10 @@ Rile is free software under GPL-3.0-or-later.\n",
                     backup_on_save: false,
                     backup_directory: None,
                     backup_written: false,
+                    auto_save: false,
+                    auto_save_directory: None,
+                    delete_auto_save_files: true,
+                    auto_save_written: false,
                     file_stamp,
                 })
             }
@@ -183,6 +240,10 @@ Rile is free software under GPL-3.0-or-later.\n",
                 backup_on_save: false,
                 backup_directory: None,
                 backup_written: false,
+                auto_save: false,
+                auto_save_directory: None,
+                delete_auto_save_files: true,
+                auto_save_written: false,
                 file_stamp: None,
             }),
             Err(error) => Err(error.into()),
@@ -270,6 +331,91 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.backup_directory = directory;
     }
 
+    pub fn auto_save(&self) -> bool {
+        self.auto_save
+    }
+
+    pub fn set_auto_save(&mut self, enabled: bool) {
+        self.auto_save = enabled;
+    }
+
+    pub fn auto_save_directory(&self) -> Option<&Path> {
+        self.auto_save_directory.as_deref()
+    }
+
+    pub fn set_auto_save_directory(&mut self, directory: Option<PathBuf>) {
+        self.auto_save_directory = directory;
+    }
+
+    pub fn set_delete_auto_save_files(&mut self, enabled: bool) {
+        self.delete_auto_save_files = enabled;
+    }
+
+    pub fn apply_settings(&mut self, settings: &DocumentSettings) {
+        self.set_backup_on_save(settings.backup_on_save);
+        self.set_backup_directory(settings.backup_directory.clone());
+        self.set_auto_save(settings.auto_save);
+        self.set_auto_save_directory(settings.auto_save_directory.clone());
+        self.set_delete_auto_save_files(settings.delete_auto_save_files);
+    }
+
+    pub fn auto_save_path(&self) -> Option<PathBuf> {
+        self.path
+            .as_ref()
+            .map(|path| auto_save_path(path, self.auto_save_directory.as_deref()))
+    }
+
+    pub fn auto_save_if_dirty(&mut self) -> Result<Option<PathBuf>> {
+        if !self.auto_save || self.kind != DocumentKind::Normal || !self.is_dirty() {
+            return Ok(None);
+        }
+        let Some(path) = self.auto_save_path() else {
+            return Ok(None);
+        };
+        safe_write(&path, self.buffer.serialize().as_bytes())?;
+        self.auto_save_written = true;
+        Ok(Some(path))
+    }
+
+    pub fn delete_auto_save_file(&self) -> Result<()> {
+        if !self.delete_auto_save_files {
+            return Ok(());
+        }
+        let Some(path) = self.auto_save_path() else {
+            return Ok(());
+        };
+        delete_file_if_exists(&path)
+    }
+
+    pub fn newer_auto_save_path(&self) -> Result<Option<PathBuf>> {
+        if self.kind != DocumentKind::Normal {
+            return Ok(None);
+        }
+        let Some(path) = self.path.as_ref() else {
+            return Ok(None);
+        };
+        let auto_save = auto_save_path(path, self.auto_save_directory.as_deref());
+        let Ok(auto_metadata) = fs::metadata(&auto_save) else {
+            return Ok(None);
+        };
+        if !auto_metadata.is_file() {
+            return Ok(None);
+        }
+        let auto_modified = auto_metadata.modified().ok();
+        let file_modified = fs::metadata(path)
+            .ok()
+            .and_then(|metadata| metadata.modified().ok());
+        if file_modified.is_none()
+            || auto_modified
+                .zip(file_modified)
+                .is_some_and(|(auto_modified, file_modified)| auto_modified > file_modified)
+        {
+            Ok(Some(auto_save))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn file_changed_on_disk(&self) -> Result<bool> {
         if self.kind != DocumentKind::Normal || self.path.is_none() {
             return Ok(false);
@@ -288,7 +434,9 @@ Rile is free software under GPL-3.0-or-later.\n",
                 "cannot save unnamed buffer without a path".to_owned(),
             ));
         };
-        self.write_to_path(&path)
+        self.write_to_path(&path)?;
+        self.delete_current_session_auto_save_file(&path)?;
+        Ok(())
     }
 
     pub fn save_as(&mut self, path: impl AsRef<Path>) -> Result<()> {
@@ -304,6 +452,8 @@ Rile is free software under GPL-3.0-or-later.\n",
             self.backup_written = previous_backup_written;
             return Err(error);
         }
+        let cleanup_path = self.path.as_deref().unwrap_or(&path).to_path_buf();
+        self.delete_current_session_auto_save_file(&cleanup_path)?;
         self.path = Some(path);
         self.name = None;
         self.missing_on_open = false;
@@ -324,10 +474,21 @@ Rile is free software under GPL-3.0-or-later.\n",
         let read_only = self.read_only;
         let backup_on_save = self.backup_on_save;
         let backup_directory = self.backup_directory.clone();
+        let auto_save = self.auto_save;
+        let auto_save_directory = self.auto_save_directory.clone();
+        let delete_auto_save_files = self.delete_auto_save_files;
+        let auto_save_written = self.auto_save_written;
         let mut reloaded = Self::open(&path)?;
+        if delete_auto_save_files && auto_save_written {
+            delete_file_if_exists(&auto_save_path(&path, auto_save_directory.as_deref()))?;
+        }
         reloaded.read_only = read_only;
         reloaded.backup_on_save = backup_on_save;
         reloaded.backup_directory = backup_directory;
+        reloaded.auto_save = auto_save;
+        reloaded.auto_save_directory = auto_save_directory;
+        reloaded.delete_auto_save_files = delete_auto_save_files;
+        reloaded.auto_save_written = auto_save_written && !delete_auto_save_files;
         *self = reloaded;
         Ok(())
     }
@@ -356,6 +517,14 @@ Rile is free software under GPL-3.0-or-later.\n",
         self.buffer.mark_clean();
         self.missing_on_open = false;
         self.file_stamp = file_stamp_from_path(path)?;
+        Ok(())
+    }
+
+    fn delete_current_session_auto_save_file(&mut self, path: &Path) -> Result<()> {
+        if self.delete_auto_save_files && self.auto_save_written {
+            delete_file_if_exists(&auto_save_path(path, self.auto_save_directory.as_deref()))?;
+            self.auto_save_written = false;
+        }
         Ok(())
     }
 }
@@ -439,6 +608,29 @@ fn sibling_backup_path(path: &Path) -> PathBuf {
 }
 
 fn mapped_backup_name(path: &Path) -> String {
+    let mut name = mapped_path_name(path);
+    name.push('~');
+    name
+}
+
+fn auto_save_path(path: &Path, auto_save_directory: Option<&Path>) -> PathBuf {
+    match auto_save_directory {
+        Some(directory) => directory.join(format!("#{}#", mapped_path_name(path))),
+        None => sibling_auto_save_path(path),
+    }
+}
+
+fn sibling_auto_save_path(path: &Path) -> PathBuf {
+    let mut auto_save = PathBuf::from(path);
+    let file_name = path
+        .file_name()
+        .map(|name| name.to_string_lossy())
+        .unwrap_or_else(|| "rile-buffer".into());
+    auto_save.set_file_name(format!("#{file_name}#"));
+    auto_save
+}
+
+fn mapped_path_name(path: &Path) -> String {
     let mut name = String::new();
     for character in path.display().to_string().chars() {
         match character {
@@ -450,13 +642,20 @@ fn mapped_backup_name(path: &Path) -> String {
     if name.is_empty() {
         name.push_str("rile-buffer");
     }
-    name.push('~');
     name
 }
 
 fn write_temporary_then_rename(path: &Path, bytes: &[u8]) -> Result<()> {
     let permissions = existing_file_permissions(path)?;
     safe_write_with_permissions(path, bytes, permissions)
+}
+
+fn delete_file_if_exists(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn safe_write_with_permissions(
@@ -792,6 +991,261 @@ mod tests {
         document.save().expect("save should succeed");
 
         assert!(!backup.exists());
+    }
+
+    #[test]
+    fn auto_save_writes_sibling_hash_file_without_marking_clean() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+
+        let written = document
+            .auto_save_if_dirty()
+            .expect("auto-save should write")
+            .expect("dirty file-backed document should auto-save");
+
+        assert_eq!(written, auto_save);
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("auto-save should read"),
+            "old\nnew\n"
+        );
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn auto_save_directory_maps_path_and_wraps_name_in_hashes() {
+        let directory = TestDir::new();
+        let auto_save_directory = directory.path().join("auto-save");
+        fs::create_dir(&auto_save_directory).expect("auto-save directory should create");
+        let path = directory.path().join("nested").join("notes.txt");
+        fs::create_dir(path.parent().expect("path should have parent"))
+            .expect("nested directory should create");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document.set_auto_save_directory(Some(auto_save_directory.clone()));
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+
+        let written = document
+            .auto_save_if_dirty()
+            .expect("auto-save should write")
+            .expect("dirty file-backed document should auto-save");
+
+        assert!(written.starts_with(&auto_save_directory));
+        let file_name = written
+            .file_name()
+            .expect("auto-save should have file name")
+            .to_string_lossy();
+        assert!(file_name.starts_with('#'));
+        assert!(file_name.ends_with('#'));
+        assert!(file_name.contains('!'));
+        assert_eq!(
+            fs::read_to_string(&written).expect("auto-save should read"),
+            "old\nnew\n"
+        );
+    }
+
+    #[test]
+    fn save_deletes_auto_save_file_by_default() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        assert!(auto_save.exists());
+
+        document.save().expect("save should succeed");
+
+        assert!(!auto_save.exists());
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old\nnew\n"
+        );
+    }
+
+    #[test]
+    fn save_keeps_auto_save_file_when_cleanup_is_disabled() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document.set_delete_auto_save_files(false);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+
+        document.save().expect("save should succeed");
+
+        assert!(auto_save.exists());
+    }
+
+    #[test]
+    fn save_as_deletes_old_visited_path_auto_save_file() {
+        let directory = TestDir::new();
+        let old_path = directory.path().join("old.txt");
+        let new_path = directory.path().join("new.txt");
+        let old_auto_save = directory.path().join("#old.txt#");
+        fs::write(&old_path, "old\n").expect("old file should be written");
+        let mut document = Document::open(&old_path).expect("old file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        assert!(old_auto_save.exists());
+
+        document.save_as(&new_path).expect("save-as should succeed");
+
+        assert!(!old_auto_save.exists());
+        assert_eq!(document.path(), Some(new_path.as_path()));
+    }
+
+    #[test]
+    fn save_preserves_preexisting_auto_save_file_not_written_this_session() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        fs::write(&auto_save, "old\ncrash\n").expect("auto-save should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+
+        document.save().expect("save should succeed");
+
+        assert!(auto_save.exists());
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("auto-save should read"),
+            "old\ncrash\n"
+        );
+    }
+
+    #[test]
+    fn saved_current_session_auto_save_is_not_reported_as_newer_when_kept() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document.set_delete_auto_save_files(false);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+
+        document.save().expect("save should succeed");
+
+        assert_eq!(
+            document
+                .newer_auto_save_path()
+                .expect("newer auto-save check should work"),
+            None
+        );
+    }
+
+    #[test]
+    fn reload_from_disk_deletes_current_session_auto_save_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        assert!(auto_save.exists());
+
+        document.reload_from_disk().expect("reload should succeed");
+
+        assert!(!auto_save.exists());
+        assert_eq!(document.buffer().serialize(), "old\n");
+        assert!(!document.is_dirty());
+    }
+
+    #[test]
+    fn auto_save_failure_keeps_buffer_dirty() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let missing_auto_save_directory = directory.path().join("missing-auto-save");
+        fs::write(&path, "old\n").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document.set_auto_save_directory(Some(missing_auto_save_directory));
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "new\n")
+            .expect("insert should succeed");
+
+        let error = document
+            .auto_save_if_dirty()
+            .expect_err("missing auto-save directory should fail");
+
+        assert!(error.to_string().contains("I/O error"));
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old\n"
+        );
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn newer_auto_save_path_reports_stale_recovery_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("file should be written");
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fs::write(&auto_save, "old\nnew\n").expect("auto-save should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+
+        assert_eq!(
+            document
+                .newer_auto_save_path()
+                .expect("newer auto-save check should work"),
+            Some(auto_save)
+        );
     }
 
     #[test]

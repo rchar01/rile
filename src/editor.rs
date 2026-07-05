@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -15,7 +16,7 @@ use crate::command::{
 };
 use crate::completion::{CompletionConfig, CompletionSession, CompletionStyle};
 use crate::config::{Config, ThemeName, default_config_path};
-use crate::file::{Document, DocumentKind};
+use crate::file::{Document, DocumentKind, DocumentSettings};
 use crate::input::{KeyEvent, SpecialKey};
 use crate::keymap::{
     KeyMap, KeyMapStack, KeyStackResolution, buffer_list_keymap, format_key_sequence, help_keymap,
@@ -121,6 +122,13 @@ pub struct Editor {
     fill_column: usize,
     backup_on_save: bool,
     backup_directory: Option<PathBuf>,
+    auto_save: bool,
+    auto_save_interval: usize,
+    auto_save_timeout: Duration,
+    auto_save_directory: Option<PathBuf>,
+    delete_auto_save_files: bool,
+    auto_save_key_events: usize,
+    last_auto_save_activity: Instant,
     theme: ThemeName,
 }
 
@@ -198,6 +206,16 @@ impl DescribeKeyMode {
             Self::Help => "Describe key:",
             Self::Brief => "Describe key briefly:",
         }
+    }
+}
+
+fn document_settings_from_config(config: &Config) -> DocumentSettings {
+    DocumentSettings {
+        backup_on_save: config.backup_on_save,
+        backup_directory: config.backup_directory.clone(),
+        auto_save: config.auto_save,
+        auto_save_directory: config.auto_save_directory.clone(),
+        delete_auto_save_files: config.delete_auto_save_files,
     }
 }
 
@@ -452,14 +470,14 @@ impl Editor {
     }
 
     pub fn with_config(mut document: Document, config: Config) -> Self {
-        document.set_backup_on_save(config.backup_on_save);
-        document.set_backup_directory(config.backup_directory.clone());
+        let document_settings = document_settings_from_config(&config);
+        document.apply_settings(&document_settings);
         let buffers = BufferManager::new(document);
         let current_buffer = buffers.entries()[0].id();
         let mut buffer_viewports = HashMap::new();
         buffer_viewports.insert(current_buffer, Viewport::new(current_buffer));
         let clean_undo_depths = HashMap::from([(current_buffer, 0)]);
-        Self {
+        let mut editor = Self {
             windows: WindowSet::new(current_buffer),
             buffers,
             buffer_viewports,
@@ -520,8 +538,17 @@ impl Editor {
             fill_column: config.fill_column,
             backup_on_save: config.backup_on_save,
             backup_directory: config.backup_directory,
+            auto_save: config.auto_save,
+            auto_save_interval: config.auto_save_interval,
+            auto_save_timeout: Duration::from_secs(config.auto_save_timeout_seconds as u64),
+            auto_save_directory: config.auto_save_directory,
+            delete_auto_save_files: config.delete_auto_save_files,
+            auto_save_key_events: 0,
+            last_auto_save_activity: Instant::now(),
             theme: config.theme,
-        }
+        };
+        editor.warn_if_current_auto_save_is_newer();
+        editor
     }
 
     pub fn document(&self) -> &Document {
@@ -795,6 +822,14 @@ impl Editor {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        let outcome = self.handle_key_inner(key)?;
+        if outcome != EditorOutcome::Quit {
+            self.after_key_auto_save()?;
+        }
+        Ok(outcome)
+    }
+
+    fn handle_key_inner(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
         self.record_keyboard_macro_key(&key);
 
         if self.minibuffer.prompt().is_some() {
@@ -890,8 +925,9 @@ impl Editor {
     }
 
     pub fn poll_auto_revert(&mut self) -> Result<bool> {
+        let auto_saved = self.poll_auto_save();
         if self.minibuffer.prompt().is_some() {
-            return Ok(false);
+            return Ok(auto_saved);
         }
         let enabled_buffers = self.auto_revert_buffers.clone();
         let mut reverted = Vec::new();
@@ -913,7 +949,7 @@ impl Editor {
         }
 
         if reverted.is_empty() {
-            return Ok(false);
+            return Ok(auto_saved);
         }
         self.undo_stack
             .retain(|entry| !reverted.contains(&entry.buffer));
@@ -945,6 +981,78 @@ impl Editor {
                 .set_message(format!("Reverted {} buffers from disk", reverted.len()));
         }
         Ok(true)
+    }
+
+    fn after_key_auto_save(&mut self) -> Result<()> {
+        if !self.auto_save {
+            return Ok(());
+        }
+        if self.minibuffer.prompt().is_some() {
+            return Ok(());
+        }
+        self.last_auto_save_activity = Instant::now();
+        if self.auto_save_interval == 0 {
+            return Ok(());
+        }
+        self.auto_save_key_events += 1;
+        if self.auto_save_key_events >= self.auto_save_interval {
+            self.auto_save_key_events = 0;
+            self.auto_save_dirty_buffers();
+        }
+        Ok(())
+    }
+
+    fn poll_auto_save(&mut self) -> bool {
+        if !self.auto_save || self.auto_save_timeout.is_zero() || self.minibuffer.prompt().is_some()
+        {
+            return false;
+        }
+        if self.last_auto_save_activity.elapsed() < self.auto_save_timeout {
+            return false;
+        }
+        self.last_auto_save_activity = Instant::now();
+        self.auto_save_key_events = 0;
+        self.auto_save_dirty_buffers()
+    }
+
+    fn auto_save_dirty_buffers(&mut self) -> bool {
+        let mut saved = Vec::new();
+        for entry in self.buffers.entries_mut() {
+            let name = entry.name().to_owned();
+            match entry.document_mut().auto_save_if_dirty() {
+                Ok(Some(_)) => saved.push(name),
+                Ok(None) => {}
+                Err(error) => {
+                    self.minibuffer
+                        .set_error(format!("Auto-save failed for {name}: {error}"));
+                    return true;
+                }
+            }
+        }
+
+        match saved.len() {
+            0 => false,
+            1 => {
+                self.minibuffer
+                    .set_message(format!("Auto-saved {}", saved[0]));
+                true
+            }
+            count => {
+                self.minibuffer
+                    .set_message(format!("Auto-saved {count} buffers"));
+                true
+            }
+        }
+    }
+
+    fn warn_if_current_auto_save_is_newer(&mut self) {
+        let Ok(Some(path)) = self.document().newer_auto_save_path() else {
+            return;
+        };
+        self.minibuffer.set_message(format!(
+            "Auto-save file {} is newer; open it to recover",
+            path.display()
+        ));
     }
 
     pub fn execute_command_by_name(&mut self, name: &str) -> Result<EditorOutcome> {
@@ -5505,6 +5613,18 @@ impl Editor {
                     .map(|path| path.display().to_string())
                     .unwrap_or_default(),
             ),
+            OptionId::AutoSave => OptionValue::Boolean(self.auto_save),
+            OptionId::AutoSaveInterval => OptionValue::Integer(self.auto_save_interval),
+            OptionId::AutoSaveTimeoutSeconds => {
+                OptionValue::Integer(self.auto_save_timeout.as_secs() as usize)
+            }
+            OptionId::AutoSaveDirectory => OptionValue::String(
+                self.auto_save_directory
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default(),
+            ),
+            OptionId::DeleteAutoSaveFiles => OptionValue::Boolean(self.delete_auto_save_files),
             OptionId::Theme => OptionValue::Choice(self.theme.name()),
             OptionId::CompletionStyle => OptionValue::Choice(self.completion_config.style.name()),
             OptionId::CompletionMaxCandidates => {
@@ -5912,18 +6032,11 @@ impl Editor {
         }
 
         let path = self.resolve_find_file_path(path);
+        let settings = self.document_settings();
         let result = if read_only {
-            self.buffers.open_path_read_only(
-                &path,
-                self.backup_on_save,
-                self.backup_directory.clone(),
-            )
+            self.buffers.open_path_read_only(&path, settings)
         } else {
-            self.buffers.open_path_with_backup(
-                &path,
-                self.backup_on_save,
-                self.backup_directory.clone(),
-            )
+            self.buffers.open_path_with_settings(&path, settings)
         };
         match result {
             Ok(opened) => {
@@ -5944,6 +6057,9 @@ impl Editor {
                 let mode = if read_only { " read-only" } else { "" };
                 self.minibuffer
                     .set_message(format!("Opened{mode} {}", self.document().display_name()));
+                if opened.created {
+                    self.warn_if_current_auto_save_is_newer();
+                }
             }
             Err(error) => self.minibuffer.set_error(format!("open failed: {error}")),
         }
@@ -5957,6 +6073,16 @@ impl Editor {
             .filter(|parent| !parent.as_os_str().is_empty())
             .map(Path::to_path_buf)
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    }
+
+    fn document_settings(&self) -> DocumentSettings {
+        DocumentSettings {
+            backup_on_save: self.backup_on_save,
+            backup_directory: self.backup_directory.clone(),
+            auto_save: self.auto_save,
+            auto_save_directory: self.auto_save_directory.clone(),
+            delete_auto_save_files: self.delete_auto_save_files,
+        }
     }
 
     fn resolve_find_file_path(&self, path: &str) -> PathBuf {
@@ -17709,6 +17835,166 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn auto_save_interval_writes_hash_file_and_keeps_buffer_dirty() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("fixture should be written");
+        let mut editor = Editor::with_config(
+            Document::open(&path).expect("document should open"),
+            Config {
+                auto_save: true,
+                auto_save_interval: 2,
+                auto_save_timeout_seconds: 0,
+                ..Config::default()
+            },
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("a".to_owned()))
+            .expect("first edit should insert");
+        assert!(!auto_save.exists());
+        editor
+            .handle_key(KeyEvent::Text("b".to_owned()))
+            .expect("second edit should insert and auto-save");
+
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("auto-save should read"),
+            "abold\n"
+        );
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old\n"
+        );
+        assert!(editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Auto-saved notes.txt")
+        );
+    }
+
+    #[test]
+    fn auto_save_interval_sweeps_dirty_background_buffers() {
+        let directory = TestDir::new();
+        let first = directory.path().join("first.txt");
+        let second = directory.path().join("second.txt");
+        let first_auto_save = directory.path().join("#first.txt#");
+        fs::write(&first, "first\n").expect("first fixture should be written");
+        fs::write(&second, "second\n").expect("second fixture should be written");
+        let mut editor = Editor::with_config(
+            Document::open(&first).expect("first document should open"),
+            Config {
+                auto_save: true,
+                auto_save_interval: 3,
+                auto_save_timeout_seconds: 0,
+                ..Config::default()
+            },
+        );
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("first edit should insert");
+        editor
+            .open_file_path(&second.display().to_string(), false)
+            .expect("second file should open");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("first movement should count");
+        assert!(!first_auto_save.exists());
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("second movement should trigger auto-save sweep");
+
+        assert_eq!(
+            fs::read_to_string(&first_auto_save).expect("auto-save should read"),
+            "xfirst\n"
+        );
+    }
+
+    #[test]
+    fn auto_save_idle_poll_writes_dirty_buffer() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("fixture should be written");
+        let mut editor = Editor::with_config(
+            Document::open(&path).expect("document should open"),
+            Config {
+                auto_save: true,
+                auto_save_interval: 0,
+                auto_save_timeout_seconds: 1,
+                ..Config::default()
+            },
+        );
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("edit should insert");
+        editor.last_auto_save_activity =
+            std::time::Instant::now() - std::time::Duration::from_secs(2);
+
+        assert!(editor.poll_auto_revert().expect("poll should work"));
+
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("auto-save should read"),
+            "xold\n"
+        );
+    }
+
+    #[test]
+    fn save_buffer_deletes_auto_save_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("fixture should be written");
+        let mut editor = Editor::with_config(
+            Document::open(&path).expect("document should open"),
+            Config {
+                auto_save: true,
+                auto_save_interval: 1,
+                auto_save_timeout_seconds: 0,
+                ..Config::default()
+            },
+        );
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("edit should insert and auto-save");
+        assert!(auto_save.exists());
+
+        editor
+            .execute_command_by_name("save-buffer")
+            .expect("save should work");
+
+        assert!(!auto_save.exists());
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "xold\n"
+        );
+    }
+
+    #[test]
+    fn opening_file_warns_when_auto_save_file_is_newer_even_when_auto_save_is_disabled() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("fixture should be written");
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        fs::write(&auto_save, "old\nnew\n").expect("auto-save should be written");
+
+        let editor = Editor::with_config(
+            Document::open(&path).expect("document should open"),
+            Config::default(),
+        );
+
+        let message = editor
+            .minibuffer()
+            .message
+            .as_deref()
+            .expect("newer auto-save should warn");
+        assert!(message.contains("Auto-save file"));
+        assert!(message.contains("newer"));
+    }
+
+    #[test]
     fn undo_to_opened_file_contents_marks_buffer_clean() {
         let directory = TestDir::new();
         let path = directory.path().join("undo-clean.txt");
@@ -18037,6 +18323,11 @@ M-g g           goto-line                      Go to line or line:column\n"
                 search_highlighting: false,
                 backup_on_save: true,
                 backup_directory: Some(backup_directory.clone()),
+                auto_save: true,
+                auto_save_interval: 2,
+                auto_save_timeout_seconds: 30,
+                auto_save_directory: None,
+                delete_auto_save_files: true,
                 theme: ThemeName::Mono,
                 completion: Default::default(),
             },
@@ -18054,6 +18345,11 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(
             editor.document().backup_directory(),
             Some(backup_directory.as_path())
+        );
+        assert!(editor.document().auto_save());
+        assert_eq!(
+            editor.option_value(OptionId::AutoSaveInterval),
+            OptionValue::Integer(2)
         );
         assert_eq!(editor.theme(), ThemeName::Mono);
 

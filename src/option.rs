@@ -12,6 +12,11 @@ pub enum OptionId {
     SearchHighlighting,
     BackupOnSave,
     BackupDirectory,
+    AutoSave,
+    AutoSaveInterval,
+    AutoSaveTimeoutSeconds,
+    AutoSaveDirectory,
+    DeleteAutoSaveFiles,
     Theme,
     CompletionStyle,
     CompletionMaxCandidates,
@@ -264,6 +269,66 @@ fn default_options() -> Vec<OptionSpec> {
             validation_error: "backup_directory must be a string",
         }),
         option_spec(OptionSpecData {
+            id: OptionId::AutoSave,
+            name: "auto_save",
+            summary: "Auto-save",
+            doc: "Whether dirty file-visiting buffers write Emacs-style #file# auto-save files.",
+            value_type: OptionType::Boolean,
+            default: OptionValue::Boolean(false),
+            valid_values: "true or false",
+            validator: valid_boolean,
+            parse_error: "expected true or false",
+            validation_error: "expected true or false",
+        }),
+        option_spec(OptionSpecData {
+            id: OptionId::AutoSaveInterval,
+            name: "auto_save_interval",
+            summary: "Auto-save interval",
+            doc: "Number of handled key events between auto-save writes. Zero disables event-count auto-save.",
+            value_type: OptionType::Integer,
+            default: OptionValue::Integer(300),
+            valid_values: "integer from 0 through 100000",
+            validator: valid_auto_save_interval,
+            parse_error: "auto_save_interval must be an integer",
+            validation_error: "auto_save_interval must be between 0 and 100000",
+        }),
+        option_spec(OptionSpecData {
+            id: OptionId::AutoSaveTimeoutSeconds,
+            name: "auto_save_timeout_seconds",
+            summary: "Auto-save idle timeout",
+            doc: "Idle seconds before auto-save writes dirty buffers. Zero disables idle auto-save.",
+            value_type: OptionType::Integer,
+            default: OptionValue::Integer(30),
+            valid_values: "integer from 0 through 3600",
+            validator: valid_auto_save_timeout_seconds,
+            parse_error: "auto_save_timeout_seconds must be an integer",
+            validation_error: "auto_save_timeout_seconds must be between 0 and 3600",
+        }),
+        option_spec(OptionSpecData {
+            id: OptionId::AutoSaveDirectory,
+            name: "auto_save_directory",
+            summary: "Auto-save directory",
+            doc: "Directory for auto_save files. Empty keeps #file# auto-save files beside the visited file. A non-empty directory is checked when auto-save writes; files there use mapped path-based names wrapped in #...#.",
+            value_type: OptionType::String,
+            default: OptionValue::String(String::new()),
+            valid_values: "directory path string, or empty string for sibling auto-save files",
+            validator: valid_string,
+            parse_error: "auto_save_directory must be a string",
+            validation_error: "auto_save_directory must be a string",
+        }),
+        option_spec(OptionSpecData {
+            id: OptionId::DeleteAutoSaveFiles,
+            name: "delete_auto_save_files",
+            summary: "Delete auto-save files",
+            doc: "Whether a successful explicit save removes the buffer's current-session auto-save file.",
+            value_type: OptionType::Boolean,
+            default: OptionValue::Boolean(true),
+            valid_values: "true or false",
+            validator: valid_boolean,
+            parse_error: "expected true or false",
+            validation_error: "expected true or false",
+        }),
+        option_spec(OptionSpecData {
             id: OptionId::Theme,
             name: "theme",
             summary: "Theme",
@@ -386,6 +451,14 @@ fn valid_completion_max_candidates(value: &OptionValue) -> bool {
     matches!(value, OptionValue::Integer(max) if (1..=20).contains(max))
 }
 
+fn valid_auto_save_interval(value: &OptionValue) -> bool {
+    matches!(value, OptionValue::Integer(interval) if (0..=100000).contains(interval))
+}
+
+fn valid_auto_save_timeout_seconds(value: &OptionValue) -> bool {
+    matches!(value, OptionValue::Integer(seconds) if (0..=3600).contains(seconds))
+}
+
 fn valid_completion_matching(value: &OptionValue) -> bool {
     matches!(
         value,
@@ -409,7 +482,7 @@ mod tests {
         let registry = OptionRegistry::default();
 
         assert_eq!(registry.validate(), Ok(()));
-        assert_eq!(registry.options().count(), 12);
+        assert_eq!(registry.options().count(), 17);
     }
 
     #[test]
@@ -510,6 +583,20 @@ mod tests {
                 .expect("backup_directory option should exist")
                 .parse_value("\"/tmp/rile-backups\""),
             Ok(OptionValue::String("/tmp/rile-backups".to_owned()))
+        );
+        assert_eq!(
+            registry
+                .get("auto_save_interval")
+                .expect("auto_save_interval option should exist")
+                .parse_value("300"),
+            Ok(OptionValue::Integer(300))
+        );
+        assert_eq!(
+            registry
+                .get("auto_save_directory")
+                .expect("auto_save_directory option should exist")
+                .parse_value("\"/tmp/rile-auto-save\""),
+            Ok(OptionValue::String("/tmp/rile-auto-save".to_owned()))
         );
     }
 

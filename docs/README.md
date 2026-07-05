@@ -11,6 +11,8 @@ This directory contains maintainer and contributor documentation for Rile.
 
 - [Architecture](architecture.md): current module boundaries, runtime flow,
   editor state, rendering, terminal integration, and known hotspots.
+- [Auto-Save Research](auto-save-research.md): GNU Emacs and GNU Zile evidence,
+  implemented auto-save behavior, and remaining recovery follow-up.
 - [Development Notes](development.md): repository scope, milestone history, tooling, containers, release files, and CI expectations.
 - [Emacs Function Reference](emacs-function-reference.md): durable curated Emacs
   command behavior notes for completed and future Rile compatibility work.

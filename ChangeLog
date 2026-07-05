@@ -1,3 +1,54 @@
+2026-07-05  Robert Charusta  <rch-public@posteo.net>
+
+	Add default-off Emacs-style auto-save.
+
+	* src/option.rs (OptionId): Add auto-save option identifiers.
+	(default_options): Add auto_save, auto_save_interval,
+	auto_save_timeout_seconds, auto_save_directory, and delete_auto_save_files.
+	(valid_auto_save_interval, valid_auto_save_timeout_seconds): New validators.
+	(tests): Cover auto-save option metadata and parsing.
+	* src/config.rs (Config): Add auto-save settings and expose them as option
+	values.
+	(Config::apply_option_value): Parse auto-save configuration.
+	(tests): Cover valid and invalid auto-save config values.
+	* src/file.rs (Document): Track auto-save settings.
+	(DocumentSettings): New type.
+	(apply_settings, auto_save_path, auto_save_if_dirty,
+	delete_auto_save_file, newer_auto_save_path): New methods.
+	(delete_current_session_auto_save_file): New helper.
+	(auto_save_if_dirty): Track current-session auto-save writes.
+	(save, save_as, reload_from_disk): Delete only current-session auto-save files
+	after successful explicit saves or reverts when configured.
+	(auto_save_path, sibling_auto_save_path, mapped_path_name): New helpers.
+	(mapped_backup_name): Reuse mapped path names.
+	(tests): Cover sibling and directory auto-save paths, dirty-state
+	preservation, cleanup after save and revert, disabled cleanup, preservation of
+	pre-existing recovery files, and newer auto-save detection.
+	* src/buffers.rs (open_path_with_settings): Replace backup-only open settings
+	with document settings.
+	(open_path_read_only, open_path_with_options): Apply document settings to new
+	documents.
+	* src/editor.rs (Editor): Store auto-save runtime settings, key-event counters,
+	and idle timers.
+	(document_settings_from_config, document_settings): New helpers.
+	(handle_key, handle_key_inner, after_key_auto_save, poll_auto_save,
+	auto_save_dirty_buffers,
+	warn_if_current_auto_save_is_newer): Trigger auto-save writes and warn when a
+	newer auto-save file exists.
+	(poll_auto_revert): Also poll idle auto-save.
+	(open_file_path): Propagate document settings and warn on newer auto-save
+	files.
+	(option_value): Report auto-save option values.
+	(tests): Cover interval auto-save, idle auto-save, cleanup through
+	save-buffer, config propagation, and open-time warnings.
+	* tests/pty_save.rs (auto_save_writes_hash_file_from_loaded_config): New test.
+	* README.md: Document auto-save configuration and behavior.
+	* NEWS: Mention default-off Emacs-style auto-save.
+	* docs/development.md: Document auto-save policy.
+	* docs/auto-save-research.md: Mark implemented behavior and remaining
+	recovery-command follow-up.
+	* docs/README.md: Link auto-save research.
+
 2026-07-04  Robert Charusta  <rch-public@posteo.net>
 
 	Harden save backups and temporary writes.

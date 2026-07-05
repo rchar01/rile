@@ -32,6 +32,11 @@ pub struct Config {
     pub search_highlighting: bool,
     pub backup_on_save: bool,
     pub backup_directory: Option<PathBuf>,
+    pub auto_save: bool,
+    pub auto_save_interval: usize,
+    pub auto_save_timeout_seconds: usize,
+    pub auto_save_directory: Option<PathBuf>,
+    pub delete_auto_save_files: bool,
     pub theme: ThemeName,
     pub completion: CompletionConfig,
 }
@@ -106,6 +111,18 @@ impl Config {
                     .map(|path| path.display().to_string())
                     .unwrap_or_default(),
             ),
+            OptionId::AutoSave => OptionValue::Boolean(self.auto_save),
+            OptionId::AutoSaveInterval => OptionValue::Integer(self.auto_save_interval),
+            OptionId::AutoSaveTimeoutSeconds => {
+                OptionValue::Integer(self.auto_save_timeout_seconds)
+            }
+            OptionId::AutoSaveDirectory => OptionValue::String(
+                self.auto_save_directory
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_default(),
+            ),
+            OptionId::DeleteAutoSaveFiles => OptionValue::Boolean(self.delete_auto_save_files),
             OptionId::Theme => OptionValue::Choice(self.theme.name()),
             OptionId::CompletionStyle => OptionValue::Choice(self.completion.style.name()),
             OptionId::CompletionMaxCandidates => {
@@ -127,6 +144,11 @@ impl Config {
             search_highlighting: false,
             backup_on_save: false,
             backup_directory: None,
+            auto_save: false,
+            auto_save_interval: 0,
+            auto_save_timeout_seconds: 0,
+            auto_save_directory: None,
+            delete_auto_save_files: false,
             theme: ThemeName::Default,
             completion: CompletionConfig {
                 style: CompletionStyle::Vertical,
@@ -159,6 +181,23 @@ impl Config {
                 } else {
                     Some(PathBuf::from(value))
                 };
+            }
+            (OptionId::AutoSave, OptionValue::Boolean(value)) => self.auto_save = value,
+            (OptionId::AutoSaveInterval, OptionValue::Integer(value)) => {
+                self.auto_save_interval = value;
+            }
+            (OptionId::AutoSaveTimeoutSeconds, OptionValue::Integer(value)) => {
+                self.auto_save_timeout_seconds = value;
+            }
+            (OptionId::AutoSaveDirectory, OptionValue::String(value)) => {
+                self.auto_save_directory = if value.is_empty() {
+                    None
+                } else {
+                    Some(PathBuf::from(value))
+                };
+            }
+            (OptionId::DeleteAutoSaveFiles, OptionValue::Boolean(value)) => {
+                self.delete_auto_save_files = value;
             }
             (OptionId::Theme, OptionValue::Choice("default")) => self.theme = ThemeName::Default,
             (OptionId::Theme, OptionValue::Choice("mono")) => self.theme = ThemeName::Mono,
@@ -240,6 +279,11 @@ mod tests {
             search_highlighting = false
             backup_on_save = true
             backup_directory = "/tmp/rile-backups"
+            auto_save = true
+            auto_save_interval = 300
+            auto_save_timeout_seconds = 30
+            auto_save_directory = "/tmp/rile-auto-save"
+            delete_auto_save_files = false
             theme = "mono"
             completion_style = "ido"
             completion_max_candidates = 5
@@ -259,6 +303,14 @@ mod tests {
             config.backup_directory,
             Some(PathBuf::from("/tmp/rile-backups"))
         );
+        assert!(config.auto_save);
+        assert_eq!(config.auto_save_interval, 300);
+        assert_eq!(config.auto_save_timeout_seconds, 30);
+        assert_eq!(
+            config.auto_save_directory,
+            Some(PathBuf::from("/tmp/rile-auto-save"))
+        );
+        assert!(!config.delete_auto_save_files);
         assert_eq!(config.theme, ThemeName::Mono);
         assert_eq!(config.completion.style, CompletionStyle::Ido);
         assert_eq!(config.completion.max_candidates, 5);
@@ -272,6 +324,10 @@ mod tests {
         assert!(Config::parse("fill_column = 19").is_err());
         assert!(Config::parse("line_numbers = yes").is_err());
         assert!(Config::parse("backup_on_save = sometimes").is_err());
+        assert!(Config::parse("auto_save = sometimes").is_err());
+        assert!(Config::parse("auto_save_interval = nope").is_err());
+        assert!(Config::parse("auto_save_timeout_seconds = nope").is_err());
+        assert!(Config::parse("delete_auto_save_files = sometimes").is_err());
         assert!(Config::parse("theme = \"solarized\"").is_err());
         assert!(Config::parse("completion_style = \"popup\"").is_err());
         assert!(Config::parse("completion_max_candidates = 0").is_err());
