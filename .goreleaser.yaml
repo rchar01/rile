@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+version: 2
+
+project_name: rile
+
+builds:
+  - id: rile
+    builder: rust
+    binary: rile
+    command: build
+    flags:
+      - --release
+      - --locked
+    targets:
+      - x86_64-unknown-linux-gnu
+
+archives:
+  - id: binaries
+    ids:
+      - rile
+    formats:
+      - binary
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+gitea_urls:
+  api: https://codeberg.org/api/v1
+  download: https://codeberg.org
+
+release:
+  gitea:
+    owner: rch
+    name: rile
+  mode: replace

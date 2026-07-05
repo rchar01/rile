@@ -19,6 +19,8 @@ This directory contains maintainer and contributor documentation for Rile.
 - [Performance Smoke Testing](performance.md): optional large-file and long-line
   timing comparisons against reference editors.
 - [Reference Testing](reference-testing.md): optional behavior-capture workflow for reference editors such as GNU Zile and kg.
+- [Release Checklist](release-checklist.md): containerized `release-tools` and
+  GoReleaser workflow for cutting Rile releases.
 - [Self-Documentation Architecture](self-documentation.md): implemented command,
   keymap, option, mode, help, and metadata-testing architecture.
 - [Testing Guide](testing.md): unit, integration, PTY, snapshot, and optional visual-review workflows.

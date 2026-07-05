@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 ARG RUST_VERSION=1.96.0
+ARG GORELEASER_VERSION=2.15.2
+ARG RELEASE_TOOLS_VERSION=3.3.0
 FROM docker.io/library/rust:${RUST_VERSION}-bookworm
+
+ARG GORELEASER_VERSION=2.15.2
+ARG RELEASE_TOOLS_VERSION=3.3.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -23,6 +28,16 @@ RUN cargo install --locked \
     cargo-nextest
 
 RUN cargo install --locked cargo-insta
+
+RUN curl -fsSL -o /tmp/goreleaser.tar.gz \
+    "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_Linux_x86_64.tar.gz" \
+ && tar -xzf /tmp/goreleaser.tar.gz -C /usr/local/bin goreleaser \
+ && chmod 0755 /usr/local/bin/goreleaser \
+ && rm -f /tmp/goreleaser.tar.gz
+
+RUN curl -fsSL -o /usr/local/bin/release-tools \
+    "https://codeberg.org/rch/release-tools/releases/download/v${RELEASE_TOOLS_VERSION}/release-tools_${RELEASE_TOOLS_VERSION}_linux_amd64" \
+ && chmod 0755 /usr/local/bin/release-tools
 
 RUN chmod -R a+rwX /usr/local/cargo /usr/local/rustup \
  && mkdir -p /workspace \

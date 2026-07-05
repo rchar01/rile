@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+set -euo pipefail
+
+if [ "$#" -eq 0 ]; then
+  printf '%s\n' 'usage: scripts/release-in-container <command> [args...]' >&2
+  exit 2
+fi
+
+IMAGE=${IMAGE:-rile-dev}
+PODMAN=${PODMAN:-podman}
+CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
+user_flags=(--user "$(id -u):$(id -g)")
+if [ "$($PODMAN info --format '{{.Host.Security.Rootless}}')" = true ]; then
+  user_flags=(--userns=keep-id)
+fi
+
+"$PODMAN" build --ignorefile .containerignore -f "$CONTAINERFILE" -t "$IMAGE" .
+
+env_flags=(
+  -e CARGO_TERM_COLOR=always
+  -e HOME=/tmp
+)
+
+for name in \
+  GIT_AUTHOR_NAME \
+  GIT_AUTHOR_EMAIL \
+  GIT_COMMITTER_NAME \
+  GIT_COMMITTER_EMAIL \
+  RELEASE_TOKEN \
+  RELEASE_TOKEN_FILE \
+  GITEA_TOKEN \
+  GITHUB_TOKEN \
+  GITLAB_TOKEN \
+  RELEASE_CONFIG_FILE \
+  VERSION \
+  GORELEASER_BIN
+do
+  if [ -n "${!name-}" ]; then
+    env_flags+=("-e" "$name=${!name}")
+  fi
+done
+
+"$PODMAN" run --rm \
+  "${user_flags[@]}" \
+  "${env_flags[@]}" \
+  -v "$PWD":/workspace:z \
+  -w /workspace \
+  "$IMAGE" "$@"

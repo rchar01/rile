@@ -553,6 +553,10 @@ Maintain `NEWS` for user-visible release notes, with newest releases first. Keep
 
 Maintain `ChangeLog` in GNU-style plain text for file-level maintenance history, with newest entries first. Git remains the detailed history; `ChangeLog` should summarize coherent changes rather than mechanically duplicating every commit.
 
+Release publishing uses the installed `release-tools` CLI and GoReleaser from
+the dev container.  See [Release Checklist](release-checklist.md) for the
+containerized release flow, version checks, tag command, and publish command.
+
 ## Testing
 
 See [Testing Guide](testing.md) for unit, integration, PTY, parsed-screen snapshot, and optional VHS visual-review workflows.

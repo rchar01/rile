@@ -10,10 +10,12 @@ PERF_IMAGE ?= rile-perf
 REFERENCE_EDITORS ?= emacs zile kg rile
 REF_EDITOR ?=
 REF_SCENARIO ?=
+RELEASE_VERSION ?= v0.9.0
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
+RELEASE_IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/release-in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run perf-smoke reference-capture reference-capture-all visual-demos visual-frames clean
+.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run release-doctor release-check release-snapshot release-notes release-publish-tag perf-smoke reference-capture reference-capture-all visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -81,6 +83,26 @@ verify:
 ## Run the Rile binary in the dev container; pass ARGS='--help'
 run:
 	$(IN_CONTAINER) ./scripts/run $(ARGS)
+
+## Check release-tools and GoReleaser configuration
+release-doctor:
+	$(RELEASE_IN_CONTAINER) release-tools doctor
+
+## Validate GoReleaser release configuration
+release-check:
+	$(RELEASE_IN_CONTAINER) release-tools check
+
+## Build a local release snapshot without publishing
+release-snapshot:
+	$(RELEASE_IN_CONTAINER) release-tools snapshot
+
+## Generate release notes for RELEASE_VERSION
+release-notes:
+	$(RELEASE_IN_CONTAINER) release-tools notes $(RELEASE_VERSION)
+
+## Publish an existing tag; set RELEASE_TOKEN and RELEASE_VERSION
+release-publish-tag:
+	$(RELEASE_IN_CONTAINER) release-tools publish-tag $(RELEASE_VERSION)
 
 ## Run optional large-file and long-line performance smoke tests
 perf-smoke:

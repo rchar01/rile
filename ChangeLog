@@ -1,5 +1,23 @@
 2026-07-05  Robert Charusta  <rch-public@posteo.net>
 
+	Prepare the 0.9.0 release flow.
+
+	* Cargo.toml: Set version to 0.9.0.
+	* Cargo.lock: Regenerate for the package version bump.
+	* NEWS: Mark the 0.9.0 release entry.
+	* Containerfile.dev: Install pinned GoReleaser and release-tools binaries.
+	* Makefile (release-doctor, release-check, release-snapshot, release-notes,
+	release-publish-tag): New targets.
+	* scripts/release-in-container: New script.
+	* .release-tools.env: New file.
+	* .goreleaser.yaml: New file.
+	* .gitignore: Ignore GoReleaser dist output and release-tools scratch output.
+	* docs/release-checklist.md: New guide.
+	* docs/README.md: Link the release checklist.
+	* docs/development.md: Document the containerized release flow.
+
+2026-07-05  Robert Charusta  <rch-public@posteo.net>
+
 	Document current backup and auto-save implementation.
 
 	* docs/backups-and-auto-save.md: New guide.
