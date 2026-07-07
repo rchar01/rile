@@ -47,6 +47,11 @@ pub struct WindowLayout {
     pub rect: WindowRect,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WindowSeparator {
+    pub rect: WindowRect,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Window {
     id: WindowId,
@@ -221,6 +226,21 @@ impl WindowSet {
         );
         layouts
     }
+
+    pub fn separators(&self, rows: usize, columns: usize) -> Vec<WindowSeparator> {
+        let mut separators = Vec::new();
+        collect_separators(
+            &self.root,
+            WindowRect {
+                row: 0,
+                column: 0,
+                rows,
+                columns,
+            },
+            &mut separators,
+        );
+        separators
+    }
 }
 
 fn replace_leaf(node: &mut SplitNode, target: WindowId, replacement: SplitNode) -> bool {
@@ -287,9 +307,11 @@ fn layout_node(node: &SplitNode, rect: WindowRect, layouts: &mut Vec<WindowLayou
                 }
             }
             SplitAxis::Vertical => {
-                let parts = split_dimension(rect.columns, children.len());
+                let separator_count = children.len().saturating_sub(1);
+                let content_columns = rect.columns.saturating_sub(separator_count);
+                let parts = split_dimension(content_columns, children.len());
                 let mut column = rect.column;
-                for (child, columns) in children.iter().zip(parts) {
+                for (index, (child, columns)) in children.iter().zip(parts).enumerate() {
                     layout_node(
                         child,
                         WindowRect {
@@ -301,6 +323,64 @@ fn layout_node(node: &SplitNode, rect: WindowRect, layouts: &mut Vec<WindowLayou
                         layouts,
                     );
                     column += columns;
+                    if index + 1 < children.len() {
+                        column += 1;
+                    }
+                }
+            }
+        },
+    }
+}
+
+fn collect_separators(node: &SplitNode, rect: WindowRect, separators: &mut Vec<WindowSeparator>) {
+    match node {
+        SplitNode::Leaf(_) => {}
+        SplitNode::Split { axis, children } => match axis {
+            SplitAxis::Horizontal => {
+                let parts = split_dimension(rect.rows, children.len());
+                let mut row = rect.row;
+                for (child, rows) in children.iter().zip(parts) {
+                    collect_separators(
+                        child,
+                        WindowRect {
+                            row,
+                            column: rect.column,
+                            rows,
+                            columns: rect.columns,
+                        },
+                        separators,
+                    );
+                    row += rows;
+                }
+            }
+            SplitAxis::Vertical => {
+                let separator_count = children.len().saturating_sub(1);
+                let content_columns = rect.columns.saturating_sub(separator_count);
+                let parts = split_dimension(content_columns, children.len());
+                let mut column = rect.column;
+                for (index, (child, columns)) in children.iter().zip(parts).enumerate() {
+                    collect_separators(
+                        child,
+                        WindowRect {
+                            row: rect.row,
+                            column,
+                            rows: rect.rows,
+                            columns,
+                        },
+                        separators,
+                    );
+                    column += columns;
+                    if index + 1 < children.len() {
+                        separators.push(WindowSeparator {
+                            rect: WindowRect {
+                                row: rect.row,
+                                column,
+                                rows: rect.rows,
+                                columns: 1,
+                            },
+                        });
+                        column += 1;
+                    }
                 }
             }
         },
@@ -366,9 +446,19 @@ mod tests {
             layouts[1].rect,
             WindowRect {
                 row: 0,
+                column: 41,
+                rows: 5,
+                columns: 39
+            }
+        );
+        assert_eq!(windows.separators(10, 80).len(), 1);
+        assert_eq!(
+            windows.separators(10, 80)[0].rect,
+            WindowRect {
+                row: 0,
                 column: 40,
                 rows: 5,
-                columns: 40
+                columns: 1
             }
         );
     }

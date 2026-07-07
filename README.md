@@ -209,7 +209,7 @@ Basic editor keys:
 Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search uses Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
-Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Empty rows are left blank rather than filled with marker characters.
+Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.
 Undo is buffer-local for current-buffer edits, groups normal typing, tracks the
 saved state so undoing back to that point clears the modified flag, and supports
 Emacs-style redo by undoing finalized undo sequences. `undo-only` and

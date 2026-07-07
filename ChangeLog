@@ -1,3 +1,21 @@
+2026-07-07  Robert Charusta  <rch-public@posteo.net>
+
+	Separate side-by-side split panes visually.
+
+	* src/window.rs (WindowSeparator): New type.
+	(WindowSet::separators, collect_separators): New helpers.
+	(layout_node): Reserve a column for vertical split separators.
+	(tests): Cover separator layout.
+	* src/editor.rs (Editor::window_separators): New method.
+	* src/terminal/mod.rs (draw_editor_frame_with_options): Draw window
+	separators after windows.
+	(draw_window_separators): New helper.
+	* tests/pty_split_pane.rs (split_pane_demo_flow_opens_file_in_other_window):
+	Adjust expectations for the reserved separator column.
+	* tests/snapshots/pty_snapshots__split_right_after_other_window_80x16.snap:
+	Update snapshot.
+	* README.md: Document visible side-by-side split separators.
+
 2026-07-06  Robert Charusta  <rch-public@posteo.net>
 
 	Update pinned development and release tools.

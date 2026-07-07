@@ -41,13 +41,16 @@ fn split_pane_demo_flow_opens_file_in_other_window() -> Result<()> {
     rile.wait_for_screen_contains("right 000 | one")?;
     rile.assert_screen_contains("left 000 | alpha")?;
     rile.assert_screen_contains("inactive split_left.txt")?;
-    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 001 Col 00")?;
+    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 001")?;
+    rile.assert_cursor(0, 61)?;
 
     rile.send("C-n", keys::control('n'))?;
-    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 002 Col 00")?;
+    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 002")?;
+    rile.assert_cursor(1, 61)?;
 
     rile.send("C-n", keys::control('n'))?;
-    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 003 Col 00")?;
+    rile.assert_status_contains("window 1 ACTIVE split_right.txt Ln 003")?;
+    rile.assert_cursor(2, 61)?;
 
     rile.quit()?;
     Ok(())

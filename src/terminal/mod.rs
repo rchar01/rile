@@ -13,7 +13,7 @@ use crate::file::Document;
 use crate::input::KeyReader;
 use crate::minibuffer::PromptKind;
 use crate::render::{Face, Span, clip_spans, merge_spans};
-use crate::window::{Viewport, WindowLayout};
+use crate::window::{Viewport, WindowLayout, WindowSeparator};
 use crate::{Result, RileError};
 use unicode_width::UnicodeWidthChar;
 
@@ -373,7 +373,9 @@ fn draw_editor_frame_with_options<W: Write>(
     let total_rows = usize::from(size.rows.max(1));
     let window_rows = total_rows.saturating_sub(1 + completion_rows).max(1);
     let minibuffer_row = (window_rows + 1).min(total_rows);
-    let layouts = editor.window_layouts(window_rows, usize::from(size.columns.max(1)));
+    let columns = usize::from(size.columns.max(1));
+    let layouts = editor.window_layouts(window_rows, columns);
+    let separators = editor.window_separators(window_rows, columns);
     for layout in &layouts {
         editor.set_window_text_rows(layout.id, layout.rect.rows.saturating_sub(1));
     }
@@ -381,6 +383,7 @@ fn draw_editor_frame_with_options<W: Write>(
     for layout in &layouts {
         draw_window(terminal, editor, *layout, options)?;
     }
+    draw_window_separators(terminal, editor, &separators)?;
 
     draw_minibuffer(terminal, editor, size, minibuffer_row)?;
     draw_completion_popup(terminal, editor, size, minibuffer_row + 1, completion_rows)?;
@@ -392,6 +395,23 @@ fn draw_editor_frame_with_options<W: Write>(
         move_cursor_to_current_window(terminal, editor, &layouts)?;
     }
     terminal.show_cursor()
+}
+
+fn draw_window_separators<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    editor: &Editor,
+    separators: &[WindowSeparator],
+) -> Result<()> {
+    for separator in separators {
+        for row in 0..separator.rect.rows {
+            terminal.move_cursor(
+                (separator.rect.row + row + 1) as u16,
+                (separator.rect.column + 1) as u16,
+            )?;
+            write_text_with_face(terminal, "|", Face::ModeLine, editor.theme())?;
+        }
+    }
+    Ok(())
 }
 
 fn draw_minibuffer<W: Write>(

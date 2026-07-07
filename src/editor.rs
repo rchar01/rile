@@ -30,7 +30,7 @@ use crate::search_pattern::{PatternKind, SearchPattern};
 use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{CommentSyntax, Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::text::is_word_character;
-use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSet};
+use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSeparator, WindowSet};
 use crate::{Result, RileError};
 
 mod completion_policy;
@@ -581,6 +581,10 @@ impl Editor {
 
     pub fn window_layouts(&self, rows: usize, columns: usize) -> Vec<WindowLayout> {
         self.windows.layouts(rows, columns)
+    }
+
+    pub fn window_separators(&self, rows: usize, columns: usize) -> Vec<WindowSeparator> {
+        self.windows.separators(rows, columns)
     }
 
     pub fn window_viewport(&self, id: WindowId) -> Option<&Viewport> {
