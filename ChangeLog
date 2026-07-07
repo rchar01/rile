@@ -1,3 +1,11 @@
+2026-07-06  Robert Charusta  <rch-public@posteo.net>
+
+	Update pinned development and release tools.
+
+	* Containerfile.dev: Bump Rust to 1.96.1 and GoReleaser to 2.17.0.
+	* Containerfile.visual: Bump Rust to 1.96.1.
+	* tools/perf/Containerfile: Likewise.
+
 2026-07-05  Robert Charusta  <rch-public@posteo.net>
 
 	Prepare the 0.9.0 release flow.
