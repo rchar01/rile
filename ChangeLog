@@ -1,5 +1,12 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Clarify the unreleased NEWS section.
+
+	* NEWS: Mark the post-0.9.0 section as unreleased while keeping the
+	existing non-outline style.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Remove premature Woodpecker CI configuration.
 
 	* .woodpecker.yml: Delete file.
