@@ -354,15 +354,16 @@ completion config keys are `completion_style`, `completion_max_candidates`,
 
 Post-Milestone 14 prompt-history polish adds in-session `M-p` and `M-n` history
 navigation for command, file, buffer, write-file, goto-line, rectangle, shell
-command, describe-function, describe-variable, and incremental-search
-minibuffer prompts. Prompt history is stored per prompt kind, preserves the
-current draft while navigating, avoids consecutive duplicate entries, and
-refreshes completion candidates after recalling history in completion-enabled
-prompts. Incremental search records accepted searches when Enter exits the
-prompt; canceled searches and invalid regexps are not recorded. It uses separate
-literal and regexp histories, shared between forward and backward search within
-each kind. Query-replace history remains deferred because its prompts have a
-separate interaction model.
+command, describe-function, describe-variable, incremental-search, and
+query-replace minibuffer prompts. Prompt history is stored per prompt kind,
+preserves the current draft while navigating, avoids consecutive duplicate
+entries, and refreshes completion candidates after recalling history in
+completion-enabled prompts. Incremental search records accepted searches when
+Enter exits the prompt; canceled searches and invalid regexps are not recorded.
+It uses separate literal and regexp histories, shared between forward and
+backward search within each kind. Query-replace search and replacement prompts
+also support history; literal and regexp query-replace prompts use separate
+histories.
 
 Undo dirty-state tracking stores a per-buffer undo save point. Opening, saving,
 reverting, and `not-modified` record the current undo depth as clean; undoing
@@ -501,10 +502,12 @@ Current limitations: there is no shell-command process timeout/cancellation, no
 message-log retention limit or persistence across sessions, and no selective
 region undo yet.
 Literal search and query replace are exact line-local substring matching. Regexp
-incremental search uses Rile's built-in line-local subset: `.`, `*`, `+`, `?`,
-`^`, `$`, escaped metacharacters, and character classes with ranges and
-negation. Search wraps only after an explicit boundary failure, query replace
-does not wrap, and no search command matches across line breaks.
+incremental search and regexp query replace use Rile's built-in line-local
+subset: `.`, `*`, `+`, `?`, `^`, `$`, escaped metacharacters, and character
+classes with ranges and negation. Regexp query replace currently uses literal
+replacement text only and rejects patterns that can match empty text. Search
+wraps only after an explicit boundary failure, query replace does not wrap, and
+no search command matches across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail

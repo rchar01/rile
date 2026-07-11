@@ -21,8 +21,9 @@ Official repository: <https://codeberg.org/rch/rile>
 
 Rile is under active early development. It can edit UTF-8 text, open and save
 files, use Emacs-style key bindings, run `M-x` commands with completion, manage
-buffers and split windows, search and query-replace with highlights, run shell
-commands, use registers and rectangles, show help buffers, highlight common
+buffers and split windows, search and literal/regexp query-replace with
+highlights, run shell commands, use registers and rectangles, show help buffers,
+highlight common
 source/config formats, and load basic user preferences.
 
 The v1 goal is a dependable lightweight editor for source files, config files,
@@ -176,7 +177,16 @@ Basic editor keys:
 - `M-t` transposes words around point and `C-x C-t` transposes lines.
 - Repeating search at a buffer boundary first reports a failing search; repeating
   again wraps to the first or last match and shows a wrapped-search prompt.
-- `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit. `M-p` and `M-n` recall accepted query-replace search and replacement prompt history while editing those prompts.
+- `M-%` starts literal query replace; enter search and replacement strings, then
+  use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q`
+  to quit.
+- `C-M-%` starts regexp query replace using the same line-local regexp subset as
+  regexp incremental search. Replacement text is literal in this first subset,
+  so replacement escapes such as `\1` and `\&` are not expanded. Regexps that
+  can match empty text are rejected for replacement.
+- `M-p` and `M-n` recall accepted query-replace search and replacement prompt
+  history while editing those prompts. Literal and regexp query-replace prompts
+  keep separate histories.
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.
@@ -206,7 +216,7 @@ Basic editor keys:
   searches accepted with Enter.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search uses Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and no search command matches across line breaks yet.
+Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search and regexp query replace use Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; query replace does not wrap, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.

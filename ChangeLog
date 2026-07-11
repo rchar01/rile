@@ -1,5 +1,38 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Add interactive regexp query replace.
+
+	* src/command.rs (Command): Add QueryReplaceRegexp.
+	(default_doc_for_command, default_commands): Register
+	query-replace-regexp.
+	* src/keymap.rs (default_bindings): Bind C-M-%.
+	* src/input.rs (csi_u_ctrl_key): Parse CSI-u Ctrl and Ctrl-Meta
+	punctuation keys.
+	* src/minibuffer.rs (PromptKind): Add regexp query-replace prompts.
+	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include the
+	regexp query-replace prompts.
+	* src/search_pattern.rs (SearchPattern::can_match_empty): New method.
+	(RegexpPattern::can_match_empty): New helper.
+	* src/editor.rs (QueryReplaceState): Store pattern kind, compiled pattern,
+	and replacement template.
+	(ReplacementTemplate): New type.
+	(command_query_replace_regexp, query_replace_replacement_label,
+	query_replace_action_label): New helpers.
+	(start_query_replace, submit_query_replace_search,
+	advance_query_replace, replace_query_replace_current): Share literal and
+	regexp query-replace flow and reject empty-match regexps.
+	(tests): Cover regexp query-replace behavior and prompt kinds.
+	* tests/support/keys.rs (csi_u_ctrl_meta): New helper.
+	* tests/pty_search.rs (query_replace_regexp_replaces_matches,
+	query_replace_regexp_rejects_invalid_and_zero_width_patterns,
+	query_replace_regexp_history_is_separate): New tests.
+	* README.md: Document regexp query replace and its first-subset limits.
+	* NEWS: Mention regexp query replace.
+	* docs/development.md: Document the implemented subset and limits.
+	* docs/emacs-function-reference.md (query-replace-regexp): New entry.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Clarify the unreleased NEWS section.
 
 	* NEWS: Mark the post-0.9.0 section as unreleased while keeping the
