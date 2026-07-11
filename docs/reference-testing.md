@@ -364,10 +364,11 @@ switch or kill. Direct Enter on ambiguous input has the same selected-candidate
 rule, but is covered by automated unit and PTY tests because there is no
 intermediate visual completion state before Enter executes.
 
-Review next whether switch-buffer candidates should prioritize the current,
-previous, or most recently used buffer like a fuller Emacs setup, and whether
-ido and *Completions* styles need style-specific documentation beyond the shared
-prompt semantics.
+Rile keeps `switch-to-buffer` completion focused on the default previous buffer:
+the default candidate is listed first, then remaining buffers keep buffer-list
+order.  `kill-buffer` remains current-buffer-first because its empty input
+defaults to the current buffer.  Review next whether ido and *Completions* styles
+need style-specific documentation beyond the shared prompt semantics.
 
 ## How To Use Evidence
 

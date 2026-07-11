@@ -10668,6 +10668,34 @@ mod tests {
     }
 
     #[test]
+    fn switch_buffer_completion_prioritizes_default_previous_buffer() {
+        let directory = TestDir::new();
+        let start = directory.path().join("start.txt");
+        let alpha = directory.path().join("alpha-buffer.txt");
+        let alphabet = directory.path().join("alphabet-buffer.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::write(&alpha, "alpha").expect("alpha fixture should write");
+        fs::write(&alphabet, "alphabet").expect("alphabet fixture should write");
+        let document = Document::open(&start).expect("start fixture should open");
+        let mut editor = Editor::new(document);
+        editor
+            .find_file(alpha.to_str().unwrap())
+            .expect("alpha should open");
+        editor
+            .find_file(alphabet.to_str().unwrap())
+            .expect("alphabet should open");
+
+        assert_eq!(
+            editor.switch_buffer_completion_names(),
+            vec![
+                "alpha-buffer.txt".to_owned(),
+                "start.txt".to_owned(),
+                "alphabet-buffer.txt".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
     fn ido_buffer_completion_empty_input_switches_default_buffer() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");

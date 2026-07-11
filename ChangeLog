@@ -1,5 +1,13 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Document switch-buffer completion ordering.
+
+	* src/editor.rs (tests): Cover default-first switch-buffer completion
+	candidates.
+	* docs/reference-testing.md: Record the candidate-ordering decision.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Harden narrow split-pane separator layout.
 
 	* src/window.rs (vertical_separator_count): New helper.
