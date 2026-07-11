@@ -1370,7 +1370,9 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
-                self.prompt_history.record(kind, &input);
+                if !is_query_replace_prompt(kind) {
+                    self.prompt_history.record(kind, &input);
+                }
                 self.minibuffer.clear();
                 self.submit_prompt(kind, &input)
             }
@@ -6445,6 +6447,7 @@ impl Editor {
             replacement_kind,
             query_replace_replacement_label(kind, query),
         );
+        self.prompt_history.record(search_prompt_kind(kind), query);
         Ok(EditorOutcome::Continue)
     }
 
@@ -6453,7 +6456,10 @@ impl Editor {
             self.minibuffer.set_error("query replace is not active");
             return Ok(EditorOutcome::Continue);
         };
+        let kind = query_replace.kind;
         query_replace.replacement = ReplacementTemplate::literal(replacement);
+        self.prompt_history
+            .record(replacement_prompt_kind(kind), replacement);
         self.advance_query_replace(self.cursor)?;
         Ok(EditorOutcome::Continue)
     }
@@ -8600,6 +8606,30 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::StringRectangle => "String rectangle: ",
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
         PromptKind::WriteFile => "Write file: ",
+    }
+}
+
+fn is_query_replace_prompt(kind: PromptKind) -> bool {
+    matches!(
+        kind,
+        PromptKind::QueryReplaceSearch
+            | PromptKind::QueryReplaceReplacement
+            | PromptKind::QueryReplaceRegexpSearch
+            | PromptKind::QueryReplaceRegexpReplacement
+    )
+}
+
+fn search_prompt_kind(kind: PatternKind) -> PromptKind {
+    match kind {
+        PatternKind::Literal => PromptKind::QueryReplaceSearch,
+        PatternKind::Regexp => PromptKind::QueryReplaceRegexpSearch,
+    }
+}
+
+fn replacement_prompt_kind(kind: PatternKind) -> PromptKind {
+    match kind {
+        PatternKind::Literal => PromptKind::QueryReplaceReplacement,
+        PatternKind::Regexp => PromptKind::QueryReplaceRegexpReplacement,
     }
 }
 
@@ -18891,6 +18921,17 @@ M-g g           goto-line                      Go to line or line:column\n"
             );
         }
         assert_eq!(editor.document().buffer().serialize(), "foo");
+
+        editor
+            .execute_command_by_name("query-replace-regexp")
+            .expect("regexp query replace should prompt");
+        editor
+            .handle_key(KeyEvent::Text("draft".to_owned()))
+            .expect("draft input should insert");
+        editor
+            .handle_key(KeyEvent::Meta('p'))
+            .expect("M-p should not recall rejected regexps");
+        assert_eq!(editor.minibuffer().prompt_input(), Some("draft"));
     }
 
     #[test]
