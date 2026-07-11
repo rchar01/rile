@@ -671,9 +671,8 @@ On this host, only `./scripts/build` and `./scripts/test-cargo` are expected to 
 
 ## CI Status
 
-The Codeberg repository carries a Woodpecker pipeline in `.woodpecker.yml`.  It
-runs `./scripts/verify` directly in a Rust toolchain image after installing the
-same required cargo tools as the dev container.  CI intentionally calls
-non-interactive scripts and does not call `scripts/devshell`.
+CI is deferred until Forgejo CI is configured for the official repository.
+Future CI should call the same non-interactive scripts used by `make verify`;
+it should not call `scripts/devshell`.
 
 Optional hosted CI visual artifact generation should be a separate, non-blocking job from `make verify`. That job may run `make visual-frames` in the visual tooling container and upload ignored files from `artifacts/` for review. GIFs and PNGs should remain review evidence only; PTY assertions and parsed-screen snapshots remain the correctness gates.
