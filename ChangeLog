@@ -1,5 +1,14 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Harden narrow split-pane separator layout.
+
+	* src/window.rs (vertical_separator_count): New helper.
+	(layout_node, collect_separators): Skip separators when narrow panes need
+	the columns for content.
+	(tests): Cover narrow and nested vertical splits.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Add query-replace prompt history.
 
 	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include

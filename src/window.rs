@@ -307,7 +307,7 @@ fn layout_node(node: &SplitNode, rect: WindowRect, layouts: &mut Vec<WindowLayou
                 }
             }
             SplitAxis::Vertical => {
-                let separator_count = children.len().saturating_sub(1);
+                let separator_count = vertical_separator_count(rect.columns, children.len());
                 let content_columns = rect.columns.saturating_sub(separator_count);
                 let parts = split_dimension(content_columns, children.len());
                 let mut column = rect.column;
@@ -323,7 +323,7 @@ fn layout_node(node: &SplitNode, rect: WindowRect, layouts: &mut Vec<WindowLayou
                         layouts,
                     );
                     column += columns;
-                    if index + 1 < children.len() {
+                    if index < separator_count {
                         column += 1;
                     }
                 }
@@ -354,7 +354,7 @@ fn collect_separators(node: &SplitNode, rect: WindowRect, separators: &mut Vec<W
                 }
             }
             SplitAxis::Vertical => {
-                let separator_count = children.len().saturating_sub(1);
+                let separator_count = vertical_separator_count(rect.columns, children.len());
                 let content_columns = rect.columns.saturating_sub(separator_count);
                 let parts = split_dimension(content_columns, children.len());
                 let mut column = rect.column;
@@ -370,7 +370,7 @@ fn collect_separators(node: &SplitNode, rect: WindowRect, separators: &mut Vec<W
                         separators,
                     );
                     column += columns;
-                    if index + 1 < children.len() {
+                    if index < separator_count {
                         separators.push(WindowSeparator {
                             rect: WindowRect {
                                 row: rect.row,
@@ -385,6 +385,12 @@ fn collect_separators(node: &SplitNode, rect: WindowRect, separators: &mut Vec<W
             }
         },
     }
+}
+
+fn vertical_separator_count(columns: usize, child_count: usize) -> usize {
+    child_count
+        .saturating_sub(1)
+        .min(columns.saturating_sub(child_count))
 }
 
 fn split_dimension(size: usize, count: usize) -> Vec<usize> {
@@ -461,6 +467,51 @@ mod tests {
                 columns: 1
             }
         );
+    }
+
+    #[test]
+    fn vertical_splits_skip_separators_when_columns_are_too_narrow() {
+        let mut windows = WindowSet::new(BufferId(1));
+        windows.split_current(SplitAxis::Vertical);
+
+        let layouts = windows.layouts(4, 2);
+        assert_eq!(windows.separators(4, 2), Vec::new());
+        assert_eq!(layouts[0].rect.columns, 1);
+        assert_eq!(layouts[1].rect.column, 1);
+        assert_eq!(layouts[1].rect.columns, 1);
+
+        let layouts = windows.layouts(4, 3);
+        let separators = windows.separators(4, 3);
+        assert_eq!(separators.len(), 1);
+        assert_eq!(separators[0].rect.column, 1);
+        assert_eq!(layouts[0].rect.columns, 1);
+        assert_eq!(layouts[1].rect.column, 2);
+        assert_eq!(layouts[1].rect.columns, 1);
+
+        let layouts = windows.layouts(4, 1);
+        assert_eq!(windows.separators(4, 1), Vec::new());
+        assert_eq!(layouts[0].rect.columns, 1);
+        assert_eq!(layouts[1].rect.columns, 0);
+    }
+
+    #[test]
+    fn nested_vertical_splits_keep_visible_rects_within_bounds() {
+        let mut windows = WindowSet::new(BufferId(1));
+        windows.split_current(SplitAxis::Vertical);
+        windows.split_current(SplitAxis::Vertical);
+
+        let layouts = windows.layouts(4, 4);
+        let separators = windows.separators(4, 4);
+
+        assert_eq!(layouts.len(), 3);
+        assert_eq!(separators.len(), 1);
+        for layout in layouts {
+            assert!(layout.rect.column + layout.rect.columns <= 4);
+            assert!(layout.rect.columns > 0);
+        }
+        for separator in separators {
+            assert!(separator.rect.column < 4);
+        }
     }
 
     #[test]
