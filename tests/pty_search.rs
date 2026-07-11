@@ -137,3 +137,82 @@ fn query_replace_history_recalls_search_and_replacement() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn query_replace_regexp_replaces_matches() -> Result<()> {
+    let file = fixtures::named_temp_file("foo fxo faa\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo fxo faa")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.assert_screen_contains("Query replace regexp:")?;
+    rile.send("regexp", b"f.o")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Query replace regexp f.o with:")?;
+    rile.send("replacement", b"bar")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Query replacing regexp f.o with bar: (y, n, !, q)?")?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("bar bar faa")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn query_replace_regexp_rejects_invalid_and_zero_width_patterns() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("invalid regexp", b"[")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Error: invalid regexp")?;
+    rile.assert_screen_contains("foo")?;
+
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("zero-width regexp", b"^")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Error: regexp can match empty string")?;
+    rile.assert_screen_contains("foo")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn query_replace_regexp_history_is_separate() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\nfxo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", b"f.o")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"bar")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+    rile.wait_for_screen_contains("Replaced 2 occurrences")?;
+
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("search draft", b"draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Query replace regexp: f.o")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Query replace regexp: draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("replacement draft", b"draft-replacement")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Query replace regexp f.o with: bar")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Query replace regexp f.o with: draft-replacement")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}

@@ -31,6 +31,11 @@ pub fn ctrl_meta(letter: char) -> Vec<u8> {
     vec![b'\x1b', (letter.to_ascii_lowercase() as u8) - b'a' + 1]
 }
 
+pub fn csi_u_ctrl_meta(character: char) -> Vec<u8> {
+    assert!(character.is_ascii());
+    format!("\x1b[{};7u", character as u32).into_bytes()
+}
+
 pub fn meta_backspace() -> Vec<u8> {
     vec![b'\x1b', b'\x7f']
 }

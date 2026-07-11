@@ -271,6 +271,9 @@ fn csi_u_ctrl_key(key_code: u32) -> Option<char> {
         '\u{8}' => Some('h'),
         '_' => Some('_'),
         character if character.is_ascii_alphabetic() => Some(character.to_ascii_lowercase()),
+        character if character.is_ascii_graphic() && !character.is_ascii_alphanumeric() => {
+            Some(character)
+        }
         _ => None,
     }
 }
@@ -466,7 +469,9 @@ mod tests {
         assert_eq!(parse(b"\x1b[112;3u").event, KeyEvent::Meta('p'));
         assert_eq!(parse(b"\x1b[110;3u").event, KeyEvent::Meta('n'));
         assert_eq!(parse(b"\x1b[65;5u").event, KeyEvent::Ctrl('a'));
+        assert_eq!(parse(b"\x1b[37;5u").event, KeyEvent::Ctrl('%'));
         assert_eq!(parse(b"\x1b[115;7u").event, KeyEvent::CtrlMeta('s'));
+        assert_eq!(parse(b"\x1b[37;7u").event, KeyEvent::CtrlMeta('%'));
         let fallback = parse(b"\x1b[x;5u");
         assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
         assert_eq!(fallback.consumed, b"\x1b[x;5u".len());
