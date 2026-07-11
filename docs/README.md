@@ -30,4 +30,6 @@ This directory contains maintainer and contributor documentation for Rile.
 - [Architecture Improvement Ideas](architecture-improvement-ideas.md): future
   refactor candidates and validation expectations, separate from current
   architecture documentation.
+- [Query Replace Regexp Plan](query-replace-regexp-plan.md): implementation plan
+  for adding a modular first subset of `query-replace-regexp`.
 Completed implementation plans should not remain here as permanent docs. When a plan finishes, move durable guidance into a guide and rely on Git history for the original checklist.
