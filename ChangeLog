@@ -1,5 +1,12 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Add hosted verification CI.
+
+	* .woodpecker.yml: New file.
+	* docs/development.md: Document CI status.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Document switch-buffer completion ordering.
 
 	* src/editor.rs (tests): Cover default-first switch-buffer completion
