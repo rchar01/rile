@@ -24,6 +24,8 @@ pub enum PromptKind {
     IncrementalSearch,
     KillBuffer,
     KillDirtyBuffer,
+    QueryReplaceRegexpReplacement,
+    QueryReplaceRegexpSearch,
     QueryReplaceReplacement,
     QueryReplaceSearch,
     RevertBuffer,

@@ -386,6 +386,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
             GotoLine,
         ),
         KeyBinding::new([KeyEvent::Meta('%')], QueryReplace),
+        KeyBinding::new([KeyEvent::CtrlMeta('%')], QueryReplaceRegexp),
         KeyBinding::new([KeyEvent::Meta('!')], ShellCommand),
         KeyBinding::new([KeyEvent::Meta('|')], ShellCommandOnRegion),
         KeyBinding::new([KeyEvent::Meta('w')], CopyRegionAsKill),
@@ -810,6 +811,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('%')]),
             KeyResolution::Command(QueryReplace)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::CtrlMeta('%')]),
+            KeyResolution::Command(QueryReplaceRegexp)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('!')]),

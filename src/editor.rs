@@ -380,11 +380,34 @@ enum PromptEditOutcome {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct QueryReplaceState {
+    kind: PatternKind,
     query: String,
-    replacement: String,
+    pattern: SearchPattern,
+    replacement: ReplacementTemplate,
     current: Option<TextRange>,
     replacements: usize,
     visited: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReplacementTemplate {
+    Literal(String),
+}
+
+impl ReplacementTemplate {
+    fn literal(text: impl Into<String>) -> Self {
+        Self::Literal(text.into())
+    }
+
+    fn text(&self) -> &str {
+        match self {
+            Self::Literal(text) => text,
+        }
+    }
+
+    fn expand(&self) -> String {
+        self.text().to_owned()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1356,7 +1379,12 @@ impl Editor {
                 self.keyboard_macro_prompt_start = None;
                 if matches!(
                     self.minibuffer.prompt_kind(),
-                    Some(PromptKind::QueryReplaceSearch | PromptKind::QueryReplaceReplacement)
+                    Some(
+                        PromptKind::QueryReplaceSearch
+                            | PromptKind::QueryReplaceReplacement
+                            | PromptKind::QueryReplaceRegexpSearch
+                            | PromptKind::QueryReplaceRegexpReplacement,
+                    )
                 ) {
                     self.query_replace = None;
                 }
@@ -1729,8 +1757,15 @@ impl Editor {
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input),
             PromptKind::KillDirtyBuffer => Ok(self.submit_kill_dirty_buffer(input.trim())),
-            PromptKind::QueryReplaceReplacement => self.submit_query_replace_replacement(input),
-            PromptKind::QueryReplaceSearch => self.submit_query_replace_search(input),
+            PromptKind::QueryReplaceReplacement | PromptKind::QueryReplaceRegexpReplacement => {
+                self.submit_query_replace_replacement(input)
+            }
+            PromptKind::QueryReplaceSearch => {
+                self.submit_query_replace_search(PatternKind::Literal, input)
+            }
+            PromptKind::QueryReplaceRegexpSearch => {
+                self.submit_query_replace_search(PatternKind::Regexp, input)
+            }
             PromptKind::RevertBuffer => Ok(self.submit_revert_buffer(input.trim())),
             PromptKind::SaveSomeBuffers => Ok(self.submit_save_some_buffers(input.trim())),
             PromptKind::QuitDirtyBuffers => Ok(self.submit_quit_dirty_buffers(input.trim())),
@@ -2471,7 +2506,15 @@ impl Editor {
         &mut self,
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.start_query_replace()?;
+        self.start_query_replace(PatternKind::Literal)?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_query_replace_regexp(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_query_replace(PatternKind::Regexp)?;
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -6343,7 +6386,7 @@ impl Editor {
         Ok(())
     }
 
-    fn start_query_replace(&mut self) -> Result<()> {
+    fn start_query_replace(&mut self, kind: PatternKind) -> Result<()> {
         if !self.ensure_buffer_editable() {
             return Ok(());
         }
@@ -6351,28 +6394,56 @@ impl Editor {
         self.search = None;
         self.query_replace = None;
         self.deactivate_region();
+        let prompt_kind = match kind {
+            PatternKind::Literal => PromptKind::QueryReplaceSearch,
+            PatternKind::Regexp => PromptKind::QueryReplaceRegexpSearch,
+        };
         self.minibuffer
-            .start_prompt(PromptKind::QueryReplaceSearch, "Query replace: ");
+            .start_prompt(prompt_kind, prompt_label(prompt_kind));
         Ok(())
     }
 
-    fn submit_query_replace_search(&mut self, query: &str) -> Result<EditorOutcome> {
+    fn submit_query_replace_search(
+        &mut self,
+        kind: PatternKind,
+        query: &str,
+    ) -> Result<EditorOutcome> {
         if query.is_empty() {
             self.query_replace = None;
             self.minibuffer.set_error("missing search string");
             return Ok(EditorOutcome::Continue);
         }
 
+        let pattern = match SearchPattern::compile(kind, query) {
+            Ok(pattern) => pattern,
+            Err(_) => {
+                self.query_replace = None;
+                self.minibuffer.set_error("invalid regexp");
+                return Ok(EditorOutcome::Continue);
+            }
+        };
+        if kind == PatternKind::Regexp && pattern.can_match_empty() {
+            self.query_replace = None;
+            self.minibuffer.set_error("regexp can match empty string");
+            return Ok(EditorOutcome::Continue);
+        }
+
         self.query_replace = Some(QueryReplaceState {
+            kind,
             query: query.to_owned(),
-            replacement: String::new(),
+            pattern,
+            replacement: ReplacementTemplate::literal(""),
             current: None,
             replacements: 0,
             visited: false,
         });
+        let replacement_kind = match kind {
+            PatternKind::Literal => PromptKind::QueryReplaceReplacement,
+            PatternKind::Regexp => PromptKind::QueryReplaceRegexpReplacement,
+        };
         self.minibuffer.start_prompt(
-            PromptKind::QueryReplaceReplacement,
-            format!("Query replace {query} with: "),
+            replacement_kind,
+            query_replace_replacement_label(kind, query),
         );
         Ok(EditorOutcome::Continue)
     }
@@ -6382,7 +6453,7 @@ impl Editor {
             self.minibuffer.set_error("query replace is not active");
             return Ok(EditorOutcome::Continue);
         };
-        query_replace.replacement = replacement.to_owned();
+        query_replace.replacement = ReplacementTemplate::literal(replacement);
         self.advance_query_replace(self.cursor)?;
         Ok(EditorOutcome::Continue)
     }
@@ -6424,12 +6495,14 @@ impl Editor {
     }
 
     fn advance_query_replace(&mut self, start: Position) -> Result<()> {
-        let Some(query) = self.query_replace.as_ref().map(|state| state.query.clone()) else {
+        let Some((query, pattern)) = self
+            .query_replace
+            .as_ref()
+            .map(|state| (state.query.clone(), state.pattern.clone()))
+        else {
             return Ok(());
         };
 
-        let pattern = SearchPattern::compile(PatternKind::Literal, &query)
-            .expect("literal search patterns should compile");
         let found = find_match(
             self.document().buffer(),
             &pattern,
@@ -6466,8 +6539,10 @@ impl Editor {
             return;
         };
         self.minibuffer.set_message(format!(
-            "Query replacing {} with {}: (y, n, !, q)?",
-            state.query, state.replacement
+            "{} {} with {}: (y, n, !, q)?",
+            query_replace_action_label(state.kind),
+            state.query,
+            state.replacement.text()
         ));
     }
 
@@ -6478,7 +6553,7 @@ impl Editor {
         let Some((old_range, replacement)) = self.query_replace.as_ref().and_then(|state| {
             state
                 .current
-                .map(|current| (current, state.replacement.clone()))
+                .map(|current| (current, state.replacement.expand()))
         }) else {
             return Ok(self.cursor);
         };
@@ -8512,6 +8587,8 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::IncrementalSearch => "I-search: ",
         PromptKind::KillBuffer => "Kill buffer: ",
         PromptKind::KillDirtyBuffer => "Kill buffer anyway? ",
+        PromptKind::QueryReplaceRegexpReplacement => "Query replace regexp with: ",
+        PromptKind::QueryReplaceRegexpSearch => "Query replace regexp: ",
         PromptKind::QueryReplaceReplacement => "Query replace with: ",
         PromptKind::QueryReplaceSearch => "Query replace: ",
         PromptKind::RevertBuffer => "Buffer modified; revert anyway? (yes or no) ",
@@ -8523,6 +8600,20 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::StringRectangle => "String rectangle: ",
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
         PromptKind::WriteFile => "Write file: ",
+    }
+}
+
+fn query_replace_replacement_label(kind: PatternKind, query: &str) -> String {
+    match kind {
+        PatternKind::Literal => format!("Query replace {query} with: "),
+        PatternKind::Regexp => format!("Query replace regexp {query} with: "),
+    }
+}
+
+fn query_replace_action_label(kind: PatternKind) -> &'static str {
+    match kind {
+        PatternKind::Literal => "Query replacing",
+        PatternKind::Regexp => "Query replacing regexp",
     }
 }
 
@@ -11537,6 +11628,10 @@ mod tests {
             PromptKind::GotoLine,
             PromptKind::InsertFile,
             PromptKind::KillBuffer,
+            PromptKind::QueryReplaceRegexpReplacement,
+            PromptKind::QueryReplaceRegexpSearch,
+            PromptKind::QueryReplaceReplacement,
+            PromptKind::QueryReplaceSearch,
             PromptKind::RectangleNumberFormat,
             PromptKind::RectangleNumberStart,
             PromptKind::ShellCommand,
@@ -11976,6 +12071,8 @@ mod tests {
             PromptKind::GotoLine,
             PromptKind::IncrementalSearch,
             PromptKind::KillDirtyBuffer,
+            PromptKind::QueryReplaceRegexpReplacement,
+            PromptKind::QueryReplaceRegexpSearch,
             PromptKind::QueryReplaceReplacement,
             PromptKind::QueryReplaceSearch,
             PromptKind::QuitDirtyBuffers,
@@ -18723,6 +18820,77 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.minibuffer().message.as_deref(),
             Some("No matches for missing")
         );
+    }
+
+    #[test]
+    fn query_replace_regexp_replaces_matches_with_literal_replacement() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo fxo faa")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('%'))
+            .expect("regexp query replace should prompt");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Query replace regexp: ")
+        );
+        submit_prompt_text(&mut editor, "f.o");
+        assert_eq!(
+            editor.minibuffer().display_text().as_deref(),
+            Some("Query replace regexp f.o with: ")
+        );
+        submit_prompt_text(&mut editor, "x\\&");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Query replacing regexp f.o with x\\&: (y, n, !, q)?")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("bang should replace all regexp candidates");
+
+        assert_eq!(editor.document().buffer().serialize(), "x\\& x\\& faa");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Replaced 2 occurrences")
+        );
+    }
+
+    #[test]
+    fn query_replace_regexp_rejects_invalid_and_zero_width_patterns() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("query-replace-regexp")
+            .expect("regexp query replace should prompt");
+        submit_prompt_text(&mut editor, "[");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: invalid regexp")
+        );
+        assert_eq!(editor.document().buffer().serialize(), "foo");
+
+        for pattern in ["^", "$", "a*", "a?"] {
+            editor
+                .execute_command_by_name("query-replace-regexp")
+                .expect("regexp query replace should prompt");
+            submit_prompt_text(&mut editor, pattern);
+            assert_eq!(
+                editor.minibuffer().message.as_deref(),
+                Some("Error: regexp can match empty string"),
+                "{pattern} should be rejected"
+            );
+        }
+        assert_eq!(editor.document().buffer().serialize(), "foo");
     }
 
     #[test]

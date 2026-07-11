@@ -90,6 +90,17 @@ impl SearchPattern {
                 .match_ranges(line),
         }
     }
+
+    pub(crate) fn can_match_empty(&self) -> bool {
+        match self.kind {
+            PatternKind::Literal => self.literal.is_empty(),
+            PatternKind::Regexp => self
+                .regexp
+                .as_ref()
+                .expect("regexp kind should have compiled pattern")
+                .can_match_empty(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -198,6 +209,10 @@ impl RegexpPattern {
 
     fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
         self.match_piece(slots, 0, start_slot)
+    }
+
+    fn can_match_empty(&self) -> bool {
+        self.match_from(&[], 0) == Some(0)
     }
 
     fn match_piece(
@@ -519,6 +534,27 @@ mod tests {
     fn regexp_search_can_find_zero_length_matches() {
         assert_eq!(regexp("a*").find_forward_in_line("bbb", 0), Some((0, 0)));
         assert_eq!(regexp("$").find_backward_in_line("abc", 4), Some((3, 3)));
+    }
+
+    #[test]
+    fn pattern_reports_whether_it_can_match_empty_text() {
+        assert!(regexp("^").can_match_empty());
+        assert!(regexp("$").can_match_empty());
+        assert!(regexp("a*").can_match_empty());
+        assert!(regexp("a?").can_match_empty());
+        assert!(regexp("^a*$").can_match_empty());
+        assert!(!regexp("a+").can_match_empty());
+        assert!(!regexp("f.o").can_match_empty());
+        assert!(
+            SearchPattern::compile(PatternKind::Literal, "")
+                .expect("literal compiles")
+                .can_match_empty()
+        );
+        assert!(
+            !SearchPattern::compile(PatternKind::Literal, "foo")
+                .expect("literal compiles")
+                .can_match_empty()
+        );
     }
 
     #[test]

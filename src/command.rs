@@ -89,6 +89,7 @@ pub enum Command {
     QuitShellOutputWindow,
     QuotedInsert,
     QueryReplace,
+    QueryReplaceRegexp,
     RectangleMarkMode,
     RectangleNumberLines,
     Recenter,
@@ -264,7 +265,8 @@ impl CommandCategory {
             | IncrementalSearchForward
             | IncrementalSearchRegexpBackward
             | IncrementalSearchRegexpForward
-            | QueryReplace => Self::Search,
+            | QueryReplace
+            | QueryReplaceRegexp => Self::Search,
             ShellCommand | ShellCommandOnRegion | QuitShellOutputWindow => Self::Shell,
             CopyRectangleToRegister
             | CopyToRegister
@@ -394,6 +396,9 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         }
         QuotedInsert => "Read the next key and insert it literally when supported.",
         QueryReplace => "Prompt for search and replacement strings and replace interactively.",
+        QueryReplaceRegexp => {
+            "Prompt for a regexp and replacement string and replace interactively."
+        }
         RectangleMarkMode => "Activate rectangle mark mode for column-oriented region commands.",
         RectangleNumberLines => "Insert formatted line numbers down the active rectangle.",
         Recenter => "Cycle point between center, top, and bottom of the selected window.",
@@ -1084,6 +1089,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_query_replace),
         CommandSpec::new(
+            "query-replace-regexp",
+            "Interactively replace regexp matches",
+            true,
+            QueryReplaceRegexp,
+        )
+        .with_handler(crate::editor::Editor::command_query_replace_regexp),
+        CommandSpec::new(
             "rectangle-mark-mode",
             "Mark a rectangular region",
             true,
@@ -1387,6 +1399,7 @@ mod tests {
         assert!(registry.contains("view-echo-area-messages"));
         assert!(registry.contains("what-cursor-position"));
         assert!(registry.contains("query-replace"));
+        assert!(registry.contains("query-replace-regexp"));
         assert!(registry.contains("rectangle-mark-mode"));
         assert!(registry.contains("rectangle-number-lines"));
         assert!(registry.contains("recenter"));
