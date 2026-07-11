@@ -112,6 +112,8 @@ pub(super) fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::GotoLine
             | PromptKind::InsertFile
             | PromptKind::KillBuffer
+            | PromptKind::QueryReplaceReplacement
+            | PromptKind::QueryReplaceSearch
             | PromptKind::RectangleNumberFormat
             | PromptKind::RectangleNumberStart
             | PromptKind::ShellCommand
@@ -204,6 +206,22 @@ mod tests {
         assert_eq!(
             history.recall(PromptKind::ExtendedCommand, "ignored", 1),
             Some("fresh draft".to_owned())
+        );
+    }
+
+    #[test]
+    fn query_replace_search_and_replacement_use_separate_histories() {
+        let mut history = PromptHistoryStore::new();
+        history.record(PromptKind::QueryReplaceSearch, "needle");
+        history.record(PromptKind::QueryReplaceReplacement, "replacement");
+
+        assert_eq!(
+            history.recall(PromptKind::QueryReplaceSearch, "draft", -1),
+            Some("needle".to_owned())
+        );
+        assert_eq!(
+            history.recall(PromptKind::QueryReplaceReplacement, "draft", -1),
+            Some("replacement".to_owned())
         );
     }
 

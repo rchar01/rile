@@ -497,9 +497,9 @@ Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: there is no query-replace prompt history, no shell-command
-process timeout/cancellation, no message-log retention limit or persistence
-across sessions, and no selective region undo yet.
+Current limitations: there is no shell-command process timeout/cancellation, no
+message-log retention limit or persistence across sessions, and no selective
+region undo yet.
 Literal search and query replace are exact line-local substring matching. Regexp
 incremental search uses Rile's built-in line-local subset: `.`, `*`, `+`, `?`,
 `^`, `$`, escaped metacharacters, and character classes with ranges and

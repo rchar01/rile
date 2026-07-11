@@ -176,7 +176,7 @@ Basic editor keys:
 - `M-t` transposes words around point and `C-x C-t` transposes lines.
 - Repeating search at a buffer boundary first reports a failing search; repeating
   again wraps to the first or last match and shows a wrapped-search prompt.
-- `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit.
+- `M-%` starts query replace; enter search and replacement strings, then use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q` to quit. `M-p` and `M-n` recall accepted query-replace search and replacement prompt history while editing those prompts.
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.

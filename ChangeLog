@@ -1,5 +1,19 @@
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
+	Add query-replace prompt history.
+
+	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include
+	query-replace search and replacement prompts.
+	(tests): Cover separate query-replace prompt histories.
+	* tests/pty_search.rs
+	(query_replace_history_recalls_search_and_replacement): New test.
+	* README.md: Document query-replace history keys.
+	* NEWS: Mention query-replace prompt history.
+	* docs/development.md: Remove query-replace history from current
+	limitations.
+
+2026-07-11  Robert Charusta  <rch-public@posteo.net>
+
 	Document post-0.9.0 user-visible changes.
 
 	* NEWS: Add an unreleased entry for split-window separators.

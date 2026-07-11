@@ -103,3 +103,37 @@ fn incremental_search_history_recalls_with_meta_keys() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn query_replace_history_recalls_search_and_replacement() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\nbaz\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    rile.send("M-%", keys::meta('%'))?;
+    rile.send("search text", b"foo")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement text", b"qux")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+    rile.wait_for_screen_contains("Replaced 1 occurrence")?;
+
+    rile.send("M-%", keys::meta('%'))?;
+    rile.send("search draft", b"draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Query replace: foo")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Query replace: draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("replacement draft", b"draft-replacement")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Query replace foo with: qux")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Query replace foo with: draft-replacement")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}

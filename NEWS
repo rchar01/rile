@@ -10,6 +10,11 @@ Interface features:
 * Side-by-side split windows now reserve and draw a visible separator column so
   adjacent buffer text and mode lines no longer run together.
 
+Editing features:
+
+* Query-replace search and replacement prompts now support in-session `M-p` and
+  `M-n` history recall.
+
 
 * Noteworthy changes in release 0.9.0 (2026-07-05)
 
