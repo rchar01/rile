@@ -59,10 +59,8 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 - Existing regexp support includes `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style
   grouping, alternation, counted repetition, escaped metacharacters, and
   character classes with ranges and negation.
-- Current code tracks numbered captures internally but has no
-  replacement-expansion API yet.
-- `query-replace-regexp` and `replace-regexp` intentionally use literal
-  replacement text today.
+- Current code tracks numbered captures internally and expands `\&`, `\1`
+  through `\9`, and `\\` in regexp replacement commands.
 
 ## Assumptions
 
@@ -79,9 +77,6 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 
 - [ ] Should `\s-`, `\sw`, and other Emacs syntax-class constructs be deferred
   entirely, or should a tiny hard-coded subset exist before syntax tables?
-- [ ] Should replacement expansion treat unmatched captures as empty strings or
-  preserve the typed escape literally? Emacs behavior should be checked before
-  implementation.
 - [ ] Should `\w` use Rust Unicode word-like semantics, ASCII plus underscore, or
   Rile's existing word-motion definition?
 
@@ -148,13 +143,13 @@ Goal: Make regexp replacement text functionally useful for Emacs-style workflows
 
 Tasks:
 
-- [ ] Add a replacement expansion API for regexp matches.
-- [ ] Support `\&` for the whole match.
-- [ ] Support `\1` through `\9` for numbered captures.
-- [ ] Define and test escaping rules for literal backslashes and unsupported
+- [x] Add a replacement expansion API for regexp matches.
+- [x] Support `\&` for the whole match.
+- [x] Support `\1` through `\9` for numbered captures.
+- [x] Define and test escaping rules for literal backslashes and unsupported
   replacement escapes.
-- [ ] Use replacement expansion in `query-replace-regexp`.
-- [ ] Use replacement expansion in `replace-regexp`.
+- [x] Use replacement expansion in `query-replace-regexp`.
+- [x] Use replacement expansion in `replace-regexp`.
 
 Examples:
 
@@ -164,9 +159,9 @@ Examples:
 
 Validation gate:
 
-- [ ] Run focused `query-replace-regexp` tests.
-- [ ] Run focused `replace-regexp` tests after the command exists.
-- [ ] Run PTY replacement tests for visible prompt and replacement behavior.
+- [x] Run focused `query-replace-regexp` tests.
+- [x] Run focused `replace-regexp` tests after the command exists.
+- [x] Run PTY replacement tests for visible prompt and replacement behavior.
 
 ## Phase 5: Word And Class Constructs
 
@@ -239,6 +234,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-07-12 | Phase 4 regexp replacement expansion completed for `\&`, `\1` through `\9`, and `\\`. | `src/editor.rs`, `src/editor/search.rs`, `src/search_pattern.rs`, and `tests/pty_search.rs`; `./scripts/in-container cargo test --locked --lib regexp` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 3 internal match objects and numbered capture ranges completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 2 grouping, alternation, and counted repetition completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 1 AST foundation completed without user-visible regexp changes. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern`, `./scripts/in-container cargo test --locked --lib regexp`, and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
@@ -251,4 +247,6 @@ Validation gate:
 | 2026-07-12 | Target Emacs regexp syntax rather than PCRE syntax. | Rile is an Emacs-style editor and existing commands are named after Emacs regexp commands. |
 | 2026-07-12 | Keep matching line-local for this upgrade. | Current search infrastructure is line-local, and multiline matching needs a separate buffer-spanning design. |
 | 2026-07-12 | Defer full syntax-table and replacement-expression support. | They are less important than groups, alternation, counts, captures, and ordinary replacement expansion. |
+| 2026-07-12 | Expand unmatched or missing captures to empty text. | This keeps replacement flows total and avoids preserving implementation-looking escapes in edited text. |
+| 2026-07-12 | Preserve unsupported replacement backslash escapes literally. | Rile does not yet implement `\,(...)` or case-conversion directives, so preserving the typed text is safer than silently dropping it. |
 | 2026-07-12 | Split Phase 1 into an AST foundation before new syntax. | This keeps all existing regexp users stable before adding Emacs grouping, alternation, and captures. |

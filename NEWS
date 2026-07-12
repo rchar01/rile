@@ -12,17 +12,21 @@ Interface features:
 
 Editing features:
 
+* `query-replace-regexp` and `replace-regexp` now expand regexp replacement
+  escapes.  `\&` inserts the whole match, `\1` through `\9` insert numbered
+  captures, and `\\` inserts a literal backslash.
+
 * Rile's built-in regexp subset now supports Emacs-style grouping `\(...\)`,
   alternation `\|`, and counted repetition `\{m\}`, `\{m,\}`, and `\{m,n\}`
   in regexp search, `query-replace-regexp`, and `replace-regexp`.
 
 * `replace-regexp` is now available through `M-x`. It replaces regexp matches
   from point to the end of the buffer using Rile's built-in line-local regexp
-  subset and literal replacement text.
+  subset.
 
 * `query-replace-regexp` is now available through `C-M-%` and `M-x`. It uses
-  Rile's built-in line-local regexp subset with literal replacement text, keeps
-  separate regexp prompt history, and rejects regexps that can match empty text.
+  Rile's built-in line-local regexp subset, keeps separate regexp prompt
+  history, and rejects regexps that can match empty text.
 
 * Query-replace search and replacement prompts now support in-session `M-p` and
   `M-n` history recall.

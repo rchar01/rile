@@ -1,5 +1,34 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp replacement expansion.
+
+	* src/search_pattern.rs (PatternMatch): New type.
+	(SearchPattern::find_forward_match_in_line): New helper.
+	(SearchPattern::find_forward_in_line, RegexpPattern::find_forward): Restrict
+	to tests.
+	(RegexpPattern::find_forward_match): Return a pattern match.
+	* src/editor/search.rs (EditorPatternMatch): New type.
+	(find_pattern_match): New helper.
+	(find_match, find_forward): Use capture-aware matches.
+	* src/editor.rs (QueryReplaceState): Store the current editor pattern match.
+	(ReplacementTemplate): Add regexp templates.
+	(expand_regexp_replacement): New helper.
+	(replace_regexp_matches, submit_replace_regexp_replacement,
+	submit_query_replace_replacement, advance_query_replace,
+	replace_query_replace_current): Expand regexp replacement text.
+	(tests): Cover whole-match, capture, unmatched-capture, literal-backslash,
+	and unsupported-escape replacement expansion.
+	* tests/pty_search.rs
+	(query_replace_regexp_expands_replacement_captures,
+	replace_regexp_expands_whole_match_and_captures): New tests.
+	* README.md: Document regexp replacement expansion.
+	* NEWS: Mention regexp replacement expansion.
+	* docs/development.md: Update regexp replacement behavior.
+	* docs/emacs-function-reference.md: Likewise.
+	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 4 complete.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add capture backtracking edge tests.
 
 	* src/search_pattern.rs

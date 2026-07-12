@@ -182,13 +182,15 @@ empty text report `Error: regexp can match empty string` and are rejected before
 replacement begins.
 
 Rile target: intentional subset. Matching uses the same line-local regexp subset
-as regexp incremental search. Replacement text is literal; Emacs replacement
-escapes such as `\1`, `\&`, `\,(...)`, and case-conversion directives are not
-expanded yet.
+as regexp incremental search. Replacement text expands `\&` to the whole match,
+`\1` through `\9` to numbered captures, and `\\` to a literal backslash.
+Unmatched or missing captures expand to empty text, and unsupported backslash
+escapes are preserved literally. Rile does not expand Emacs replacement
+expressions such as `\,(...)` or case-conversion directives yet.
 
 Evidence: GNU Emacs command name and default binding; Rile unit and PTY tests for
-command dispatch, prompt history, regexp replacement, invalid patterns,
-zero-width rejection, and literal replacement text.
+command dispatch, prompt history, regexp replacement, replacement expansion,
+invalid patterns, and zero-width rejection.
 
 Notes: rejecting zero-width regexps is intentionally conservative. It avoids
 replacement loops until Rile has a deliberate empty-match advancement policy.
@@ -226,13 +228,15 @@ empty text report `Error: regexp can match empty string`. Completion reports
 `Replaced N occurrences` or `No matches for <regexp>`.
 
 Rile target: intentional subset. Matching uses the same line-local regexp subset
-as regexp incremental search. Replacement text is literal; Emacs replacement
-escapes such as `\1`, `\&`, `\,(...)`, and case-conversion directives are not
-expanded yet.
+as regexp incremental search. Replacement text expands `\&` to the whole match,
+`\1` through `\9` to numbered captures, and `\\` to a literal backslash.
+Unmatched or missing captures expand to empty text, and unsupported backslash
+escapes are preserved literally. Rile does not expand Emacs replacement
+expressions such as `\,(...)` or case-conversion directives yet.
 
 Evidence: GNU Emacs command name; Rile unit and PTY tests for command dispatch,
-prompt history, regexp replacement from point, no-match reporting, invalid
-patterns, zero-width rejection, undo, and literal replacement text.
+prompt history, regexp replacement from point, replacement expansion, no-match
+reporting, invalid patterns, zero-width rejection, and undo.
 
 Notes: Rile implements `replace-regexp` after `query-replace-regexp` so both can
 share the same regexp validation and later capture-expansion work.

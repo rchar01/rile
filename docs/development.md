@@ -507,10 +507,12 @@ built-in line-local subset: `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style grouping
 `\(...\)`, alternation `\|`, counted repetition `\{m\}`, `\{m,\}`, and
 `\{m,n\}`, escaped metacharacters, and character classes with ranges and
 negation. Bare `(`, `)`, `{`, `}`, and `|` match literally. Regexp replacement
-commands currently use literal replacement text only and reject patterns that can
-match empty text. Search wraps only after an explicit boundary failure,
-replacement commands do not wrap, and no search command matches across line
-breaks.
+commands expand `\&` to the whole match, `\1` through `\9` to numbered
+captures, and `\\` to a literal backslash. Unmatched or missing captures expand
+to empty text, unsupported backslash escapes are preserved literally, and
+patterns that can match empty text are rejected. Search wraps only after an
+explicit boundary failure, replacement commands do not wrap, and no search
+command matches across line breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail

@@ -184,12 +184,14 @@ Basic editor keys:
   use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q`
   to quit.
 - `C-M-%` starts regexp query replace using the same line-local regexp subset as
-  regexp incremental search. Replacement text is literal in the current subset,
-  so replacement escapes such as `\1` and `\&` are not expanded. Regexps that
-  can match empty text are rejected for replacement.
+  regexp incremental search. Replacement text expands `\&` to the whole match,
+  `\1` through `\9` to numbered captures, and `\\` to a literal backslash.
+  Unmatched or missing captures expand to empty text, and unsupported backslash
+  escapes are preserved literally. Regexps that can match empty text are
+  rejected for replacement.
 - `M-x replace-regexp` prompts for a regexp and replacement string, then replaces
   all matches from point to the end of the buffer without asking at each match.
-  It uses the same line-local regexp subset and literal replacement text as
+  It uses the same line-local regexp subset and replacement expansion as
   `query-replace-regexp`.
 - `M-p` and `M-n` recall accepted query-replace search and replacement prompt
   history while editing those prompts. Literal and regexp query-replace prompts
