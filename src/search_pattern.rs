@@ -468,7 +468,7 @@ fn start_slots_from_byte(
 
 #[cfg(test)]
 mod tests {
-    use super::{PatternKind, RegexpPattern, SearchPattern};
+    use super::{Atom, PatternKind, Piece, Quantifier, RegexpPattern, SearchPattern};
 
     fn regexp(pattern: &str) -> SearchPattern {
         SearchPattern::compile(PatternKind::Regexp, pattern).expect("regexp should compile")
@@ -477,9 +477,84 @@ mod tests {
     #[test]
     fn regexp_parser_builds_expression_sequence() {
         let pattern = RegexpPattern::compile("^f[ao]+$").expect("regexp should compile");
+        let pieces = &pattern.expression.alternatives[0].pieces;
 
         assert_eq!(pattern.expression.alternatives.len(), 1);
-        assert_eq!(pattern.expression.alternatives[0].pieces.len(), 4);
+        assert_eq!(pieces.len(), 4);
+        assert_eq!(pieces[0], Piece::AnchorStart);
+        assert_eq!(pieces[3], Piece::AnchorEnd);
+        assert_eq!(consume_literal(&pieces[1]), Some(('f', Quantifier::One)));
+        assert!(matches!(
+            pieces[2],
+            Piece::Consume {
+                atom: Atom::Class(_),
+                quantifier: Quantifier::OneOrMore,
+            }
+        ));
+    }
+
+    #[test]
+    fn regexp_parser_preserves_escaped_metacharacters_as_literals() {
+        let pattern = RegexpPattern::compile(r"\.\*\+\?\^\$\[\]").expect("regexp should compile");
+        let pieces = &pattern.expression.alternatives[0].pieces;
+        let literals = pieces
+            .iter()
+            .map(consume_literal)
+            .collect::<Option<Vec<_>>>()
+            .expect("all pieces should be literal atoms");
+
+        assert_eq!(
+            literals,
+            ['.', '*', '+', '?', '^', '$', '[', ']']
+                .map(|character| (character, Quantifier::One))
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn regexp_parser_keeps_future_emacs_syntax_bare_literals() {
+        let pattern = RegexpPattern::compile("(){}|").expect("regexp should compile");
+        let pieces = &pattern.expression.alternatives[0].pieces;
+        let literals = pieces
+            .iter()
+            .map(consume_literal)
+            .collect::<Option<Vec<_>>>()
+            .expect("all pieces should be literal atoms");
+
+        assert_eq!(
+            literals,
+            ['(', ')', '{', '}', '|']
+                .map(|character| (character, Quantifier::One))
+                .to_vec()
+        );
+    }
+
+    #[test]
+    fn regexp_parser_attaches_quantifiers_to_previous_atoms() {
+        let pattern = RegexpPattern::compile("a?b*c+").expect("regexp should compile");
+        let pieces = &pattern.expression.alternatives[0].pieces;
+
+        assert_eq!(
+            pieces
+                .iter()
+                .map(consume_literal)
+                .collect::<Option<Vec<_>>>(),
+            Some(vec![
+                ('a', Quantifier::ZeroOrOne),
+                ('b', Quantifier::ZeroOrMore),
+                ('c', Quantifier::OneOrMore),
+            ])
+        );
+    }
+
+    fn consume_literal(piece: &Piece) -> Option<(char, Quantifier)> {
+        match piece {
+            Piece::Consume {
+                atom: Atom::Literal(character),
+                quantifier,
+            } => Some((*character, *quantifier)),
+            _ => None,
+        }
     }
 
     #[test]

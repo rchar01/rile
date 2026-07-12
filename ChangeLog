@@ -9,7 +9,8 @@
 	(Expression::sequence, Expression::match_from, Sequence::match_from): New
 	helpers.
 	(Parser::parse): Return an expression.
-	(tests): Cover expression sequence construction.
+	(tests): Cover expression sequence construction, escaped metacharacter
+	literals, future-syntax bare literals, and quantifier attachment.
 	* docs/plans/regexp-module-upgrade-plan.md: Record Phase 1 progress.
 
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
