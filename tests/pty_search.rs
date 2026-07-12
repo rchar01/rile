@@ -143,6 +143,22 @@ fn regexp_incremental_search_uses_smart_case() -> Result<()> {
 }
 
 #[test]
+fn regexp_incremental_search_smart_case_ignores_escaped_uppercase() -> Result<()> {
+    let file = fixtures::named_temp_file("!Cat\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("!Cat")?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("escaped uppercase regexp", br"\Wcat")?;
+    rile.assert_screen_contains(r"Regexp I-search: \Wcat")?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn regexp_incremental_search_uses_groups_alternation_and_counts() -> Result<()> {
     let file = fixtures::named_temp_file("xx cats\nxx dogs\nxx dogss\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -408,6 +424,26 @@ fn query_replace_regexp_uses_word_and_posix_classes() -> Result<()> {
 
     rile.wait_for_screen_contains("hit concatenate bob_cat hit")?;
     rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn query_replace_regexp_uses_smart_case_matching() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", b"status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("state state state")?;
+    rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
     Ok(())

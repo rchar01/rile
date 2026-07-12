@@ -19,8 +19,10 @@
 	(tests): Cover literal and regexp smart-case behavior.
 	* tests/pty_search.rs (incremental_search_uses_smart_case)
 	(regexp_incremental_search_uses_smart_case)
+	(regexp_incremental_search_smart_case_ignores_escaped_uppercase)
 	(query_replace_uses_smart_case_matching)
 	(replace_regexp_uses_smart_case_matching)
+	(query_replace_regexp_uses_smart_case_matching)
 	(query_replace_smart_case_keeps_uppercase_search_exact)
 	(query_replace_regexp_smart_case_keeps_uppercase_search_exact)
 	(replace_regexp_smart_case_keeps_uppercase_search_exact): New tests.
