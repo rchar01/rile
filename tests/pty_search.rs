@@ -136,6 +136,12 @@ fn regexp_incremental_search_uses_word_and_posix_classes() -> Result<()> {
     rile.assert_status_contains("Ln 003 Col 000")?;
     rile.send("Enter", keys::ENTER)?;
 
+    rile.send("C-M-r", keys::ctrl_meta('r'))?;
+    rile.send("regexp", br"\<cat\>")?;
+    rile.assert_screen_contains(r"Regexp I-search backward: \<cat\>")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
     rile.quit()?;
     Ok(())
 }
