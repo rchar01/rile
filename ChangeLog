@@ -1,3 +1,30 @@
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
+	Add noninteractive regexp replacement.
+
+	* src/command.rs (Command): Add ReplaceRegexp.
+	(default_doc_for_command, default_commands): Register replace-regexp.
+	* src/minibuffer.rs (PromptKind): Add replace-regexp prompts.
+	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include the
+	replace-regexp prompts.
+	(tests): Cover separate replace-regexp prompt histories.
+	* src/editor.rs (ReplaceRegexpState): New type.
+	(command_replace_regexp, start_replace_regexp,
+	submit_replace_regexp_search, submit_replace_regexp_replacement,
+	replace_regexp_matches): New helpers.
+	(compile_replacement_pattern): New helper shared by replacement commands.
+	(submit_query_replace_search): Use it.
+	(tests): Cover replace-regexp replacement, errors, prompt history, and undo.
+	* tests/pty_search.rs (replace_regexp_replaces_matches,
+	replace_regexp_history_recalls_search_and_replacement): New tests.
+	* README.md: Document replace-regexp.
+	* NEWS: Mention replace-regexp.
+	* docs/development.md: Document the implemented subset and limits.
+	* docs/emacs-function-reference.md (replace-regexp): New entry.
+	* docs/README.md: Remove the completed replace-regexp plan link.
+	* docs/plans/replace-regexp-plan.md: Remove completed plan.
+	* docs/plans/regexp-module-upgrade-plan.md: Update current context.
+
 2026-07-11  Robert Charusta  <rch-public@posteo.net>
 
 	Add interactive regexp query replace.

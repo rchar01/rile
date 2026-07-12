@@ -184,6 +184,10 @@ Basic editor keys:
   regexp incremental search. Replacement text is literal in this first subset,
   so replacement escapes such as `\1` and `\&` are not expanded. Regexps that
   can match empty text are rejected for replacement.
+- `M-x replace-regexp` prompts for a regexp and replacement string, then replaces
+  all matches from point to the end of the buffer without asking at each match.
+  It uses the same line-local regexp subset and literal replacement text as
+  `query-replace-regexp`.
 - `M-p` and `M-n` recall accepted query-replace search and replacement prompt
   history while editing those prompts. Literal and regexp query-replace prompts
   keep separate histories.

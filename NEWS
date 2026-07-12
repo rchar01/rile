@@ -12,6 +12,10 @@ Interface features:
 
 Editing features:
 
+* `replace-regexp` is now available through `M-x`. It replaces regexp matches
+  from point to the end of the buffer using Rile's built-in line-local regexp
+  subset and literal replacement text.
+
 * `query-replace-regexp` is now available through `C-M-%` and `M-x`. It uses
   Rile's built-in line-local regexp subset with literal replacement text, keeps
   separate regexp prompt history, and rejects regexps that can match empty text.

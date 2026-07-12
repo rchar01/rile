@@ -59,9 +59,8 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
   metacharacters, and character classes with ranges and negation.
 - Current code has no AST, no alternation, no groups, no captures, and no
   replacement-expansion API.
-- `query-replace-regexp` intentionally uses literal replacement text today.
-- `replace-regexp` is planned separately and can initially use literal
-  replacement text before this upgrade lands.
+- `query-replace-regexp` and `replace-regexp` intentionally use literal
+  replacement text today.
 
 ## Assumptions
 

@@ -32,6 +32,4 @@ This directory contains maintainer and contributor documentation for Rile.
   architecture documentation.
 - [Regexp Module Upgrade Plan](plans/regexp-module-upgrade-plan.md): active plan
   for growing Rile's regexp engine into a practical Emacs-aligned subset.
-- [Replace Regexp Plan](plans/replace-regexp-plan.md): active plan for adding
-  non-interactive regexp replacement through `M-x replace-regexp`.
 Completed implementation plans should not remain here as permanent docs. When a plan finishes, move durable guidance into a guide and rely on Git history for the original checklist.

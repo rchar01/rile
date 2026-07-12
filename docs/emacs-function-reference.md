@@ -193,6 +193,50 @@ zero-width rejection, and literal replacement text.
 Notes: rejecting zero-width regexps is intentionally conservative. It avoids
 replacement loops until Rile has a deliberate empty-match advancement policy.
 
+### `replace-regexp`
+
+Status: `partial` in Rile.
+
+Default binding: none.
+
+Purpose: prompt for a regular expression and replacement string, then replace all
+remaining matches without asking at each match.
+
+Prompt flow: Rile prompts `Replace regexp: ` for the regexp, then prompts
+`Replace regexp <regexp> with: ` for replacement text. Accepted search and
+replacement prompts use history separate from query-replace-regexp prompts.
+
+Prefix argument behavior: Rile does not implement Emacs prefix variants for this
+command.
+
+Region behavior: Rile operates from point through the current buffer and does not
+wrap.
+
+Point after command: point lands after the final replacement. If there are no
+matches, point remains at its original location.
+
+Undo behavior: each replacement records undo information through the normal
+buffer-local undo path.
+
+Read-only behavior: should refuse modifications in read-only buffers through the
+normal Rile read-only guard before prompting.
+
+Messages: invalid regexps report `Error: invalid regexp`. Regexps that can match
+empty text report `Error: regexp can match empty string`. Completion reports
+`Replaced N occurrences` or `No matches for <regexp>`.
+
+Rile target: intentional first subset. Matching uses the same line-local regexp
+subset as regexp incremental search. Replacement text is literal; Emacs
+replacement escapes such as `\1`, `\&`, `\,(...)`, and case-conversion
+directives are not expanded yet.
+
+Evidence: GNU Emacs command name; Rile unit and PTY tests for command dispatch,
+prompt history, regexp replacement from point, no-match reporting, invalid
+patterns, zero-width rejection, undo, and literal replacement text.
+
+Notes: Rile implements `replace-regexp` after `query-replace-regexp` so both can
+share the same regexp validation and later capture-expansion work.
+
 ### `isearch-forward-regexp` / `isearch-backward-regexp`
 
 Status: `implemented` in Rile as a small regexp subset.
