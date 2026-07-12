@@ -101,6 +101,28 @@ fn regexp_incremental_search_uses_groups_alternation_and_counts() -> Result<()> 
 }
 
 #[test]
+fn regexp_incremental_search_uses_word_and_posix_classes() -> Result<()> {
+    let file = fixtures::named_temp_file("concatenate\ncat 1234\nbob_cat\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("concatenate")?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", br"\<cat\>")?;
+    rile.assert_screen_contains(r"Regexp I-search: \<cat\>")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", br"[[:digit:]]\{2,4\}")?;
+    rile.assert_screen_contains(r"Regexp I-search: [[:digit:]]\{2,4\}")?;
+    rile.assert_status_contains("Ln 002 Col 004")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn incremental_search_history_recalls_with_meta_keys() -> Result<()> {
     let file = fixtures::named_temp_file("foo\nbar\nféo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -312,6 +334,25 @@ fn replace_regexp_uses_groups_alternation_and_counts() -> Result<()> {
 
     rile.wait_for_screen_contains("pet pet pet cots")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_uses_word_and_posix_classes() -> Result<()> {
+    let file = fixtures::named_temp_file("cat concatenate bob_cat 1234\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("cat concatenate bob_cat 1234")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", br"\<cat\>\|[[:digit:]]\{2,4\}")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"hit")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("hit concatenate bob_cat hit")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
 
     rile.quit()?;
     Ok(())
