@@ -130,6 +130,7 @@ enum Atom {
     Any,
     Literal(char),
     Class(CharacterClass),
+    Group(Expression),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,70 +228,71 @@ impl RegexpPattern {
 }
 
 impl Expression {
-    fn sequence(pieces: Vec<Piece>) -> Self {
-        Self {
-            alternatives: vec![Sequence { pieces }],
-        }
+    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
+        self.match_ends(slots, start_slot).into_iter().next()
     }
 
-    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
+    fn match_ends(&self, slots: &[CharSlot], start_slot: usize) -> Vec<usize> {
         self.alternatives
             .iter()
-            .find_map(|alternative| alternative.match_from(slots, start_slot))
+            .flat_map(|alternative| alternative.match_ends(slots, start_slot))
+            .collect()
     }
 }
 
 impl Sequence {
-    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
-        self.match_piece(slots, 0, start_slot)
+    fn match_ends(&self, slots: &[CharSlot], start_slot: usize) -> Vec<usize> {
+        self.match_piece_ends(slots, 0, start_slot)
     }
 
-    fn match_piece(
+    fn match_piece_ends(
         &self,
         slots: &[CharSlot],
         piece_index: usize,
         slot_index: usize,
-    ) -> Option<usize> {
+    ) -> Vec<usize> {
         let Some(piece) = self.pieces.get(piece_index) else {
-            return Some(slot_index);
+            return vec![slot_index];
         };
         match piece {
             Piece::AnchorStart => {
-                (slot_index == 0).then(|| self.match_piece(slots, piece_index + 1, slot_index))?
+                if slot_index == 0 {
+                    self.match_piece_ends(slots, piece_index + 1, slot_index)
+                } else {
+                    Vec::new()
+                }
             }
-            Piece::AnchorEnd => (slot_index == slots.len())
-                .then(|| self.match_piece(slots, piece_index + 1, slot_index))?,
-            Piece::Consume { atom, quantifier } => {
-                self.match_consume(slots, piece_index, slot_index, atom, *quantifier)
+            Piece::AnchorEnd => {
+                if slot_index == slots.len() {
+                    self.match_piece_ends(slots, piece_index + 1, slot_index)
+                } else {
+                    Vec::new()
+                }
             }
+            Piece::Consume { atom, quantifier } => self
+                .repeat_end_slots(slots, slot_index, atom, *quantifier)
+                .into_iter()
+                .flat_map(|next_slot| self.match_piece_ends(slots, piece_index + 1, next_slot))
+                .collect(),
         }
     }
 
-    fn match_consume(
+    fn repeat_end_slots(
         &self,
         slots: &[CharSlot],
-        piece_index: usize,
         slot_index: usize,
         atom: &Atom,
         quantifier: Quantifier,
-    ) -> Option<usize> {
-        let max = max_repetitions(slots, slot_index, atom);
+    ) -> Vec<usize> {
         let (minimum, maximum) = match quantifier {
             Quantifier::One => (1, 1),
-            Quantifier::ZeroOrMore => (0, max),
-            Quantifier::OneOrMore => (1, max),
-            Quantifier::ZeroOrOne => (0, max.min(1)),
+            Quantifier::ZeroOrMore => (0, slots.len().saturating_sub(slot_index)),
+            Quantifier::OneOrMore => (1, slots.len().saturating_sub(slot_index)),
+            Quantifier::ZeroOrOne => (0, 1),
         };
-        if max < minimum {
-            return None;
-        }
-        for count in (minimum..=maximum).rev() {
-            let next_slot = slot_index + count;
-            if let Some(end) = self.match_piece(slots, piece_index + 1, next_slot) {
-                return Some(end);
-            }
-        }
-        None
+        let mut results = Vec::new();
+        collect_repetition_ends(slots, slot_index, atom, 0, minimum, maximum, &mut results);
+        results
     }
 }
 
@@ -300,6 +302,18 @@ impl Atom {
             Self::Any => true,
             Self::Literal(literal) => *literal == character,
             Self::Class(class) => class.matches(character),
+            Self::Group(_) => false,
+        }
+    }
+
+    fn match_ends(&self, slots: &[CharSlot], slot_index: usize) -> Vec<usize> {
+        match self {
+            Self::Any | Self::Literal(_) | Self::Class(_) => slots
+                .get(slot_index)
+                .filter(|slot| self.matches(slot.character))
+                .map(|_| vec![slot_index + 1])
+                .unwrap_or_default(),
+            Self::Group(expression) => expression.match_ends(slots, slot_index),
         }
     }
 }
@@ -330,8 +344,25 @@ impl<'a> Parser<'a> {
     }
 
     fn parse(&mut self) -> Result<Expression, PatternError> {
+        self.parse_expression(false)
+    }
+
+    fn parse_expression(&mut self, in_group: bool) -> Result<Expression, PatternError> {
+        let mut alternatives = Vec::new();
         let mut pieces = Vec::new();
-        while let Some(character) = self.next() {
+        while self.peek().is_some() {
+            match self.peek_escaped() {
+                Some(')') if in_group => break,
+                Some(')') => return Err(PatternError::new("unmatched group close")),
+                Some('|') => {
+                    self.index += 2;
+                    alternatives.push(Sequence { pieces });
+                    pieces = Vec::new();
+                    continue;
+                }
+                _ => {}
+            }
+            let character = self.next().expect("peek should have found character");
             let piece = match character {
                 '^' => Piece::AnchorStart,
                 '$' => Piece::AnchorEnd,
@@ -344,7 +375,18 @@ impl<'a> Parser<'a> {
                     let literal = self
                         .next()
                         .ok_or_else(|| PatternError::new("trailing escape"))?;
-                    self.consume_piece(Atom::Literal(literal))?
+                    match literal {
+                        '(' => {
+                            let expression = self.parse_expression(true)?;
+                            if self.peek_escaped() != Some(')') {
+                                return Err(PatternError::new("unterminated group"));
+                            }
+                            self.index += 2;
+                            self.consume_piece(Atom::Group(expression))?
+                        }
+                        ')' => return Err(PatternError::new("unmatched group close")),
+                        literal => self.consume_piece(Atom::Literal(literal))?,
+                    }
                 }
                 '*' | '+' | '?' => {
                     return Err(PatternError::new("missing atom before quantifier"));
@@ -353,7 +395,8 @@ impl<'a> Parser<'a> {
             };
             pieces.push(piece);
         }
-        Ok(Expression::sequence(pieces))
+        alternatives.push(Sequence { pieces });
+        Ok(Expression { alternatives })
     }
 
     fn consume_piece(&mut self, atom: Atom) -> Result<Piece, PatternError> {
@@ -432,17 +475,37 @@ impl<'a> Parser<'a> {
     fn peek_next(&self) -> Option<char> {
         self.chars.get(self.index + 1).copied()
     }
+
+    fn peek_escaped(&self) -> Option<char> {
+        (self.peek() == Some('\\'))
+            .then(|| self.peek_next())
+            .flatten()
+    }
 }
 
-fn max_repetitions(slots: &[CharSlot], slot_index: usize, atom: &Atom) -> usize {
-    let mut count = 0;
-    while slots
-        .get(slot_index + count)
-        .is_some_and(|slot| atom.matches(slot.character))
-    {
-        count += 1;
+fn collect_repetition_ends(
+    slots: &[CharSlot],
+    slot_index: usize,
+    atom: &Atom,
+    count: usize,
+    minimum: usize,
+    maximum: usize,
+    results: &mut Vec<usize>,
+) {
+    if count < maximum {
+        for end_slot in atom.match_ends(slots, slot_index) {
+            if end_slot == slot_index {
+                if count + 1 >= minimum {
+                    results.push(end_slot);
+                }
+                continue;
+            }
+            collect_repetition_ends(slots, end_slot, atom, count + 1, minimum, maximum, results);
+        }
     }
-    count
+    if count >= minimum {
+        results.push(slot_index);
+    }
 }
 
 fn char_slots(line: &str) -> Vec<CharSlot> {
@@ -505,7 +568,7 @@ mod tests {
     #[test]
     fn regexp_parser_preserves_escaped_metacharacters_as_literals() {
         let pattern =
-            RegexpPattern::compile(r"\.\*\+\?\^\$\[\]\(\)\{\}\|").expect("regexp should compile");
+            RegexpPattern::compile(r"\.\*\+\?\^\$\[\]\{\}").expect("regexp should compile");
         let pieces = &pattern.expression.alternatives[0].pieces;
         let literals = pieces
             .iter()
@@ -515,11 +578,9 @@ mod tests {
 
         assert_eq!(
             literals,
-            [
-                '.', '*', '+', '?', '^', '$', '[', ']', '(', ')', '{', '}', '|'
-            ]
-            .map(|character| (character, Quantifier::One))
-            .to_vec()
+            ['.', '*', '+', '?', '^', '$', '[', ']', '{', '}']
+                .map(|character| (character, Quantifier::One))
+                .to_vec()
         );
     }
 
@@ -559,6 +620,39 @@ mod tests {
         );
     }
 
+    #[test]
+    fn regexp_parser_builds_alternatives() {
+        let pattern = RegexpPattern::compile(r"foo\|bar\|baz").expect("regexp should compile");
+
+        assert_eq!(pattern.expression.alternatives.len(), 3);
+        assert_eq!(
+            literal_text(&pattern.expression.alternatives[0].pieces),
+            "foo"
+        );
+        assert_eq!(
+            literal_text(&pattern.expression.alternatives[1].pieces),
+            "bar"
+        );
+        assert_eq!(
+            literal_text(&pattern.expression.alternatives[2].pieces),
+            "baz"
+        );
+    }
+
+    #[test]
+    fn regexp_parser_builds_grouped_alternatives() {
+        let pattern = RegexpPattern::compile(r"a\(bc\|d\)e").expect("regexp should compile");
+        let pieces = &pattern.expression.alternatives[0].pieces;
+        let group = consume_group(&pieces[1]).expect("middle piece should be a group");
+
+        assert_eq!(pieces.len(), 3);
+        assert_eq!(consume_literal(&pieces[0]), Some(('a', Quantifier::One)));
+        assert_eq!(consume_literal(&pieces[2]), Some(('e', Quantifier::One)));
+        assert_eq!(group.alternatives.len(), 2);
+        assert_eq!(literal_text(&group.alternatives[0].pieces), "bc");
+        assert_eq!(literal_text(&group.alternatives[1].pieces), "d");
+    }
+
     fn consume_literal(piece: &Piece) -> Option<(char, Quantifier)> {
         match piece {
             Piece::Consume {
@@ -567,6 +661,24 @@ mod tests {
             } => Some((*character, *quantifier)),
             _ => None,
         }
+    }
+
+    fn consume_group(piece: &Piece) -> Option<&super::Expression> {
+        match piece {
+            Piece::Consume {
+                atom: Atom::Group(expression),
+                quantifier: Quantifier::One,
+            } => Some(expression),
+            _ => None,
+        }
+    }
+
+    fn literal_text(pieces: &[Piece]) -> String {
+        pieces
+            .iter()
+            .map(|piece| consume_literal(piece).map(|(character, _)| character))
+            .collect::<Option<String>>()
+            .expect("all pieces should be literal atoms")
     }
 
     #[test]
@@ -629,6 +741,34 @@ mod tests {
     }
 
     #[test]
+    fn regexp_supports_alternation_and_groups() {
+        assert_eq!(
+            regexp(r"cat\|dog").find_forward_in_line("fox dog cat", 0),
+            Some((4, 7))
+        );
+        assert_eq!(
+            regexp(r"fo\(o\|x\)").match_ranges_in_line("foo fox fob"),
+            vec![(0, 3), (4, 7)]
+        );
+        assert_eq!(
+            regexp(r"\(ab\|a\)b").find_forward_in_line("ab", 0),
+            Some((0, 2))
+        );
+        assert_eq!(
+            regexp(r"\(ab\)+").find_forward_in_line("xx abab", 0),
+            Some((3, 7))
+        );
+    }
+
+    #[test]
+    fn regexp_supports_nested_groups() {
+        assert_eq!(
+            regexp(r"a\(b\(c\|d\)\|e\)f").match_ranges_in_line("abcf abdf aef"),
+            vec![(0, 4), (5, 9), (10, 13)]
+        );
+    }
+
+    #[test]
     fn regexp_uses_utf8_safe_byte_ranges() {
         assert_eq!(regexp("é.").find_forward_in_line("x éa", 0), Some((2, 5)));
         assert_eq!(
@@ -684,7 +824,9 @@ mod tests {
 
     #[test]
     fn regexp_reports_invalid_patterns() {
-        for pattern in ["\\", "[abc", "[]", "[z-a]", "*a", "a**"] {
+        for pattern in [
+            "\\", r"\(", r"\)", r"\(abc", "[abc", "[]", "[z-a]", "*a", "a**",
+        ] {
             assert!(
                 SearchPattern::compile(PatternKind::Regexp, pattern).is_err(),
                 "{pattern} should be invalid"
