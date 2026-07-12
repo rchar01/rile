@@ -202,6 +202,26 @@ fn query_replace_regexp_expands_replacement_captures() -> Result<()> {
 }
 
 #[test]
+fn query_replace_regexp_preserves_unsupported_escapes_and_utf8() -> Result<()> {
+    let file = fixtures::named_temp_file("éx bar\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("éx bar")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", "\\(éx\\)\\|\\(bar\\)".as_bytes())?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", br"\1/\2/\9/\\/\q")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains(r"éx///\/\q /bar//\/\q")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn query_replace_regexp_rejects_invalid_and_zero_width_patterns() -> Result<()> {
     let file = fixtures::named_temp_file("foo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

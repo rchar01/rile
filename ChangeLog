@@ -6,7 +6,8 @@
 	* src/editor/search.rs (find_pattern_match): Document why backward matches
 	drop captures.
 	* tests/pty_search.rs
-	(replace_regexp_preserves_unsupported_escapes_and_utf8): New test.
+	(query_replace_regexp_preserves_unsupported_escapes_and_utf8,
+	replace_regexp_preserves_unsupported_escapes_and_utf8): New tests.
 	* docs/emacs-function-reference.md: Fix stale replacement-expansion note.
 
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
