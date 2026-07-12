@@ -1024,6 +1024,17 @@ mod tests {
     }
 
     #[test]
+    fn regexp_match_clears_nested_capture_from_abandoned_branch() {
+        let pattern = RegexpPattern::compile(r"\(\(a\)b\|a\)c").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("ac", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 2));
+        assert_eq!(regexp_match.captures, vec![Some((0, 1)), None]);
+    }
+
+    #[test]
     fn regexp_match_reports_last_repeated_capture() {
         let pattern = RegexpPattern::compile(r"\(ab\)+").expect("regexp should compile");
         let regexp_match = pattern

@@ -4,6 +4,7 @@
 
 	* src/search_pattern.rs
 	(regexp_match_clears_capture_when_backtracking_skips_optional_group,
+	regexp_match_clears_nested_capture_from_abandoned_branch,
 	regexp_match_reports_zero_width_repeated_capture): New tests.
 
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
