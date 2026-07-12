@@ -292,6 +292,26 @@ fn query_replace_regexp_expands_replacement_captures() -> Result<()> {
 }
 
 #[test]
+fn query_replace_regexp_uses_word_and_posix_classes() -> Result<()> {
+    let file = fixtures::named_temp_file("cat concatenate bob_cat 1234\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("cat concatenate bob_cat 1234")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", br"\<cat\>\|[[:digit:]]\{2,4\}")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"hit")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("hit concatenate bob_cat hit")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn query_replace_regexp_preserves_unsupported_escapes_and_utf8() -> Result<()> {
     let file = fixtures::named_temp_file("éx bar\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

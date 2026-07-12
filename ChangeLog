@@ -1,5 +1,15 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp architecture validation.
+
+	* tests/source_architecture.rs: New test file.
+	(regexp_engine_is_private_to_search_pattern_module)
+	(crate_does_not_depend_on_external_regex_engine): New tests.
+	* tests/pty_search.rs
+	(query_replace_regexp_uses_word_and_posix_classes): New test.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add regexp conformance tests.
 
 	* src/search_pattern.rs (tests): Add a documented-subset conformance
