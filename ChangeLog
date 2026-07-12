@@ -6,6 +6,8 @@
 	(regexp_incremental_search_uses_groups_alternation_and_counts,
 	replace_regexp_uses_groups_alternation_and_counts): New tests.
 	* README.md: Clarify bare and escaped regexp punctuation.
+	* docs/development.md: Likewise.
+	* docs/emacs-function-reference.md: Likewise.
 
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 

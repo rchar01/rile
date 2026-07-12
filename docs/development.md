@@ -506,10 +506,11 @@ incremental search, regexp query replace, and `replace-regexp` use Rile's
 built-in line-local subset: `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style grouping
 `\(...\)`, alternation `\|`, counted repetition `\{m\}`, `\{m,\}`, and
 `\{m,n\}`, escaped metacharacters, and character classes with ranges and
-negation. Regexp replacement commands currently use literal replacement text
-only and reject patterns that can match empty text. Search wraps only after an
-explicit boundary failure, replacement commands do not wrap, and no search
-command matches across line breaks.
+negation. Bare `(`, `)`, `{`, `}`, and `|` match literally. Regexp replacement
+commands currently use literal replacement text only and reject patterns that can
+match empty text. Search wraps only after an explicit boundary failure,
+replacement commands do not wrap, and no search command matches across line
+breaks.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail
