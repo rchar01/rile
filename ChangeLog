@@ -1,5 +1,27 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Track regexp captures internally.
+
+	* src/search_pattern.rs (RegexpPattern): Store capture count.
+	(Atom): Store group indexes.
+	(RegexpMatch, MatchState): New types.
+	(RegexpPattern::find_forward_match, RegexpPattern::match_state_from,
+	RegexpPattern::build_match): New helpers.
+	(RegexpPattern::find_forward, RegexpPattern::find_backward,
+	RegexpPattern::match_ranges, RegexpPattern::match_from): Preserve range-only
+	API behavior through match-state wrappers.
+	(Expression::match_states, Sequence::match_states,
+	Sequence::match_piece_states, Sequence::repeat_matches,
+	Atom::match_states): Track capture state through matching and backtracking.
+	(Parser): Count and number groups.
+	(collect_repetition_matches): New helper.
+	(tests): Cover simple, nested, unmatched, repeated, backtracked, and UTF-8
+	capture ranges.
+	* docs/emacs-function-reference.md: Document internal-only capture tracking.
+	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 3 complete.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add command-level regexp syntax coverage.
 
 	* tests/pty_search.rs

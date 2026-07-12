@@ -59,14 +59,15 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 - Existing regexp support includes `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style
   grouping, alternation, counted repetition, escaped metacharacters, and
   character classes with ranges and negation.
-- Current code has no captures and no replacement-expansion API.
+- Current code tracks numbered captures internally but has no
+  replacement-expansion API yet.
 - `query-replace-regexp` and `replace-regexp` intentionally use literal
   replacement text today.
 
 ## Assumptions
 
 - The small expression/sequence AST should remain the internal representation as
-  capture tracking and replacement expansion are added.
+  replacement expansion is added.
 - Matching should stay line-local until there is a separate design for multiline
   buffer-spanning matches.
 - Captures should be represented as byte ranges into the original line text.
@@ -127,19 +128,19 @@ Goal: Return enough match information for replacement expansion.
 
 Tasks:
 
-- [ ] Introduce a match result that includes the whole-match byte range and
+- [x] Introduce a match result that includes the whole-match byte range and
   numbered capture ranges.
-- [ ] Preserve the existing public search-pattern APIs where callers only need a
+- [x] Preserve the existing public search-pattern APIs where callers only need a
   range, or migrate callers minimally.
-- [ ] Track captures through backtracking without exposing invalid UTF-8 byte
+- [x] Track captures through backtracking without exposing invalid UTF-8 byte
   boundaries.
-- [ ] Add tests for captures, unmatched captures, nested captures, and repeated
+- [x] Add tests for captures, unmatched captures, nested captures, and repeated
   captures.
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
-- [ ] Run existing search and query-replace focused tests.
+- [x] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
+- [x] Run existing search and query-replace focused tests.
 
 ## Phase 4: Replacement Expansion
 
@@ -238,6 +239,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-07-12 | Phase 3 internal match objects and numbered capture ranges completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 2 grouping, alternation, and counted repetition completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 1 AST foundation completed without user-visible regexp changes. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern`, `./scripts/in-container cargo test --locked --lib regexp`, and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Plan created for a practical Emacs-aligned regexp subset. | User requested a durable plan in `docs/plans/`; current `src/search_pattern.rs` and regexp docs inspected. |
