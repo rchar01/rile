@@ -13,11 +13,32 @@ pub(super) fn find_match(
     start: Position,
     direction: SearchDirection,
 ) -> Result<Option<TextRange>> {
+    Ok(find_pattern_match(buffer, pattern, start, direction)?
+        .map(|pattern_match| pattern_match.range))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct EditorPatternMatch {
+    pub(super) range: TextRange,
+    pub(super) captures: Vec<Option<TextRange>>,
+}
+
+pub(super) fn find_pattern_match(
+    buffer: &Buffer,
+    pattern: &SearchPattern,
+    start: Position,
+    direction: SearchDirection,
+) -> Result<Option<EditorPatternMatch>> {
     buffer.validate_position(start)?;
 
     match direction {
         SearchDirection::Forward => find_forward(buffer, pattern, start),
-        SearchDirection::Backward => find_backward(buffer, pattern, start),
+        SearchDirection::Backward => find_backward(buffer, pattern, start).map(|range| {
+            range.map(|range| EditorPatternMatch {
+                range,
+                captures: Vec::new(),
+            })
+        }),
     }
 }
 
@@ -25,7 +46,7 @@ fn find_forward(
     buffer: &Buffer,
     pattern: &SearchPattern,
     start: Position,
-) -> Result<Option<TextRange>> {
+) -> Result<Option<EditorPatternMatch>> {
     for line_index in start.line..buffer.line_count() {
         let line = buffer.line(line_index).expect("line index is in range");
         let minimum_byte = if line_index == start.line {
@@ -33,11 +54,25 @@ fn find_forward(
         } else {
             0
         };
-        if let Some((match_start, match_end)) = pattern.find_forward_in_line(line, minimum_byte) {
-            return Ok(Some(TextRange::new(
-                Position::new(line_index, match_start),
-                Position::new(line_index, match_end),
-            )));
+        if let Some(pattern_match) = pattern.find_forward_match_in_line(line, minimum_byte) {
+            return Ok(Some(EditorPatternMatch {
+                range: TextRange::new(
+                    Position::new(line_index, pattern_match.range.0),
+                    Position::new(line_index, pattern_match.range.1),
+                ),
+                captures: pattern_match
+                    .captures
+                    .into_iter()
+                    .map(|range| {
+                        range.map(|(start, end)| {
+                            TextRange::new(
+                                Position::new(line_index, start),
+                                Position::new(line_index, end),
+                            )
+                        })
+                    })
+                    .collect(),
+            }));
         }
     }
     Ok(None)

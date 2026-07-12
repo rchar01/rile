@@ -182,6 +182,26 @@ fn query_replace_regexp_replaces_matches() -> Result<()> {
 }
 
 #[test]
+fn query_replace_regexp_expands_replacement_captures() -> Result<()> {
+    let file = fixtures::named_temp_file("foo-bar baz-qux\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo-bar baz-qux")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", br"\([a-z]+\)-\([a-z]+\)")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", br"\2/\1")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("bar/foo qux/baz")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn query_replace_regexp_rejects_invalid_and_zero_width_patterns() -> Result<()> {
     let file = fixtures::named_temp_file("foo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -272,6 +292,25 @@ fn replace_regexp_uses_groups_alternation_and_counts() -> Result<()> {
 
     rile.wait_for_screen_contains("pet pet pet cots")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_expands_whole_match_and_captures() -> Result<()> {
+    let file = fixtures::named_temp_file("foo-bar foo-baz\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo-bar foo-baz")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", br"\(foo\)-\([a-z]+\)")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", br"[\&]=\2/\1")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("[foo-bar]=bar/foo [foo-baz]=baz/foo")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
 
     rile.quit()?;
     Ok(())

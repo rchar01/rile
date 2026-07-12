@@ -27,6 +27,12 @@ pub(crate) struct SearchPattern {
     regexp: Option<RegexpPattern>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PatternMatch {
+    pub(crate) range: (usize, usize),
+    pub(crate) captures: Vec<Option<(usize, usize)>>,
+}
+
 impl SearchPattern {
     pub(crate) fn compile(kind: PatternKind, input: &str) -> Result<Self, PatternError> {
         let regexp = match kind {
@@ -40,21 +46,34 @@ impl SearchPattern {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn find_forward_in_line(
         &self,
         line: &str,
         minimum_byte: usize,
     ) -> Option<(usize, usize)> {
+        self.find_forward_match_in_line(line, minimum_byte)
+            .map(|pattern_match| pattern_match.range)
+    }
+
+    pub(crate) fn find_forward_match_in_line(
+        &self,
+        line: &str,
+        minimum_byte: usize,
+    ) -> Option<PatternMatch> {
         match self.kind {
             PatternKind::Literal => line
                 .match_indices(&self.literal)
                 .find(|(start, _)| *start >= minimum_byte)
-                .map(|(start, text)| (start, start + text.len())),
+                .map(|(start, text)| PatternMatch {
+                    range: (start, start + text.len()),
+                    captures: Vec::new(),
+                }),
             PatternKind::Regexp => self
                 .regexp
                 .as_ref()
                 .expect("regexp kind should have compiled pattern")
-                .find_forward(line, minimum_byte),
+                .find_forward_match(line, minimum_byte),
         }
     }
 
@@ -143,6 +162,15 @@ struct RegexpMatch {
     captures: Vec<Option<(usize, usize)>>,
 }
 
+impl From<RegexpMatch> for PatternMatch {
+    fn from(regexp_match: RegexpMatch) -> Self {
+        Self {
+            range: regexp_match.range,
+            captures: regexp_match.captures,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct MatchState {
     end_slot: usize,
@@ -189,16 +217,20 @@ impl RegexpPattern {
         })
     }
 
+    #[cfg(test)]
     fn find_forward(&self, line: &str, minimum_byte: usize) -> Option<(usize, usize)> {
         self.find_forward_match(line, minimum_byte)
             .map(|regexp_match| regexp_match.range)
     }
 
-    fn find_forward_match(&self, line: &str, minimum_byte: usize) -> Option<RegexpMatch> {
+    fn find_forward_match(&self, line: &str, minimum_byte: usize) -> Option<PatternMatch> {
         let slots = char_slots(line);
         for start_slot in start_slots_from_byte(&slots, line.len(), minimum_byte) {
             if let Some(state) = self.match_state_from(&slots, start_slot) {
-                return Some(self.build_match(line.len(), &slots, start_slot, state));
+                return Some(
+                    self.build_match(line.len(), &slots, start_slot, state)
+                        .into(),
+                );
             }
         }
         None

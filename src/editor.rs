@@ -50,7 +50,9 @@ use help::{
     format_unbound_key_help, format_unbound_key_message,
 };
 use prompt_history::PromptHistoryStore;
-use search::{find_match, search_start_after, search_start_before};
+use search::{
+    EditorPatternMatch, find_match, find_pattern_match, search_start_after, search_start_before,
+};
 use search_history::SearchHistoryStore;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -385,7 +387,7 @@ struct QueryReplaceState {
     query: String,
     pattern: SearchPattern,
     replacement: ReplacementTemplate,
-    current: Option<TextRange>,
+    current: Option<EditorPatternMatch>,
     replacements: usize,
     visited: bool,
 }
@@ -399,6 +401,7 @@ struct ReplaceRegexpState {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ReplacementTemplate {
     Literal(String),
+    Regexp(String),
 }
 
 impl ReplacementTemplate {
@@ -406,15 +409,53 @@ impl ReplacementTemplate {
         Self::Literal(text.into())
     }
 
+    fn regexp(text: impl Into<String>) -> Self {
+        Self::Regexp(text.into())
+    }
+
     fn text(&self) -> &str {
         match self {
-            Self::Literal(text) => text,
+            Self::Literal(text) | Self::Regexp(text) => text,
         }
     }
 
-    fn expand(&self) -> String {
-        self.text().to_owned()
+    fn expand(&self, buffer: &Buffer, pattern_match: &EditorPatternMatch) -> Result<String> {
+        match self {
+            Self::Literal(text) => Ok(text.to_owned()),
+            Self::Regexp(text) => expand_regexp_replacement(text, buffer, pattern_match),
+        }
     }
+}
+
+fn expand_regexp_replacement(
+    template: &str,
+    buffer: &Buffer,
+    pattern_match: &EditorPatternMatch,
+) -> Result<String> {
+    let mut expanded = String::new();
+    let mut chars = template.chars();
+    while let Some(character) = chars.next() {
+        if character != '\\' {
+            expanded.push(character);
+            continue;
+        }
+        match chars.next() {
+            Some('&') => expanded.push_str(&buffer.text_in_range(pattern_match.range)?),
+            Some(digit @ '1'..='9') => {
+                let index = digit as usize - '1' as usize;
+                if let Some(Some(range)) = pattern_match.captures.get(index) {
+                    expanded.push_str(&buffer.text_in_range(*range)?);
+                }
+            }
+            Some('\\') => expanded.push('\\'),
+            Some(other) => {
+                expanded.push('\\');
+                expanded.push(other);
+            }
+            None => expanded.push('\\'),
+        }
+    }
+    Ok(expanded)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -833,7 +874,10 @@ impl Editor {
         };
         let query_replace = QueryReplaceDecorator {
             enabled: self.search_highlighting,
-            current: self.query_replace.as_ref().and_then(|state| state.current),
+            current: self
+                .query_replace
+                .as_ref()
+                .and_then(|state| state.current.as_ref().map(|current| current.range)),
         };
         let search = SearchDecorator {
             enabled: self.search_highlighting,
@@ -6504,7 +6548,7 @@ impl Editor {
         };
         self.prompt_history
             .record(PromptKind::ReplaceRegexpReplacement, replacement);
-        let template = ReplacementTemplate::literal(replacement);
+        let template = ReplacementTemplate::regexp(replacement);
         let replacements = self.replace_regexp_matches(&state.pattern, &template)?;
         if replacements == 0 {
             self.minibuffer
@@ -6528,13 +6572,14 @@ impl Editor {
     ) -> Result<usize> {
         let mut replacements = 0;
         let mut start = self.cursor;
-        while let Some(range) = find_match(
+        while let Some(pattern_match) = find_pattern_match(
             self.document().buffer(),
             pattern,
             start,
             SearchDirection::Forward,
         )? {
-            let replacement_text = replacement.expand();
+            let range = pattern_match.range;
+            let replacement_text = replacement.expand(self.document().buffer(), &pattern_match)?;
             let new_end = self.replace_text_range(range, &replacement_text, range.start)?;
             self.cursor = new_end;
             self.goal_display_column = None;
@@ -6582,7 +6627,10 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         };
         let kind = query_replace.kind;
-        query_replace.replacement = ReplacementTemplate::literal(replacement);
+        query_replace.replacement = match kind {
+            PatternKind::Literal => ReplacementTemplate::literal(replacement),
+            PatternKind::Regexp => ReplacementTemplate::regexp(replacement),
+        };
         self.prompt_history
             .record(replacement_prompt_kind(kind), replacement);
         self.advance_query_replace(self.cursor)?;
@@ -6596,11 +6644,15 @@ impl Editor {
                 self.advance_query_replace(next_start)?;
             }
             KeyEvent::Text(text) if text == "n" => {
-                if let Some(current) = self.query_replace.as_ref().and_then(|state| state.current) {
-                    self.cursor = current.end;
+                if let Some(end) = self
+                    .query_replace
+                    .as_ref()
+                    .and_then(|state| state.current.as_ref().map(|current| current.range.end))
+                {
+                    self.cursor = end;
                     self.goal_display_column = None;
                     self.sync_current_window();
-                    self.advance_query_replace(current.end)?;
+                    self.advance_query_replace(end)?;
                 } else {
                     self.finish_query_replace(false);
                 }
@@ -6609,7 +6661,7 @@ impl Editor {
                 while self
                     .query_replace
                     .as_ref()
-                    .and_then(|state| state.current)
+                    .and_then(|state| state.current.as_ref())
                     .is_some()
                 {
                     let next_start = self.replace_query_replace_current()?;
@@ -6634,15 +6686,16 @@ impl Editor {
             return Ok(());
         };
 
-        let found = find_match(
+        let found = find_pattern_match(
             self.document().buffer(),
             &pattern,
             start,
             SearchDirection::Forward,
         )?;
-        if let Some(range) = found {
+        if let Some(pattern_match) = found {
+            let range = pattern_match.range;
             if let Some(state) = &mut self.query_replace {
-                state.current = Some(range);
+                state.current = Some(pattern_match);
                 state.visited = true;
             }
             self.cursor = range.start;
@@ -6681,13 +6734,18 @@ impl Editor {
         if !self.ensure_buffer_editable() {
             return Ok(self.cursor);
         }
-        let Some((old_range, replacement)) = self.query_replace.as_ref().and_then(|state| {
-            state
-                .current
-                .map(|current| (current, state.replacement.expand()))
-        }) else {
+        let Some((pattern_match, replacement_template)) =
+            self.query_replace.as_ref().and_then(|state| {
+                state
+                    .current
+                    .clone()
+                    .map(|current| (current, state.replacement.clone()))
+            })
+        else {
             return Ok(self.cursor);
         };
+        let old_range = pattern_match.range;
+        let replacement = replacement_template.expand(self.document().buffer(), &pattern_match)?;
 
         let old_text = self.document_mut().buffer_mut().delete_range(old_range)?;
         let new_end = self
@@ -18995,7 +19053,7 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn query_replace_regexp_replaces_matches_with_literal_replacement() {
+    fn query_replace_regexp_expands_whole_match_replacement() {
         let mut document = Document::scratch();
         document
             .buffer_mut()
@@ -19025,7 +19083,32 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("!".to_owned()))
             .expect("bang should replace all regexp candidates");
 
-        assert_eq!(editor.document().buffer().serialize(), "x\\& x\\& faa");
+        assert_eq!(editor.document().buffer().serialize(), "xfoo xfxo faa");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Replaced 2 occurrences")
+        );
+    }
+
+    #[test]
+    fn query_replace_regexp_expands_capture_replacement() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo-bar baz-qux")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::CtrlMeta('%'))
+            .expect("regexp query replace should prompt");
+        submit_prompt_text(&mut editor, r"\([a-z]+\)-\([a-z]+\)");
+        submit_prompt_text(&mut editor, r"\2/\1");
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("bang should replace all regexp candidates");
+
+        assert_eq!(editor.document().buffer().serialize(), "bar/foo qux/baz");
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Replaced 2 occurrences")
@@ -19077,7 +19160,7 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
-    fn replace_regexp_replaces_matches_from_point_with_literal_replacement() {
+    fn replace_regexp_expands_whole_match_from_point() {
         let mut document = Document::scratch();
         document
             .buffer_mut()
@@ -19100,8 +19183,33 @@ M-g g           goto-line                      Go to line or line:column\n"
         );
         submit_prompt_text(&mut editor, "x\\&");
 
-        assert_eq!(editor.document().buffer().serialize(), "foo x\\& x\\&");
-        assert_eq!(editor.cursor(), Position::new(0, "foo x\\& x\\&".len()));
+        assert_eq!(editor.document().buffer().serialize(), "foo xfxo xfoo");
+        assert_eq!(editor.cursor(), Position::new(0, "foo xfxo xfoo".len()));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Replaced 2 occurrences")
+        );
+    }
+
+    #[test]
+    fn replace_regexp_expands_captures_and_replacement_escapes() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "foo-bar bar")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("replace-regexp")
+            .expect("replace regexp should prompt");
+        submit_prompt_text(&mut editor, r"\(foo\)-\(bar\)\|\(bar\)");
+        submit_prompt_text(&mut editor, r"\2/\1/\3/\9/\\/\q");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            r"bar/foo///\/\q //bar//\/\q"
+        );
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Replaced 2 occurrences")
