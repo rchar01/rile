@@ -2,14 +2,15 @@
 
 	Add smart-case search matching.
 
-	* src/search_pattern.rs (SearchPattern): Store search case mode.
+	* src/search_pattern.rs (SearchPattern, RepeatBounds): Store search case
+	and repetition modes.
 	(SearchPattern::compile): Select Emacs-style smart case for literal and
 	regexp patterns.
 	(RegexpPattern): Store regexp case mode.
 	(regexp_is_smart_case_sensitive, find_literal_forward_match)
 	(find_literal_forward, find_literal_backward, literal_match_ranges)
 	(literal_match_end, line_boundaries, next_boundary_after, chars_match)
-	(character_in_range, folded_range_character): New helpers.
+	(character_in_range): New helpers.
 	(Expression::match_states, Sequence::match_states)
 	(Sequence::match_piece_states, Sequence::repeat_matches)
 	(Atom::matches, Atom::match_states, CharacterClass::matches)
@@ -19,7 +20,10 @@
 	* tests/pty_search.rs (incremental_search_uses_smart_case)
 	(regexp_incremental_search_uses_smart_case)
 	(query_replace_uses_smart_case_matching)
-	(replace_regexp_uses_smart_case_matching): New tests.
+	(replace_regexp_uses_smart_case_matching)
+	(query_replace_smart_case_keeps_uppercase_search_exact)
+	(query_replace_regexp_smart_case_keeps_uppercase_search_exact)
+	(replace_regexp_smart_case_keeps_uppercase_search_exact): New tests.
 	* README.md: Document smart-case search behavior.
 	* NEWS: Add user-visible smart-case search entry.
 	* docs/development.md: Document smart-case matching and exact replacement

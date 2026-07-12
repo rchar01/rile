@@ -164,9 +164,9 @@ Basic editor keys:
   The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`,
   Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
   `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character
-  classes such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word
-  constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket
-  classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
+  classes such as `[abc]`, `[^abc]`, and ASCII ranges like `[a-z]`. It also
+  supports word constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII
+  POSIX bracket classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
   `[[:lower:]]`, and `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match
   literally; use the escaped Emacs forms for regexp operators. Regexp search uses
   the same smart-case rule as literal search; uppercase regexp characters escaped

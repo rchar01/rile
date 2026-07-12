@@ -184,6 +184,12 @@ struct MatchState {
     captures: Vec<Option<(usize, usize)>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RepeatBounds {
+    minimum: usize,
+    maximum: usize,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CharacterClass {
     negated: bool,
@@ -459,16 +465,8 @@ impl Sequence {
         let maximum =
             maximum.unwrap_or_else(|| slots.len().saturating_sub(state.end_slot).max(minimum));
         let mut results = Vec::new();
-        collect_repetition_matches(
-            slots,
-            case_sensitive,
-            state,
-            atom,
-            0,
-            minimum,
-            maximum,
-            &mut results,
-        );
+        let bounds = RepeatBounds { minimum, maximum };
+        collect_repetition_matches(slots, case_sensitive, state, atom, 0, bounds, &mut results);
         results
     }
 }
@@ -839,25 +837,23 @@ fn collect_repetition_matches(
     state: MatchState,
     atom: &Atom,
     count: usize,
-    minimum: usize,
-    maximum: usize,
+    bounds: RepeatBounds,
     results: &mut Vec<MatchState>,
 ) {
-    if count < maximum {
+    if count < bounds.maximum {
         for next_state in atom.match_states(slots, case_sensitive, state.clone()) {
             if next_state.end_slot == state.end_slot {
-                if count + 1 < maximum {
+                if count + 1 < bounds.maximum {
                     collect_repetition_matches(
                         slots,
                         case_sensitive,
                         next_state,
                         atom,
                         count + 1,
-                        minimum,
-                        maximum,
+                        bounds,
                         results,
                     );
-                } else if count + 1 >= minimum {
+                } else if count + 1 >= bounds.minimum {
                     results.push(next_state);
                 }
                 continue;
@@ -868,13 +864,12 @@ fn collect_repetition_matches(
                 next_state,
                 atom,
                 count + 1,
-                minimum,
-                maximum,
+                bounds,
                 results,
             );
         }
     }
-    if count >= minimum {
+    if count >= bounds.minimum {
         results.push(state);
     }
 }
@@ -1015,17 +1010,17 @@ fn character_in_range(character: char, start: char, end: char, case_sensitive: b
     if start <= character && character <= end {
         return true;
     }
-    if case_sensitive {
+    if case_sensitive
+        || !character.is_ascii_alphabetic()
+        || !start.is_ascii_alphabetic()
+        || !end.is_ascii_alphabetic()
+    {
         return false;
     }
-    let folded_character = folded_range_character(character);
-    let folded_start = folded_range_character(start);
-    let folded_end = folded_range_character(end);
+    let folded_character = character.to_ascii_lowercase();
+    let folded_start = start.to_ascii_lowercase();
+    let folded_end = end.to_ascii_lowercase();
     folded_start <= folded_character && folded_character <= folded_end
-}
-
-fn folded_range_character(character: char) -> char {
-    character.to_lowercase().next().unwrap_or(character)
 }
 
 fn char_slots(line: &str) -> Vec<CharSlot> {
@@ -1550,6 +1545,11 @@ mod tests {
         assert_eq!(
             regexp("[A-Z]+").match_ranges_in_line("ABC abc"),
             vec![(0, 3)]
+        );
+        assert_eq!(regexp("[a-z]+").find_forward_in_line("İ", 0), None);
+        assert_eq!(
+            regexp("[é]+").find_forward_in_line("É", 0),
+            Some((0, "É".len()))
         );
     }
 

@@ -331,6 +331,26 @@ fn query_replace_uses_smart_case_matching() -> Result<()> {
 }
 
 #[test]
+fn query_replace_smart_case_keeps_uppercase_search_exact() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    rile.send("M-%", keys::meta('%'))?;
+    rile.send("search text", b"Status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement text", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("state status STATUS")?;
+    rile.assert_screen_contains("Replaced 1 occurrence")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn query_replace_regexp_replaces_matches() -> Result<()> {
     let file = fixtures::named_temp_file("foo fxo faa\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -388,6 +408,26 @@ fn query_replace_regexp_uses_word_and_posix_classes() -> Result<()> {
 
     rile.wait_for_screen_contains("hit concatenate bob_cat hit")?;
     rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn query_replace_regexp_smart_case_keeps_uppercase_search_exact() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    rile.send("C-M-%", keys::csi_u_ctrl_meta('%'))?;
+    rile.send("regexp", b"Status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("state status STATUS")?;
+    rile.assert_screen_contains("Replaced 1 occurrence")?;
 
     rile.quit()?;
     Ok(())
@@ -561,6 +601,25 @@ fn replace_regexp_uses_smart_case_matching() -> Result<()> {
 
     rile.wait_for_screen_contains("state state state")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_smart_case_keeps_uppercase_search_exact() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", b"Status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("state status STATUS")?;
+    rile.assert_screen_contains("Replaced 1 occurrence")?;
 
     rile.quit()?;
     Ok(())

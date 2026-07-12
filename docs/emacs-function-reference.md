@@ -263,9 +263,9 @@ history separate from literal isearch history.
 Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
 `^`, `$`, Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
 `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character classes
-such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word constructs `\<`,
-`\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket classes
-`[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`, `[[:lower:]]`, and
+such as `[abc]`, `[^abc]`, and ASCII ranges like `[a-z]`. It also supports word
+constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket
+classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`, `[[:lower:]]`, and
 `[[:upper:]]`. Matching uses Emacs-style smart case: lowercase regexps match
 case-insensitively, while unescaped uppercase regexp characters make the search
 case-sensitive. Uppercase characters escaped with `\` do not trigger

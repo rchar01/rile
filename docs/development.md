@@ -505,9 +505,10 @@ Literal search, regexp incremental search, query replace, regexp query replace,
 and `replace-regexp` use Emacs-style smart-case matching: lowercase search text
 matches case-insensitively, while unescaped uppercase search text is
 case-sensitive. Regexp matching applies that rule to literal atoms, character
-classes, ranges, and supported POSIX classes; uppercase regexp characters escaped
-with `\` do not make the whole search case-sensitive. Regexp commands use Rile's
-built-in line-local subset: `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style grouping
+classes, ASCII alphabetic ranges, and supported POSIX classes; uppercase regexp
+characters escaped with `\` do not make the whole search case-sensitive. Regexp
+commands use Rile's built-in line-local subset: `.`, `*`, `+`, `?`, `^`, `$`,
+Emacs-style grouping
 `\(...\)`, alternation `\|`, counted repetition `\{m\}`, `\{m,\}`, and
 `\{m,n\}`, escaped metacharacters, and character classes with ranges and
 negation. It also supports word constructs `\<`, `\>`, `\b`, `\B`, `\w`, and
