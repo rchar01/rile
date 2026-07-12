@@ -501,8 +501,12 @@ prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 Current limitations: there is no shell-command process timeout/cancellation, no
 message-log retention limit or persistence across sessions, and no selective
 region undo yet.
-Literal search and query replace are exact line-local substring matching. Regexp
-incremental search, regexp query replace, and `replace-regexp` use Rile's
+Literal search, regexp incremental search, query replace, regexp query replace,
+and `replace-regexp` use Emacs-style smart-case matching: lowercase search text
+matches case-insensitively, while unescaped uppercase search text is
+case-sensitive. Regexp matching applies that rule to literal atoms, character
+classes, ranges, and supported POSIX classes; uppercase regexp characters escaped
+with `\` do not make the whole search case-sensitive. Regexp commands use Rile's
 built-in line-local subset: `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style grouping
 `\(...\)`, alternation `\|`, counted repetition `\{m\}`, `\{m,\}`, and
 `\{m,n\}`, escaped metacharacters, and character classes with ranges and
@@ -516,7 +520,8 @@ escaped character literally unless they are explicitly invalid syntax. Regexp
 replacement commands expand `\&` to the whole match, `\1` through `\9` to numbered
 captures, and `\\` to a literal backslash. Unmatched or missing captures expand to
 empty text, unsupported replacement backslash escapes are preserved literally,
-and patterns that can match empty text are rejected. Search wraps only after an
+replacement text is inserted exactly as typed rather than case-adapted, and
+patterns that can match empty text are rejected. Search wraps only after an
 explicit boundary failure, and replacement commands do not wrap.
 
 Milestone 15 hardening has started with binary-file detection: files containing

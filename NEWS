@@ -12,6 +12,11 @@ Interface features:
 
 Editing features:
 
+* Search and replacement commands now use Emacs-style smart-case matching:
+  lowercase search text matches case-insensitively, while unescaped uppercase
+  search text is case-sensitive.  This applies to literal search, regexp search,
+  `query-replace`, `query-replace-regexp`, and `replace-regexp`.
+
 * Rile's built-in regexp subset now supports common word constructs (`\<`,
   `\>`, `\b`, `\B`, `\w`, and `\W`) and ASCII POSIX bracket classes such as
   `[[:alpha:]]`, `[[:digit:]]`, and `[[:space:]]` in regexp search,

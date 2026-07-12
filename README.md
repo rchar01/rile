@@ -158,6 +158,8 @@ Basic editor keys:
 - `C-x o` selects the next window.
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
+  Search uses Emacs-style smart case: lowercase search text matches
+  case-insensitively, while unescaped uppercase search text is case-sensitive.
 - `C-M-s` and `C-M-r` start forward and backward regexp incremental search.
   The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`,
   Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
@@ -166,9 +168,10 @@ Basic editor keys:
   constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket
   classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
   `[[:lower:]]`, and `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match
-  literally; use the escaped Emacs forms for regexp operators. Word constructs
-  use Rile's Unicode-aware word definition: alphanumeric characters plus
-  underscore.
+  literally; use the escaped Emacs forms for regexp operators. Regexp search uses
+  the same smart-case rule as literal search; uppercase regexp characters escaped
+  with `\` do not make the whole search case-sensitive. Word constructs use
+  Rile's Unicode-aware word definition: alphanumeric characters plus underscore.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward
@@ -187,7 +190,8 @@ Basic editor keys:
   again wraps to the first or last match and shows a wrapped-search prompt.
 - `M-%` starts literal query replace; enter search and replacement strings, then
   use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q`
-  to quit.
+  to quit. Matching uses smart case; replacement text is inserted exactly as
+  typed.
 - `C-M-%` starts regexp query replace using the same line-local regexp subset as
   regexp incremental search. Replacement text expands `\&` to the whole match,
   `\1` through `\9` to numbered captures, and `\\` to a literal backslash.
@@ -231,7 +235,7 @@ Basic editor keys:
   searches accepted with Enter.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, counted repetition, word constructs, and ASCII POSIX bracket classes. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
+Current search and replacement matching is line-local and uses smart case: lowercase search text matches case-insensitively, while unescaped uppercase search text is case-sensitive. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, counted repetition, word constructs, and ASCII POSIX bracket classes. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, replacement text is inserted exactly as typed, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.

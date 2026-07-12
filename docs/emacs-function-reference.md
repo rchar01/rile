@@ -136,8 +136,11 @@ normal Rile read-only guard.
 Messages: prompts and choice status are user-visible. Rile reports completion
 status after replacement, including the number of replacements made.
 
-Rile target: keep the current subset. Do not attempt full Emacs query-replace
-choice-key coverage before simpler missing command families.
+Rile target: keep the current choice-key subset. Matching follows Emacs-style
+smart case: lowercase search text matches case-insensitively, while unescaped
+uppercase search text is case-sensitive. Replacement text is inserted exactly as
+typed; Emacs-style case-adapted replacement through `case-replace` remains out of
+scope until a separate design exists.
 
 Evidence: GNU Emacs manual, Query Replace; Emacs scenario
 `tools/reference/emacs/scenarios/query-replace-core.scenario`; Rile command
@@ -182,11 +185,12 @@ empty text report `Error: regexp can match empty string` and are rejected before
 replacement begins.
 
 Rile target: intentional subset. Matching uses the same line-local regexp subset
-as regexp incremental search. Replacement text expands `\&` to the whole match,
-`\1` through `\9` to numbered captures, and `\\` to a literal backslash.
-Unmatched or missing captures expand to empty text, and unsupported backslash
-escapes are preserved literally. Rile does not expand Emacs replacement
-expressions such as `\,(...)` or case-conversion directives yet.
+as regexp incremental search, including smart-case matching. Replacement text
+expands `\&` to the whole match, `\1` through `\9` to numbered captures, and
+`\\` to a literal backslash. Unmatched or missing captures expand to empty text,
+and unsupported backslash escapes are preserved literally. Rile does not expand
+Emacs replacement expressions such as `\,(...)`, case-conversion directives, or
+case-adapted replacements yet.
 
 Evidence: GNU Emacs command name and default binding; Rile unit and PTY tests for
 command dispatch, prompt history, regexp replacement, replacement expansion,
@@ -228,11 +232,12 @@ empty text report `Error: regexp can match empty string`. Completion reports
 `Replaced N occurrences` or `No matches for <regexp>`.
 
 Rile target: intentional subset. Matching uses the same line-local regexp subset
-as regexp incremental search. Replacement text expands `\&` to the whole match,
-`\1` through `\9` to numbered captures, and `\\` to a literal backslash.
-Unmatched or missing captures expand to empty text, and unsupported backslash
-escapes are preserved literally. Rile does not expand Emacs replacement
-expressions such as `\,(...)` or case-conversion directives yet.
+as regexp incremental search, including smart-case matching. Replacement text
+expands `\&` to the whole match, `\1` through `\9` to numbered captures, and
+`\\` to a literal backslash. Unmatched or missing captures expand to empty text,
+and unsupported backslash escapes are preserved literally. Rile does not expand
+Emacs replacement expressions such as `\,(...)`, case-conversion directives, or
+case-adapted replacements yet.
 
 Evidence: GNU Emacs command name; Rile unit and PTY tests for command dispatch,
 prompt history, regexp replacement from point, replacement expansion, no-match
@@ -261,8 +266,11 @@ Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
 such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word constructs `\<`,
 `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket classes
 `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`, `[[:lower:]]`, and
-`[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match literally. Rile tracks
-numbered captures for regexp replacement expansion but does not yet support
+`[[:upper:]]`. Matching uses Emacs-style smart case: lowercase regexps match
+case-insensitively, while unescaped uppercase regexp characters make the search
+case-sensitive. Uppercase characters escaped with `\` do not trigger
+case-sensitive matching. Bare `(`, `)`, `{`, `}`, and `|` match literally. Rile
+tracks numbered captures for regexp replacement expansion but does not yet support
 regexp backreferences, syntax classes, or multiline regexp matching. Current
 unrecognized regexp escapes match the escaped character literally unless they are
 explicitly invalid syntax; do not treat that as Emacs-compatible support for the
