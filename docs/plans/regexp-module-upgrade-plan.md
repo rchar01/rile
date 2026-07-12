@@ -152,7 +152,7 @@ Tasks:
 - [ ] Define and test escaping rules for literal backslashes and unsupported
   replacement escapes.
 - [ ] Use replacement expansion in `query-replace-regexp`.
-- [ ] Use replacement expansion in `replace-regexp` after that command exists.
+- [ ] Use replacement expansion in `replace-regexp`.
 
 Examples:
 

@@ -239,6 +239,28 @@ fn replace_regexp_replaces_matches() -> Result<()> {
 }
 
 #[test]
+fn replace_regexp_rejects_invalid_and_zero_width_patterns() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("invalid regexp", b"[")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Error: invalid regexp")?;
+    rile.assert_screen_contains("foo")?;
+
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("zero-width regexp", b"^")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Error: regexp can match empty string")?;
+    rile.assert_screen_contains("foo")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn replace_regexp_history_recalls_search_and_replacement() -> Result<()> {
     let file = fixtures::named_temp_file("foo\nfxo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

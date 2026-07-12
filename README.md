@@ -190,7 +190,8 @@ Basic editor keys:
   `query-replace-regexp`.
 - `M-p` and `M-n` recall accepted query-replace search and replacement prompt
   history while editing those prompts. Literal and regexp query-replace prompts
-  keep separate histories.
+  keep separate histories, and `replace-regexp` keeps its own regexp search and
+  replacement histories.
 - `M-x toggle-syntax-highlighting` toggles syntax highlighting on and off.
 - `M-x toggle-search-highlighting` toggles search/query-replace highlights on and off.
 - `M-x toggle-line-numbers` toggles line-number display on and off.
