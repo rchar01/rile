@@ -494,8 +494,18 @@ mod tests {
     }
 
     #[test]
+    fn regexp_parser_represents_empty_pattern_as_empty_sequence() {
+        let pattern = RegexpPattern::compile("").expect("regexp should compile");
+
+        assert_eq!(pattern.expression.alternatives.len(), 1);
+        assert!(pattern.expression.alternatives[0].pieces.is_empty());
+        assert_eq!(pattern.find_forward("abc", 0), Some((0, 0)));
+    }
+
+    #[test]
     fn regexp_parser_preserves_escaped_metacharacters_as_literals() {
-        let pattern = RegexpPattern::compile(r"\.\*\+\?\^\$\[\]").expect("regexp should compile");
+        let pattern =
+            RegexpPattern::compile(r"\.\*\+\?\^\$\[\]\(\)\{\}\|").expect("regexp should compile");
         let pieces = &pattern.expression.alternatives[0].pieces;
         let literals = pieces
             .iter()
@@ -505,9 +515,11 @@ mod tests {
 
         assert_eq!(
             literals,
-            ['.', '*', '+', '?', '^', '$', '[', ']']
-                .map(|character| (character, Quantifier::One))
-                .to_vec()
+            [
+                '.', '*', '+', '?', '^', '$', '[', ']', '(', ')', '{', '}', '|'
+            ]
+            .map(|character| (character, Quantifier::One))
+            .to_vec()
         );
     }
 

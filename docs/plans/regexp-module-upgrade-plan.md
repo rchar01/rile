@@ -53,11 +53,12 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 
 ## Current Context
 
-- `src/search_pattern.rs` currently parses regexps into a flat `Vec<Piece>`.
+- `src/search_pattern.rs` now parses regexps into an expression/sequence AST
+  foundation.
 - The current matcher handles one line at a time and returns byte ranges.
 - Existing regexp support includes `.`, `*`, `+`, `?`, `^`, `$`, escaped
   metacharacters, and character classes with ranges and negation.
-- Current code has no AST, no alternation, no groups, no captures, and no
+- Current code has no alternation, no groups, no captures, and no
   replacement-expansion API.
 - `query-replace-regexp` and `replace-regexp` intentionally use literal
   replacement text today.
