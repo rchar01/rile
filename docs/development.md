@@ -510,12 +510,14 @@ negation. It also supports word constructs `\<`, `\>`, `\b`, `\B`, `\w`, and
 `\W` using Rile's Unicode-aware word-character definition, plus ASCII POSIX
 bracket classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
 `[[:lower:]]`, and `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match
-literally. Regexp replacement commands expand `\&` to the whole match, `\1`
-through `\9` to numbered captures, and `\\` to a literal backslash. Unmatched or
-missing captures expand to empty text, unsupported backslash escapes are
-preserved literally, and patterns that can match empty text are rejected. Search
-wraps only after an explicit boundary failure, replacement commands do not wrap,
-and no search command matches across line breaks.
+literally. Rile does not implement regexp backreferences, syntax-class escapes,
+or multiline regexp matching; current unrecognized regexp escapes match the
+escaped character literally unless they are explicitly invalid syntax. Regexp
+replacement commands expand `\&` to the whole match, `\1` through `\9` to numbered
+captures, and `\\` to a literal backslash. Unmatched or missing captures expand to
+empty text, unsupported replacement backslash escapes are preserved literally,
+and patterns that can match empty text are rejected. Search wraps only after an
+explicit boundary failure, and replacement commands do not wrap.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail

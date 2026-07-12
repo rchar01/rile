@@ -263,11 +263,15 @@ such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word constructs `\<`,
 `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`, `[[:lower:]]`, and
 `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match literally. Rile tracks
 numbered captures for regexp replacement expansion but does not yet support
-regexp backreferences, syntax classes, or multiline regexp matching.
+regexp backreferences, syntax classes, or multiline regexp matching. Current
+unrecognized regexp escapes match the escaped character literally unless they are
+explicitly invalid syntax; do not treat that as Emacs-compatible support for the
+escaped construct.
 
-Evidence: GNU Emacs command names and default bindings; Rile unit and PTY tests
-for regexp isearch command dispatch, matching, repeat, wrap, invalid patterns,
-and highlighting.
+Evidence: GNU Emacs command names and default bindings; Rile unit, source
+architecture, and PTY tests for regexp isearch command dispatch, matching,
+repeat, wrap, invalid patterns, highlighting, and shared built-in regexp module
+ownership.
 
 ## First-Batch Reference Entries
 

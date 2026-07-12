@@ -1,5 +1,15 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Document regexp validation coverage.
+
+	* docs/testing.md: Document source architecture tests.
+	* docs/development.md: Clarify unsupported regexp escapes and current
+	validation coverage.
+	* docs/emacs-function-reference.md: Clarify regexp subset evidence and
+	out-of-scope escape behavior.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add regexp architecture validation.
 
 	* tests/source_architecture.rs: New test file.

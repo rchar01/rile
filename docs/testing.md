@@ -32,6 +32,12 @@ make visual-frames
 
 Unit tests cover internal editor behavior without a terminal. They live beside Rust modules and should be preferred for buffer, editor, keymap, render, syntax, file, and configuration logic that does not require terminal I/O.
 
+Source architecture tests live under ordinary integration tests when a repository
+invariant is easier to validate from source structure than from runtime behavior.
+For example, `tests/source_architecture.rs` keeps Rile's built-in regexp engine
+private to `src/search_pattern.rs` and rejects adding an external regex crate
+dependency without an intentional test update.
+
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile` binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal output with `vt100`, and assert screen contents, cursor position, status text, scrolling, splits, and save behavior.
 
 Parsed-screen snapshots live under `tests/snapshots/`. They are generated from normalized VT100 screen state, not raw ANSI bytes. Snapshots include terminal size, cursor position, visible rows, and a caret marker.
