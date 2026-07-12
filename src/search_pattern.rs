@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use crate::text::is_word_character;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PatternKind {
     Literal,
@@ -142,6 +144,10 @@ struct Sequence {
 enum Piece {
     AnchorStart,
     AnchorEnd,
+    WordStart,
+    WordEnd,
+    WordBoundary,
+    NotWordBoundary,
     Consume { atom: Atom, quantifier: Quantifier },
 }
 
@@ -149,6 +155,8 @@ enum Piece {
 enum Atom {
     Any,
     Literal(char),
+    WordCharacter,
+    NotWordCharacter,
     Class(CharacterClass),
     Group {
         index: usize,
@@ -187,6 +195,17 @@ struct CharacterClass {
 enum ClassItem {
     Character(char),
     Range(char, char),
+    Posix(PosixClass),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PosixClass {
+    Alpha,
+    Digit,
+    Alnum,
+    Space,
+    Lower,
+    Upper,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -275,11 +294,6 @@ impl RegexpPattern {
         ranges
     }
 
-    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
-        self.match_state_from(slots, start_slot)
-            .map(|state| state.end_slot)
-    }
-
     fn match_state_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<MatchState> {
         let captures = vec![None; self.capture_count];
         self.expression
@@ -322,11 +336,15 @@ impl RegexpPattern {
     }
 
     fn can_match_empty(&self) -> bool {
-        self.match_from(&[], 0) == Some(0)
+        self.expression.can_match_empty()
     }
 }
 
 impl Expression {
+    fn can_match_empty(&self) -> bool {
+        self.alternatives.iter().any(Sequence::can_match_empty)
+    }
+
     fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
         self.alternatives
             .iter()
@@ -336,6 +354,10 @@ impl Expression {
 }
 
 impl Sequence {
+    fn can_match_empty(&self) -> bool {
+        self.pieces.iter().all(Piece::can_match_empty)
+    }
+
     fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
         self.match_piece_states(slots, 0, state)
     }
@@ -359,6 +381,34 @@ impl Sequence {
             }
             Piece::AnchorEnd => {
                 if state.end_slot == slots.len() {
+                    self.match_piece_states(slots, piece_index + 1, state)
+                } else {
+                    Vec::new()
+                }
+            }
+            Piece::WordStart => {
+                if is_word_start(slots, state.end_slot) {
+                    self.match_piece_states(slots, piece_index + 1, state)
+                } else {
+                    Vec::new()
+                }
+            }
+            Piece::WordEnd => {
+                if is_word_end(slots, state.end_slot) {
+                    self.match_piece_states(slots, piece_index + 1, state)
+                } else {
+                    Vec::new()
+                }
+            }
+            Piece::WordBoundary => {
+                if is_word_boundary(slots, state.end_slot) {
+                    self.match_piece_states(slots, piece_index + 1, state)
+                } else {
+                    Vec::new()
+                }
+            }
+            Piece::NotWordBoundary => {
+                if !is_word_boundary(slots, state.end_slot) {
                     self.match_piece_states(slots, piece_index + 1, state)
                 } else {
                     Vec::new()
@@ -394,11 +444,40 @@ impl Sequence {
     }
 }
 
+impl Piece {
+    fn can_match_empty(&self) -> bool {
+        match self {
+            Self::AnchorStart
+            | Self::AnchorEnd
+            | Self::WordStart
+            | Self::WordEnd
+            | Self::WordBoundary
+            | Self::NotWordBoundary => true,
+            Self::Consume { atom, quantifier } => {
+                quantifier.minimum() == 0 || atom.can_match_empty()
+            }
+        }
+    }
+}
+
 impl Atom {
+    fn can_match_empty(&self) -> bool {
+        match self {
+            Self::Group { expression, .. } => expression.can_match_empty(),
+            Self::Any
+            | Self::Literal(_)
+            | Self::WordCharacter
+            | Self::NotWordCharacter
+            | Self::Class(_) => false,
+        }
+    }
+
     fn matches(&self, character: char) -> bool {
         match self {
             Self::Any => true,
             Self::Literal(literal) => *literal == character,
+            Self::WordCharacter => is_word_character(character),
+            Self::NotWordCharacter => !is_word_character(character),
             Self::Class(class) => class.matches(character),
             Self::Group { .. } => false,
         }
@@ -406,7 +485,11 @@ impl Atom {
 
     fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
         match self {
-            Self::Any | Self::Literal(_) | Self::Class(_) => slots
+            Self::Any
+            | Self::Literal(_)
+            | Self::WordCharacter
+            | Self::NotWordCharacter
+            | Self::Class(_) => slots
                 .get(state.end_slot)
                 .filter(|slot| self.matches(slot.character))
                 .map(|_| {
@@ -428,13 +511,49 @@ impl Atom {
     }
 }
 
+impl Quantifier {
+    fn minimum(self) -> usize {
+        match self {
+            Self::One | Self::OneOrMore => 1,
+            Self::ZeroOrMore | Self::ZeroOrOne => 0,
+            Self::Counted { minimum, .. } => minimum,
+        }
+    }
+}
+
 impl CharacterClass {
     fn matches(&self, character: char) -> bool {
         let contains = self.items.iter().any(|item| match item {
             ClassItem::Character(item) => *item == character,
             ClassItem::Range(start, end) => *start <= character && character <= *end,
+            ClassItem::Posix(class) => class.matches(character),
         });
         if self.negated { !contains } else { contains }
+    }
+}
+
+impl PosixClass {
+    fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "alpha" => Some(Self::Alpha),
+            "digit" => Some(Self::Digit),
+            "alnum" => Some(Self::Alnum),
+            "space" => Some(Self::Space),
+            "lower" => Some(Self::Lower),
+            "upper" => Some(Self::Upper),
+            _ => None,
+        }
+    }
+
+    fn matches(self, character: char) -> bool {
+        match self {
+            Self::Alpha => character.is_ascii_alphabetic(),
+            Self::Digit => character.is_ascii_digit(),
+            Self::Alnum => character.is_ascii_alphanumeric(),
+            Self::Space => character.is_ascii_whitespace(),
+            Self::Lower => character.is_ascii_lowercase(),
+            Self::Upper => character.is_ascii_uppercase(),
+        }
     }
 }
 
@@ -499,6 +618,12 @@ impl<'a> Parser<'a> {
                             self.consume_piece(Atom::Group { index, expression })?
                         }
                         ')' => return Err(PatternError::new("unmatched group close")),
+                        '<' => Piece::WordStart,
+                        '>' => Piece::WordEnd,
+                        'b' => Piece::WordBoundary,
+                        'B' => Piece::NotWordBoundary,
+                        'w' => self.consume_piece(Atom::WordCharacter)?,
+                        'W' => self.consume_piece(Atom::NotWordCharacter)?,
                         '{' => return Err(PatternError::new("missing atom before quantifier")),
                         '}' => return Err(PatternError::new("unmatched counted repetition close")),
                         literal => self.consume_piece(Atom::Literal(literal))?,
@@ -605,6 +730,10 @@ impl<'a> Parser<'a> {
                 }
                 return Ok(CharacterClass { negated, items });
             }
+            if character == '[' && self.peek() == Some(':') {
+                items.push(ClassItem::Posix(self.parse_posix_class()?));
+                continue;
+            }
             let start = if character == '\\' {
                 self.next()
                     .ok_or_else(|| PatternError::new("trailing escape in character class"))?
@@ -629,6 +758,21 @@ impl<'a> Parser<'a> {
             }
         }
         Err(PatternError::new("unterminated character class"))
+    }
+
+    fn parse_posix_class(&mut self) -> Result<PosixClass, PatternError> {
+        self.index += 1;
+        let start = self.index;
+        while self.peek().is_some() {
+            if self.peek() == Some(':') && self.peek_next() == Some(']') {
+                let name = self.chars[start..self.index].iter().collect::<String>();
+                self.index += 2;
+                return PosixClass::from_name(&name)
+                    .ok_or_else(|| PatternError::new("unsupported POSIX character class"));
+            }
+            self.index += 1;
+        }
+        Err(PatternError::new("unterminated POSIX character class"))
     }
 
     fn next(&mut self) -> Option<char> {
@@ -706,6 +850,31 @@ fn slot_byte(slots: &[CharSlot], line_len: usize, slot_index: usize) -> usize {
         .get(slot_index)
         .map(|slot| slot.byte)
         .unwrap_or(line_len)
+}
+
+fn is_word_start(slots: &[CharSlot], slot_index: usize) -> bool {
+    is_word_at(slots, slot_index) && !is_word_before(slots, slot_index)
+}
+
+fn is_word_end(slots: &[CharSlot], slot_index: usize) -> bool {
+    !is_word_at(slots, slot_index) && is_word_before(slots, slot_index)
+}
+
+fn is_word_boundary(slots: &[CharSlot], slot_index: usize) -> bool {
+    is_word_start(slots, slot_index) || is_word_end(slots, slot_index)
+}
+
+fn is_word_at(slots: &[CharSlot], slot_index: usize) -> bool {
+    slots
+        .get(slot_index)
+        .is_some_and(|slot| is_word_character(slot.character))
+}
+
+fn is_word_before(slots: &[CharSlot], slot_index: usize) -> bool {
+    slot_index
+        .checked_sub(1)
+        .and_then(|index| slots.get(index))
+        .is_some_and(|slot| is_word_character(slot.character))
 }
 
 fn start_slots_from_byte(
@@ -949,6 +1118,54 @@ mod tests {
     }
 
     #[test]
+    fn regexp_supports_word_constructs() {
+        assert_eq!(
+            regexp(r"\<cat\>").match_ranges_in_line("cat concatenate bob_cat cat!"),
+            vec![(0, 3), (24, 27)]
+        );
+        assert_eq!(
+            regexp(r"\bcat").find_forward_in_line("concatenate cat", 0),
+            Some((12, 15))
+        );
+        assert_eq!(
+            regexp(r"\Bcat").find_forward_in_line("concatenate cat", 0),
+            Some((3, 6))
+        );
+        assert_eq!(
+            regexp(r"\w+").find_forward_in_line(". déjà_vu!", 0),
+            Some((2, "déjà_vu".len() + 2))
+        );
+        assert_eq!(
+            regexp(r"\W+").find_forward_in_line("abc, def", 0),
+            Some((3, 5))
+        );
+    }
+
+    #[test]
+    fn regexp_supports_posix_character_classes() {
+        assert_eq!(
+            regexp(r"[[:digit:]]\{2,4\}").find_forward_in_line("a 1 12345", 0),
+            Some((4, 8))
+        );
+        assert_eq!(
+            regexp(r"[[:alpha:]_]+").find_forward_in_line("123 Ab_z", 0),
+            Some((4, 8))
+        );
+        assert_eq!(
+            regexp(r"[[:upper:]][[:lower:]]+").find_forward_in_line("Éclair Cat", 0),
+            Some((8, 11))
+        );
+        assert_eq!(
+            regexp(r"[[:alnum:]]+").match_ranges_in_line("a1 _ b2"),
+            vec![(0, 2), (5, 7)]
+        );
+        assert_eq!(
+            regexp(r"[^[:space:]]+").match_ranges_in_line("a b\tc"),
+            vec![(0, 1), (2, 3), (4, 5)]
+        );
+    }
+
+    #[test]
     fn regexp_supports_alternation_and_groups() {
         assert_eq!(
             regexp(r"cat\|dog").find_forward_in_line("fox dog cat", 0),
@@ -1141,9 +1358,14 @@ mod tests {
         assert!(regexp(r"a\{0\}").can_match_empty());
         assert!(regexp(r"\(a*\)\{2\}").can_match_empty());
         assert!(regexp("^a*$").can_match_empty());
+        assert!(regexp(r"\<").can_match_empty());
+        assert!(regexp(r"\>").can_match_empty());
+        assert!(regexp(r"\b").can_match_empty());
+        assert!(regexp(r"\B").can_match_empty());
         assert!(!regexp("a+").can_match_empty());
         assert!(!regexp(r"a\{2\}").can_match_empty());
         assert!(!regexp("f.o").can_match_empty());
+        assert!(!regexp(r"\<cat\>").can_match_empty());
         assert!(
             SearchPattern::compile(PatternKind::Literal, "")
                 .expect("literal compiles")
@@ -1175,8 +1397,12 @@ mod tests {
             "[abc",
             "[]",
             "[z-a]",
+            "[[:word:]]",
+            "[[:digit]",
+            "[[:digit:]]*+",
             "*a",
             "a**",
+            r"\b*",
         ] {
             assert!(
                 SearchPattern::compile(PatternKind::Regexp, pattern).is_err(),
