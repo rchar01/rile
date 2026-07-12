@@ -904,7 +904,7 @@ mod tests {
     }
 
     #[test]
-    fn regexp_conformance_matrix_covers_documented_subset() {
+    fn regexp_conformance_matrix_covers_representative_documented_subset() {
         for case in [
             RegexpConformanceCase {
                 name: "dot and plus",
@@ -1027,15 +1027,52 @@ mod tests {
 
     #[test]
     fn regexp_out_of_scope_emacs_constructs_are_not_treated_as_supported_forms() {
-        assert_eq!(
-            regexp(r"\(a\)\1").find_forward_in_line("aa a1", 0),
-            Some((3, 5))
-        );
+        struct UnsupportedEscapeCase {
+            pattern: &'static str,
+            line: &'static str,
+            expected: Option<(usize, usize)>,
+        }
+
+        for case in [
+            UnsupportedEscapeCase {
+                pattern: r"\1",
+                line: "1",
+                expected: Some((0, 1)),
+            },
+            UnsupportedEscapeCase {
+                pattern: r"\(a\)\1",
+                line: "aa a1",
+                expected: Some((3, 5)),
+            },
+            UnsupportedEscapeCase {
+                pattern: r"\sw",
+                line: "sw",
+                expected: Some((0, 2)),
+            },
+            UnsupportedEscapeCase {
+                pattern: r"\_<",
+                line: "_<",
+                expected: Some((0, 2)),
+            },
+        ] {
+            assert_eq!(
+                regexp(case.pattern).find_forward_in_line(case.line, 0),
+                case.expected,
+                "{} should use literal fallback semantics",
+                case.pattern
+            );
+        }
+
         assert_eq!(
             regexp(r"\sw+").find_forward_in_line("www sw", 0),
             Some((4, 6))
         );
-        assert!(SearchPattern::compile(PatternKind::Regexp, r"[[:word:]]").is_err());
+        for invalid in [r"[[:word:]]", r"[[:symbol:]]"] {
+            assert!(
+                SearchPattern::compile(PatternKind::Regexp, invalid).is_err(),
+                "{invalid} should be invalid"
+            );
+        }
     }
 
     #[test]

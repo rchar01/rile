@@ -1,5 +1,18 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Strengthen regexp validation tests.
+
+	* src/search_pattern.rs (tests): Broaden out-of-scope Emacs construct
+	coverage and clarify conformance test naming.
+	* tests/source_architecture.rs
+	(regexp_engine_is_private_to_search_pattern_module): Check that
+	RegexpPattern stays non-public and ignore line-comment mentions.
+	(crate_does_not_depend_on_external_regex_engine): Check dependency table
+	forms.
+	* docs/testing.md: Clarify source architecture guard scope.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Document regexp validation coverage.
 
 	* docs/testing.md: Document source architecture tests.

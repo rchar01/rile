@@ -34,9 +34,9 @@ Unit tests cover internal editor behavior without a terminal. They live beside R
 
 Source architecture tests live under ordinary integration tests when a repository
 invariant is easier to validate from source structure than from runtime behavior.
-For example, `tests/source_architecture.rs` keeps Rile's built-in regexp engine
-private to `src/search_pattern.rs` and rejects adding an external regex crate
-dependency without an intentional test update.
+For example, `tests/source_architecture.rs` guards that Rile's built-in regexp
+engine type stays private to `src/search_pattern.rs` and flags common external
+regex crate dependencies for intentional review.
 
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile` binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal output with `vt100`, and assert screen contents, cursor position, status text, scrolling, splits, and save behavior.
 
