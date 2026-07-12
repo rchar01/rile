@@ -90,17 +90,17 @@ behavior yet.
 
 Tasks:
 
-- [ ] Replace the flat piece list with a regexp AST that can represent sequences,
-  alternatives, groups, atoms, classes, anchors, and quantifiers.
-- [ ] Preserve current successful pattern behavior for the existing subset.
-- [ ] Preserve or improve current invalid-pattern rejection for trailing escapes,
+- [x] Replace the flat piece list with a regexp expression/sequence AST
+  foundation. Explicit grouping and alternation syntax remain Phase 2 work.
+- [x] Preserve current successful pattern behavior for the existing subset.
+- [x] Preserve or improve current invalid-pattern rejection for trailing escapes,
   repeated quantifiers, unterminated classes, empty classes, and invalid ranges.
-- [ ] Add parser tests for the existing subset so later phases can refactor with
+- [x] Add parser tests for the existing subset so later phases can refactor with
   confidence.
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
+- [x] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
 
 ## Phase 2: Alternation, Groups, And Counts
 
@@ -237,6 +237,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-07-12 | Phase 1 AST foundation completed without user-visible regexp changes. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern`, `./scripts/in-container cargo test --locked --lib regexp`, and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Plan created for a practical Emacs-aligned regexp subset. | User requested a durable plan in `docs/plans/`; current `src/search_pattern.rs` and regexp docs inspected. |
 
 ## Decision Log
@@ -246,3 +247,4 @@ Validation gate:
 | 2026-07-12 | Target Emacs regexp syntax rather than PCRE syntax. | Rile is an Emacs-style editor and existing commands are named after Emacs regexp commands. |
 | 2026-07-12 | Keep matching line-local for this upgrade. | Current search infrastructure is line-local, and multiline matching needs a separate buffer-spanning design. |
 | 2026-07-12 | Defer full syntax-table and replacement-expression support. | They are less important than groups, alternation, counts, captures, and ordinary replacement expansion. |
+| 2026-07-12 | Split Phase 1 into an AST foundation before new syntax. | This keeps all existing regexp users stable before adding Emacs grouping, alternation, and captures. |

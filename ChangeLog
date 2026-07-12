@@ -1,5 +1,19 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add a regexp AST foundation.
+
+	* src/search_pattern.rs (RegexpPattern): Store an expression instead of a
+	flat piece list.
+	(Expression, Sequence): New types.
+	(RegexpPattern::match_from): Delegate to the expression.
+	(Expression::sequence, Expression::match_from, Sequence::match_from): New
+	helpers.
+	(Parser::parse): Return an expression.
+	(tests): Cover expression sequence construction.
+	* docs/plans/regexp-module-upgrade-plan.md: Record Phase 1 progress.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add noninteractive regexp replacement.
 
 	* src/command.rs (Command): Add ReplaceRegexp.
