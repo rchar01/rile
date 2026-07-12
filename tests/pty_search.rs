@@ -37,6 +37,39 @@ fn incremental_search_wraps_after_boundary_failure() -> Result<()> {
 }
 
 #[test]
+fn incremental_search_uses_smart_case() -> Result<()> {
+    let file = fixtures::named_temp_file("Status\nstatus\nSTATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.send("lowercase search", b"status")?;
+    rile.assert_screen_contains("I-search: status")?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.quit()?;
+
+    let file = fixtures::named_temp_file("Status\nstatus\nSTATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.send("uppercase search", b"Status")?;
+    rile.assert_screen_contains("I-search: Status")?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_screen_contains("Failing I-search: Status")?;
+    rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn regexp_incremental_search_matches_and_repeats() -> Result<()> {
     let file = fixtures::named_temp_file("foo\nbar\nféo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -75,6 +108,35 @@ fn regexp_incremental_search_matches_and_repeats() -> Result<()> {
     rile.send("[", b"[")?;
     rile.assert_screen_contains("Invalid regexp I-search: [")?;
     rile.send("C-g", keys::control('g'))?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn regexp_incremental_search_uses_smart_case() -> Result<()> {
+    let file = fixtures::named_temp_file("Status\nstatus\n123 ABC\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status")?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("lowercase regexp", b"status")?;
+    rile.assert_screen_contains("Regexp I-search: status")?;
+    rile.assert_status_contains("Ln 001 Col 000")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.quit()?;
+
+    let file = fixtures::named_temp_file("123 ABC\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("123 ABC")?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("folded class regexp", b"[a-z]+")?;
+    rile.assert_screen_contains("Regexp I-search: [a-z]+")?;
+    rile.assert_status_contains("Ln 001 Col 004")?;
+    rile.send("Enter", keys::ENTER)?;
 
     rile.quit()?;
     Ok(())
@@ -244,6 +306,26 @@ fn query_replace_history_recalls_search_and_replacement() -> Result<()> {
     rile.assert_screen_contains("Query replace foo with: draft-replacement")?;
 
     rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn query_replace_uses_smart_case_matching() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    rile.send("M-%", keys::meta('%'))?;
+    rile.send("search text", b"status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement text", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replace all", b"!")?;
+
+    rile.wait_for_screen_contains("state state state")?;
+    rile.assert_screen_contains("Replaced 3 occurrences")?;
+
     rile.quit()?;
     Ok(())
 }
@@ -459,6 +541,25 @@ fn replace_regexp_uses_word_boundary_and_word_character_constructs() -> Result<(
     rile.send("Enter", keys::ENTER)?;
 
     rile.wait_for_screen_contains("hit hit hit")?;
+    rile.assert_screen_contains("Replaced 3 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_uses_smart_case_matching() -> Result<()> {
+    let file = fixtures::named_temp_file("Status status STATUS\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Status status STATUS")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", b"status")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"state")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("state state state")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;

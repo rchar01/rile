@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use crate::matching::is_smart_case_sensitive;
 use crate::text::is_word_character;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +27,7 @@ impl PatternError {
 pub(crate) struct SearchPattern {
     kind: PatternKind,
     literal: String,
+    case_sensitive: bool,
     regexp: Option<RegexpPattern>,
 }
 
@@ -37,13 +39,18 @@ pub(crate) struct PatternMatch {
 
 impl SearchPattern {
     pub(crate) fn compile(kind: PatternKind, input: &str) -> Result<Self, PatternError> {
+        let case_sensitive = match kind {
+            PatternKind::Literal => is_smart_case_sensitive(input),
+            PatternKind::Regexp => regexp_is_smart_case_sensitive(input),
+        };
         let regexp = match kind {
             PatternKind::Literal => None,
-            PatternKind::Regexp => Some(RegexpPattern::compile(input)?),
+            PatternKind::Regexp => Some(RegexpPattern::compile_with_case(input, case_sensitive)?),
         };
         Ok(Self {
             kind,
             literal: input.to_owned(),
+            case_sensitive,
             regexp,
         })
     }
@@ -64,13 +71,9 @@ impl SearchPattern {
         minimum_byte: usize,
     ) -> Option<PatternMatch> {
         match self.kind {
-            PatternKind::Literal => line
-                .match_indices(&self.literal)
-                .find(|(start, _)| *start >= minimum_byte)
-                .map(|(start, text)| PatternMatch {
-                    range: (start, start + text.len()),
-                    captures: Vec::new(),
-                }),
+            PatternKind::Literal => {
+                find_literal_forward_match(line, &self.literal, minimum_byte, self.case_sensitive)
+            }
             PatternKind::Regexp => self
                 .regexp
                 .as_ref()
@@ -85,11 +88,9 @@ impl SearchPattern {
         maximum_byte: usize,
     ) -> Option<(usize, usize)> {
         match self.kind {
-            PatternKind::Literal => line
-                .match_indices(&self.literal)
-                .filter(|(start, _)| *start < maximum_byte)
-                .last()
-                .map(|(start, text)| (start, start + text.len())),
+            PatternKind::Literal => {
+                find_literal_backward(line, &self.literal, maximum_byte, self.case_sensitive)
+            }
             PatternKind::Regexp => self
                 .regexp
                 .as_ref()
@@ -100,10 +101,7 @@ impl SearchPattern {
 
     pub(crate) fn match_ranges_in_line(&self, line: &str) -> Vec<(usize, usize)> {
         match self.kind {
-            PatternKind::Literal => line
-                .match_indices(&self.literal)
-                .map(|(start, text)| (start, start + text.len()))
-                .collect(),
+            PatternKind::Literal => literal_match_ranges(line, &self.literal, self.case_sensitive),
             PatternKind::Regexp => self
                 .regexp
                 .as_ref()
@@ -128,6 +126,7 @@ impl SearchPattern {
 struct RegexpPattern {
     expression: Expression,
     capture_count: usize,
+    case_sensitive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -227,12 +226,18 @@ struct CharSlot {
 }
 
 impl RegexpPattern {
+    #[cfg(test)]
     fn compile(input: &str) -> Result<Self, PatternError> {
+        Self::compile_with_case(input, regexp_is_smart_case_sensitive(input))
+    }
+
+    fn compile_with_case(input: &str, case_sensitive: bool) -> Result<Self, PatternError> {
         let mut parser = Parser::new(input);
         let expression = parser.parse()?;
         Ok(Self {
             expression,
             capture_count: parser.capture_count,
+            case_sensitive,
         })
     }
 
@@ -299,6 +304,7 @@ impl RegexpPattern {
         self.expression
             .match_states(
                 slots,
+                self.case_sensitive,
                 MatchState {
                     end_slot: start_slot,
                     captures,
@@ -345,10 +351,15 @@ impl Expression {
         self.alternatives.iter().any(Sequence::can_match_empty)
     }
 
-    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
+    fn match_states(
+        &self,
+        slots: &[CharSlot],
+        case_sensitive: bool,
+        state: MatchState,
+    ) -> Vec<MatchState> {
         self.alternatives
             .iter()
-            .flat_map(|alternative| alternative.match_states(slots, state.clone()))
+            .flat_map(|alternative| alternative.match_states(slots, case_sensitive, state.clone()))
             .collect()
     }
 }
@@ -358,13 +369,19 @@ impl Sequence {
         self.pieces.iter().all(Piece::can_match_empty)
     }
 
-    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
-        self.match_piece_states(slots, 0, state)
+    fn match_states(
+        &self,
+        slots: &[CharSlot],
+        case_sensitive: bool,
+        state: MatchState,
+    ) -> Vec<MatchState> {
+        self.match_piece_states(slots, case_sensitive, 0, state)
     }
 
     fn match_piece_states(
         &self,
         slots: &[CharSlot],
+        case_sensitive: bool,
         piece_index: usize,
         state: MatchState,
     ) -> Vec<MatchState> {
@@ -374,50 +391,52 @@ impl Sequence {
         match piece {
             Piece::AnchorStart => {
                 if state.end_slot == 0 {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::AnchorEnd => {
                 if state.end_slot == slots.len() {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::WordStart => {
                 if is_word_start(slots, state.end_slot) {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::WordEnd => {
                 if is_word_end(slots, state.end_slot) {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::WordBoundary => {
                 if is_word_boundary(slots, state.end_slot) {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::NotWordBoundary => {
                 if !is_word_boundary(slots, state.end_slot) {
-                    self.match_piece_states(slots, piece_index + 1, state)
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::Consume { atom, quantifier } => self
-                .repeat_matches(slots, state, atom, *quantifier)
+                .repeat_matches(slots, case_sensitive, state, atom, *quantifier)
                 .into_iter()
-                .flat_map(|state| self.match_piece_states(slots, piece_index + 1, state))
+                .flat_map(|state| {
+                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
+                })
                 .collect(),
         }
     }
@@ -425,6 +444,7 @@ impl Sequence {
     fn repeat_matches(
         &self,
         slots: &[CharSlot],
+        case_sensitive: bool,
         state: MatchState,
         atom: &Atom,
         quantifier: Quantifier,
@@ -439,7 +459,16 @@ impl Sequence {
         let maximum =
             maximum.unwrap_or_else(|| slots.len().saturating_sub(state.end_slot).max(minimum));
         let mut results = Vec::new();
-        collect_repetition_matches(slots, state, atom, 0, minimum, maximum, &mut results);
+        collect_repetition_matches(
+            slots,
+            case_sensitive,
+            state,
+            atom,
+            0,
+            minimum,
+            maximum,
+            &mut results,
+        );
         results
     }
 }
@@ -472,18 +501,23 @@ impl Atom {
         }
     }
 
-    fn matches(&self, character: char) -> bool {
+    fn matches(&self, character: char, case_sensitive: bool) -> bool {
         match self {
             Self::Any => true,
-            Self::Literal(literal) => *literal == character,
+            Self::Literal(literal) => chars_match(character, *literal, case_sensitive),
             Self::WordCharacter => is_word_character(character),
             Self::NotWordCharacter => !is_word_character(character),
-            Self::Class(class) => class.matches(character),
+            Self::Class(class) => class.matches(character, case_sensitive),
             Self::Group { .. } => false,
         }
     }
 
-    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
+    fn match_states(
+        &self,
+        slots: &[CharSlot],
+        case_sensitive: bool,
+        state: MatchState,
+    ) -> Vec<MatchState> {
         match self {
             Self::Any
             | Self::Literal(_)
@@ -491,7 +525,7 @@ impl Atom {
             | Self::NotWordCharacter
             | Self::Class(_) => slots
                 .get(state.end_slot)
-                .filter(|slot| self.matches(slot.character))
+                .filter(|slot| self.matches(slot.character, case_sensitive))
                 .map(|_| {
                     vec![MatchState {
                         end_slot: state.end_slot + 1,
@@ -500,7 +534,7 @@ impl Atom {
                 })
                 .unwrap_or_default(),
             Self::Group { index, expression } => expression
-                .match_states(slots, state.clone())
+                .match_states(slots, case_sensitive, state.clone())
                 .into_iter()
                 .map(|mut group_state| {
                     group_state.captures[*index - 1] = Some((state.end_slot, group_state.end_slot));
@@ -522,11 +556,13 @@ impl Quantifier {
 }
 
 impl CharacterClass {
-    fn matches(&self, character: char) -> bool {
+    fn matches(&self, character: char, case_sensitive: bool) -> bool {
         let contains = self.items.iter().any(|item| match item {
-            ClassItem::Character(item) => *item == character,
-            ClassItem::Range(start, end) => *start <= character && character <= *end,
-            ClassItem::Posix(class) => class.matches(character),
+            ClassItem::Character(item) => chars_match(character, *item, case_sensitive),
+            ClassItem::Range(start, end) => {
+                character_in_range(character, *start, *end, case_sensitive)
+            }
+            ClassItem::Posix(class) => class.matches(character, case_sensitive),
         });
         if self.negated { !contains } else { contains }
     }
@@ -545,14 +581,15 @@ impl PosixClass {
         }
     }
 
-    fn matches(self, character: char) -> bool {
+    fn matches(self, character: char, case_sensitive: bool) -> bool {
         match self {
             Self::Alpha => character.is_ascii_alphabetic(),
             Self::Digit => character.is_ascii_digit(),
             Self::Alnum => character.is_ascii_alphanumeric(),
             Self::Space => character.is_ascii_whitespace(),
-            Self::Lower => character.is_ascii_lowercase(),
-            Self::Upper => character.is_ascii_uppercase(),
+            Self::Lower if case_sensitive => character.is_ascii_lowercase(),
+            Self::Upper if case_sensitive => character.is_ascii_uppercase(),
+            Self::Lower | Self::Upper => character.is_ascii_alphabetic(),
         }
     }
 }
@@ -798,6 +835,7 @@ impl<'a> Parser<'a> {
 
 fn collect_repetition_matches(
     slots: &[CharSlot],
+    case_sensitive: bool,
     state: MatchState,
     atom: &Atom,
     count: usize,
@@ -806,11 +844,12 @@ fn collect_repetition_matches(
     results: &mut Vec<MatchState>,
 ) {
     if count < maximum {
-        for next_state in atom.match_states(slots, state.clone()) {
+        for next_state in atom.match_states(slots, case_sensitive, state.clone()) {
             if next_state.end_slot == state.end_slot {
                 if count + 1 < maximum {
                     collect_repetition_matches(
                         slots,
+                        case_sensitive,
                         next_state,
                         atom,
                         count + 1,
@@ -825,6 +864,7 @@ fn collect_repetition_matches(
             }
             collect_repetition_matches(
                 slots,
+                case_sensitive,
                 next_state,
                 atom,
                 count + 1,
@@ -837,6 +877,155 @@ fn collect_repetition_matches(
     if count >= minimum {
         results.push(state);
     }
+}
+
+fn regexp_is_smart_case_sensitive(pattern: &str) -> bool {
+    let mut escaped = false;
+    for character in pattern.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if character.is_uppercase() {
+            return true;
+        }
+    }
+    false
+}
+
+fn find_literal_forward_match(
+    line: &str,
+    literal: &str,
+    minimum_byte: usize,
+    case_sensitive: bool,
+) -> Option<PatternMatch> {
+    find_literal_forward(line, literal, minimum_byte, case_sensitive).map(|range| PatternMatch {
+        range,
+        captures: Vec::new(),
+    })
+}
+
+fn find_literal_forward(
+    line: &str,
+    literal: &str,
+    minimum_byte: usize,
+    case_sensitive: bool,
+) -> Option<(usize, usize)> {
+    line_boundaries(line)
+        .filter(|start| *start >= minimum_byte)
+        .find_map(|start| {
+            literal_match_end(line, literal, start, case_sensitive).map(|end| (start, end))
+        })
+}
+
+fn find_literal_backward(
+    line: &str,
+    literal: &str,
+    maximum_byte: usize,
+    case_sensitive: bool,
+) -> Option<(usize, usize)> {
+    line_boundaries(line)
+        .filter(|start| *start < maximum_byte)
+        .filter_map(|start| {
+            literal_match_end(line, literal, start, case_sensitive).map(|end| (start, end))
+        })
+        .last()
+}
+
+fn literal_match_ranges(line: &str, literal: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
+    if literal.is_empty() {
+        return line_boundaries(line).map(|byte| (byte, byte)).collect();
+    }
+
+    let mut ranges = Vec::new();
+    let mut start = 0;
+    while start <= line.len() {
+        if let Some(end) = literal_match_end(line, literal, start, case_sensitive) {
+            ranges.push((start, end));
+            start = end;
+        } else if let Some(next) = next_boundary_after(line, start) {
+            start = next;
+        } else {
+            break;
+        }
+    }
+    ranges
+}
+
+fn literal_match_end(
+    line: &str,
+    literal: &str,
+    start: usize,
+    case_sensitive: bool,
+) -> Option<usize> {
+    if !line.is_char_boundary(start) {
+        return None;
+    }
+    if literal.is_empty() {
+        return Some(start);
+    }
+    if case_sensitive {
+        return line[start..]
+            .starts_with(literal)
+            .then_some(start + literal.len());
+    }
+
+    let folded_literal = literal.to_lowercase();
+    let mut folded_candidate = String::new();
+    for (offset, character) in line[start..].char_indices() {
+        folded_candidate.extend(character.to_lowercase());
+        let end = start + offset + character.len_utf8();
+        if folded_candidate == folded_literal {
+            return Some(end);
+        }
+        if !folded_literal.starts_with(&folded_candidate) {
+            return None;
+        }
+    }
+    None
+}
+
+fn line_boundaries(line: &str) -> impl Iterator<Item = usize> + '_ {
+    line.char_indices()
+        .map(|(byte, _)| byte)
+        .chain(std::iter::once(line.len()))
+}
+
+fn next_boundary_after(line: &str, byte: usize) -> Option<usize> {
+    line[byte..]
+        .char_indices()
+        .nth(1)
+        .map(|(offset, _)| byte + offset)
+        .or((byte < line.len()).then_some(line.len()))
+}
+
+fn chars_match(value: char, pattern: char, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        value == pattern
+    } else {
+        value.to_lowercase().collect::<String>() == pattern.to_lowercase().collect::<String>()
+    }
+}
+
+fn character_in_range(character: char, start: char, end: char, case_sensitive: bool) -> bool {
+    if start <= character && character <= end {
+        return true;
+    }
+    if case_sensitive {
+        return false;
+    }
+    let folded_character = folded_range_character(character);
+    let folded_start = folded_range_character(start);
+    let folded_end = folded_range_character(end);
+    folded_start <= folded_character && folded_character <= folded_end
+}
+
+fn folded_range_character(character: char) -> char {
+    character.to_lowercase().next().unwrap_or(character)
 }
 
 fn char_slots(line: &str) -> Vec<CharSlot> {
@@ -1241,15 +1430,40 @@ mod tests {
     }
 
     #[test]
-    fn literal_pattern_matches_existing_literal_semantics() {
+    fn literal_pattern_uses_smart_case() {
         let pattern =
             SearchPattern::compile(PatternKind::Literal, "foo").expect("literal compiles");
 
-        assert_eq!(pattern.find_forward_in_line("Foo foo", 0), Some((4, 7)));
-        assert_eq!(pattern.find_backward_in_line("foo foo", 6), Some((4, 7)));
+        assert_eq!(pattern.find_forward_in_line("Foo foo", 0), Some((0, 3)));
+        assert_eq!(pattern.find_backward_in_line("FOO foo", 6), Some((4, 7)));
         assert_eq!(
-            pattern.match_ranges_in_line("foo foo"),
-            vec![(0, 3), (4, 7)]
+            pattern.match_ranges_in_line("Foo foo FOO"),
+            vec![(0, 3), (4, 7), (8, 11)]
+        );
+    }
+
+    #[test]
+    fn literal_pattern_uppercase_is_case_sensitive() {
+        let pattern =
+            SearchPattern::compile(PatternKind::Literal, "Foo").expect("literal compiles");
+
+        assert_eq!(pattern.find_forward_in_line("foo Foo FOO", 0), Some((4, 7)));
+        assert_eq!(pattern.find_backward_in_line("Foo foo", 7), Some((0, 3)));
+        assert_eq!(pattern.match_ranges_in_line("Foo foo FOO"), vec![(0, 3)]);
+    }
+
+    #[test]
+    fn literal_pattern_smart_case_preserves_utf8_ranges() {
+        let pattern =
+            SearchPattern::compile(PatternKind::Literal, "écho").expect("literal compiles");
+
+        assert_eq!(
+            pattern.find_forward_in_line("Écho écho", 0),
+            Some((0, "Écho".len()))
+        );
+        assert_eq!(
+            pattern.match_ranges_in_line("Écho écho"),
+            vec![(0, "Écho".len()), ("Écho ".len(), "Écho écho".len())]
         );
     }
 
@@ -1264,6 +1478,34 @@ mod tests {
         assert_eq!(
             regexp("colou?r").find_forward_in_line("color colour", 0),
             Some((0, 5))
+        );
+    }
+
+    #[test]
+    fn regexp_pattern_uses_smart_case_for_literals() {
+        assert_eq!(
+            regexp("status").find_forward_in_line("Status status", 0),
+            Some((0, 6))
+        );
+        assert_eq!(
+            regexp("status").match_ranges_in_line("Status status STATUS"),
+            vec![(0, 6), (7, 13), (14, 20)]
+        );
+        assert_eq!(
+            regexp("Status").match_ranges_in_line("Status status STATUS"),
+            vec![(0, 6)]
+        );
+    }
+
+    #[test]
+    fn regexp_pattern_ignores_escaped_uppercase_for_smart_case_detection() {
+        assert_eq!(
+            regexp(r"\Wcat").find_forward_in_line("!Cat", 0),
+            Some((0, 4))
+        );
+        assert_eq!(
+            regexp(r"\Cat").find_forward_in_line("cat Cat", 0),
+            Some((0, 3))
         );
     }
 
@@ -1296,6 +1538,18 @@ mod tests {
         assert_eq!(
             regexp("[a-z]+").find_forward_in_line("123 abc", 0),
             Some((4, 7))
+        );
+    }
+
+    #[test]
+    fn regexp_character_classes_use_smart_case() {
+        assert_eq!(
+            regexp("[a-z]+").match_ranges_in_line("ABC abc"),
+            vec![(0, 3), (4, 7)]
+        );
+        assert_eq!(
+            regexp("[A-Z]+").match_ranges_in_line("ABC abc"),
+            vec![(0, 3)]
         );
     }
 
@@ -1350,7 +1604,15 @@ mod tests {
         );
         assert_eq!(
             regexp(r"[[:upper:]][[:lower:]]+").find_forward_in_line("Éclair Cat", 0),
-            Some((8, 11))
+            Some((2, 7))
+        );
+        assert_eq!(
+            regexp(r"[[:lower:]]+").match_ranges_in_line("ABC abc"),
+            vec![(0, 3), (4, 7)]
+        );
+        assert_eq!(
+            regexp(r"[[:upper:]]+").match_ranges_in_line("ABC abc"),
+            vec![(0, 3), (4, 7)]
         );
         assert_eq!(
             regexp(r"[[:alnum:]]+").match_ranges_in_line("a1 _ b2"),
