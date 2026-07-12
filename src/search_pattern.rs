@@ -106,6 +106,7 @@ impl SearchPattern {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RegexpPattern {
     expression: Expression,
+    capture_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,7 +131,22 @@ enum Atom {
     Any,
     Literal(char),
     Class(CharacterClass),
-    Group(Expression),
+    Group {
+        index: usize,
+        expression: Expression,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RegexpMatch {
+    range: (usize, usize),
+    captures: Vec<Option<(usize, usize)>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MatchState {
+    end_slot: usize,
+    captures: Vec<Option<(usize, usize)>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -167,17 +183,22 @@ impl RegexpPattern {
     fn compile(input: &str) -> Result<Self, PatternError> {
         let mut parser = Parser::new(input);
         let expression = parser.parse()?;
-        Ok(Self { expression })
+        Ok(Self {
+            expression,
+            capture_count: parser.capture_count,
+        })
     }
 
     fn find_forward(&self, line: &str, minimum_byte: usize) -> Option<(usize, usize)> {
+        self.find_forward_match(line, minimum_byte)
+            .map(|regexp_match| regexp_match.range)
+    }
+
+    fn find_forward_match(&self, line: &str, minimum_byte: usize) -> Option<RegexpMatch> {
         let slots = char_slots(line);
         for start_slot in start_slots_from_byte(&slots, line.len(), minimum_byte) {
-            if let Some(end_slot) = self.match_from(&slots, start_slot) {
-                return Some((
-                    slot_byte(&slots, line.len(), start_slot),
-                    slot_byte(&slots, line.len(), end_slot),
-                ));
+            if let Some(state) = self.match_state_from(&slots, start_slot) {
+                return Some(self.build_match(line.len(), &slots, start_slot, state));
             }
         }
         None
@@ -191,8 +212,8 @@ impl RegexpPattern {
             if start_byte > maximum_byte {
                 break;
             }
-            if let Some(end_slot) = self.match_from(&slots, start_slot) {
-                let end_byte = slot_byte(&slots, line.len(), end_slot);
+            if let Some(state) = self.match_state_from(&slots, start_slot) {
+                let end_byte = slot_byte(&slots, line.len(), state.end_slot);
                 if start_byte < maximum_byte || (start_byte == line.len() && end_byte == start_byte)
                 {
                     found = Some((start_byte, end_byte));
@@ -207,14 +228,14 @@ impl RegexpPattern {
         let mut ranges = Vec::new();
         let mut start_slot = 0;
         while start_slot <= slots.len() {
-            if let Some(end_slot) = self.match_from(&slots, start_slot)
-                && end_slot > start_slot
+            if let Some(state) = self.match_state_from(&slots, start_slot)
+                && state.end_slot > start_slot
             {
                 ranges.push((
                     slot_byte(&slots, line.len(), start_slot),
-                    slot_byte(&slots, line.len(), end_slot),
+                    slot_byte(&slots, line.len(), state.end_slot),
                 ));
-                start_slot = end_slot;
+                start_slot = state.end_slot;
             } else {
                 start_slot += 1;
             }
@@ -223,7 +244,49 @@ impl RegexpPattern {
     }
 
     fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
-        self.expression.match_from(slots, start_slot)
+        self.match_state_from(slots, start_slot)
+            .map(|state| state.end_slot)
+    }
+
+    fn match_state_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<MatchState> {
+        let captures = vec![None; self.capture_count];
+        self.expression
+            .match_states(
+                slots,
+                MatchState {
+                    end_slot: start_slot,
+                    captures,
+                },
+            )
+            .into_iter()
+            .next()
+    }
+
+    fn build_match(
+        &self,
+        line_len: usize,
+        slots: &[CharSlot],
+        start_slot: usize,
+        state: MatchState,
+    ) -> RegexpMatch {
+        RegexpMatch {
+            range: (
+                slot_byte(slots, line_len, start_slot),
+                slot_byte(slots, line_len, state.end_slot),
+            ),
+            captures: state
+                .captures
+                .into_iter()
+                .map(|range| {
+                    range.map(|(start, end)| {
+                        (
+                            slot_byte(slots, line_len, start),
+                            slot_byte(slots, line_len, end),
+                        )
+                    })
+                })
+                .collect(),
+        }
     }
 
     fn can_match_empty(&self) -> bool {
@@ -232,62 +295,58 @@ impl RegexpPattern {
 }
 
 impl Expression {
-    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
-        self.match_ends(slots, start_slot).into_iter().next()
-    }
-
-    fn match_ends(&self, slots: &[CharSlot], start_slot: usize) -> Vec<usize> {
+    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
         self.alternatives
             .iter()
-            .flat_map(|alternative| alternative.match_ends(slots, start_slot))
+            .flat_map(|alternative| alternative.match_states(slots, state.clone()))
             .collect()
     }
 }
 
 impl Sequence {
-    fn match_ends(&self, slots: &[CharSlot], start_slot: usize) -> Vec<usize> {
-        self.match_piece_ends(slots, 0, start_slot)
+    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
+        self.match_piece_states(slots, 0, state)
     }
 
-    fn match_piece_ends(
+    fn match_piece_states(
         &self,
         slots: &[CharSlot],
         piece_index: usize,
-        slot_index: usize,
-    ) -> Vec<usize> {
+        state: MatchState,
+    ) -> Vec<MatchState> {
         let Some(piece) = self.pieces.get(piece_index) else {
-            return vec![slot_index];
+            return vec![state];
         };
         match piece {
             Piece::AnchorStart => {
-                if slot_index == 0 {
-                    self.match_piece_ends(slots, piece_index + 1, slot_index)
+                if state.end_slot == 0 {
+                    self.match_piece_states(slots, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::AnchorEnd => {
-                if slot_index == slots.len() {
-                    self.match_piece_ends(slots, piece_index + 1, slot_index)
+                if state.end_slot == slots.len() {
+                    self.match_piece_states(slots, piece_index + 1, state)
                 } else {
                     Vec::new()
                 }
             }
             Piece::Consume { atom, quantifier } => self
-                .repeat_end_slots(slots, slot_index, atom, *quantifier)
+                .repeat_matches(slots, state, atom, *quantifier)
                 .into_iter()
-                .flat_map(|next_slot| self.match_piece_ends(slots, piece_index + 1, next_slot))
+                .flat_map(|state| self.match_piece_states(slots, piece_index + 1, state))
                 .collect(),
         }
     }
 
-    fn repeat_end_slots(
+    fn repeat_matches(
         &self,
         slots: &[CharSlot],
-        slot_index: usize,
+        state: MatchState,
         atom: &Atom,
         quantifier: Quantifier,
-    ) -> Vec<usize> {
+    ) -> Vec<MatchState> {
         let (minimum, maximum) = match quantifier {
             Quantifier::One => (1, Some(1)),
             Quantifier::ZeroOrMore => (0, None),
@@ -296,10 +355,9 @@ impl Sequence {
             Quantifier::Counted { minimum, maximum } => (minimum, maximum),
         };
         let maximum =
-            maximum.unwrap_or_else(|| slots.len().saturating_sub(slot_index).max(minimum));
+            maximum.unwrap_or_else(|| slots.len().saturating_sub(state.end_slot).max(minimum));
         let mut results = Vec::new();
-        collect_repetition_ends(slots, slot_index, atom, 0, minimum, maximum, &mut results);
-        results.dedup();
+        collect_repetition_matches(slots, state, atom, 0, minimum, maximum, &mut results);
         results
     }
 }
@@ -310,18 +368,30 @@ impl Atom {
             Self::Any => true,
             Self::Literal(literal) => *literal == character,
             Self::Class(class) => class.matches(character),
-            Self::Group(_) => false,
+            Self::Group { .. } => false,
         }
     }
 
-    fn match_ends(&self, slots: &[CharSlot], slot_index: usize) -> Vec<usize> {
+    fn match_states(&self, slots: &[CharSlot], state: MatchState) -> Vec<MatchState> {
         match self {
             Self::Any | Self::Literal(_) | Self::Class(_) => slots
-                .get(slot_index)
+                .get(state.end_slot)
                 .filter(|slot| self.matches(slot.character))
-                .map(|_| vec![slot_index + 1])
+                .map(|_| {
+                    vec![MatchState {
+                        end_slot: state.end_slot + 1,
+                        captures: state.captures,
+                    }]
+                })
                 .unwrap_or_default(),
-            Self::Group(expression) => expression.match_ends(slots, slot_index),
+            Self::Group { index, expression } => expression
+                .match_states(slots, state.clone())
+                .into_iter()
+                .map(|mut group_state| {
+                    group_state.captures[*index - 1] = Some((state.end_slot, group_state.end_slot));
+                    group_state
+                })
+                .collect(),
         }
     }
 }
@@ -339,6 +409,7 @@ impl CharacterClass {
 struct Parser<'a> {
     chars: Vec<char>,
     index: usize,
+    capture_count: usize,
     _input: &'a str,
 }
 
@@ -347,6 +418,7 @@ impl<'a> Parser<'a> {
         Self {
             chars: input.chars().collect(),
             index: 0,
+            capture_count: 0,
             _input: input,
         }
     }
@@ -385,12 +457,14 @@ impl<'a> Parser<'a> {
                         .ok_or_else(|| PatternError::new("trailing escape"))?;
                     match literal {
                         '(' => {
+                            self.capture_count += 1;
+                            let index = self.capture_count;
                             let expression = self.parse_expression(true)?;
                             if self.peek_escaped() != Some(')') {
                                 return Err(PatternError::new("unterminated group"));
                             }
                             self.index += 2;
-                            self.consume_piece(Atom::Group(expression))?
+                            self.consume_piece(Atom::Group { index, expression })?
                         }
                         ')' => return Err(PatternError::new("unmatched group close")),
                         '{' => return Err(PatternError::new("missing atom before quantifier")),
@@ -546,22 +620,22 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn collect_repetition_ends(
+fn collect_repetition_matches(
     slots: &[CharSlot],
-    slot_index: usize,
+    state: MatchState,
     atom: &Atom,
     count: usize,
     minimum: usize,
     maximum: usize,
-    results: &mut Vec<usize>,
+    results: &mut Vec<MatchState>,
 ) {
     if count < maximum {
-        for end_slot in atom.match_ends(slots, slot_index) {
-            if end_slot == slot_index {
+        for next_state in atom.match_states(slots, state.clone()) {
+            if next_state.end_slot == state.end_slot {
                 if count + 1 < maximum {
-                    collect_repetition_ends(
+                    collect_repetition_matches(
                         slots,
-                        end_slot,
+                        next_state,
                         atom,
                         count + 1,
                         minimum,
@@ -569,15 +643,23 @@ fn collect_repetition_ends(
                         results,
                     );
                 } else if count + 1 >= minimum {
-                    results.push(end_slot);
+                    results.push(next_state);
                 }
                 continue;
             }
-            collect_repetition_ends(slots, end_slot, atom, count + 1, minimum, maximum, results);
+            collect_repetition_matches(
+                slots,
+                next_state,
+                atom,
+                count + 1,
+                minimum,
+                maximum,
+                results,
+            );
         }
     }
     if count >= minimum {
-        results.push(slot_index);
+        results.push(state);
     }
 }
 
@@ -760,7 +842,7 @@ mod tests {
     fn consume_group(piece: &Piece) -> Option<&super::Expression> {
         match piece {
             Piece::Consume {
-                atom: Atom::Group(expression),
+                atom: Atom::Group { expression, .. },
                 quantifier: Quantifier::One,
             } => Some(expression),
             _ => None,
@@ -884,6 +966,72 @@ mod tests {
             regexp(r"a\(b\(c\|d\)\|e\)f").match_ranges_in_line("abcf abdf aef"),
             vec![(0, 4), (5, 9), (10, 13)]
         );
+    }
+
+    #[test]
+    fn regexp_match_reports_simple_captures() {
+        let pattern = RegexpPattern::compile(r"\(foo\)-\(bar\)").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("xx foo-bar", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (3, 10));
+        assert_eq!(regexp_match.captures, vec![Some((3, 6)), Some((7, 10))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_nested_captures() {
+        let pattern = RegexpPattern::compile(r"\(a\(b\)\)").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("xab", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (1, 3));
+        assert_eq!(regexp_match.captures, vec![Some((1, 3)), Some((2, 3))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_unmatched_alternative_captures() {
+        let pattern = RegexpPattern::compile(r"\(foo\)\|\(bar\)").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("bar", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 3));
+        assert_eq!(regexp_match.captures, vec![None, Some((0, 3))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_backtracked_capture_branch() {
+        let pattern = RegexpPattern::compile(r"\(ab\|a\)b").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("ab", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 2));
+        assert_eq!(regexp_match.captures, vec![Some((0, 1))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_last_repeated_capture() {
+        let pattern = RegexpPattern::compile(r"\(ab\)+").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("abab", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 4));
+        assert_eq!(regexp_match.captures, vec![Some((2, 4))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_utf8_capture_byte_ranges() {
+        let pattern = RegexpPattern::compile(r"\(é.\)").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("x éa", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (2, 5));
+        assert_eq!(regexp_match.captures, vec![Some((2, 5))]);
     }
 
     #[test]
