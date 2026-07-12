@@ -20,17 +20,20 @@
 	(is_word_start, is_word_end, is_word_boundary, is_word_at)
 	(is_word_before): New helpers.
 	(tests): Cover word constructs, POSIX classes, nullability, and invalid
-	POSIX classes.  Cover boundary-only edge cases.
+	POSIX classes.  Cover boundary-only edge cases and backward word-construct
+	matching.
 	* tests/pty_search.rs
 	(regexp_incremental_search_uses_word_and_posix_classes,
 	replace_regexp_uses_word_and_posix_classes,
 	replace_regexp_uses_word_boundary_and_word_character_constructs): New
-	tests.  Cover backward regexp isearch with a word-boundary pattern.
+	tests.  Cover backward regexp isearch with word constructs and POSIX
+	classes.
 	* README.md: Document regexp word constructs and POSIX classes.
 	* NEWS: Add user-visible regexp improvement entry.
 	* docs/development.md: Update current regexp subset.
 	* docs/emacs-function-reference.md: Update regexp support notes.
-	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 5 complete.
+	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 5 complete and
+	resolve the word-character semantics question.
 
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 

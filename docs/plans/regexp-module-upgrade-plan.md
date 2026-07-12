@@ -77,8 +77,8 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 
 - [ ] Should `\s-`, `\sw`, and other Emacs syntax-class constructs be deferred
   entirely, or should a tiny hard-coded subset exist before syntax tables?
-- [ ] Should `\w` use Rust Unicode word-like semantics, ASCII plus underscore, or
-  Rile's existing word-motion definition?
+- [x] Resolved: `\w` uses Rile's existing word-motion definition, Unicode
+  alphanumeric characters plus underscore.
 
 ## Phase 1: Parser Refactor
 

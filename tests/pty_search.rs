@@ -137,6 +137,50 @@ fn regexp_incremental_search_uses_word_and_posix_classes() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
 
     rile.send("C-M-r", keys::ctrl_meta('r'))?;
+    rile.send("regexp", br"[[:digit:]]\{4\}")?;
+    rile.assert_screen_contains(r"Regexp I-search backward: [[:digit:]]\{4\}")?;
+    rile.assert_status_contains("Ln 002 Col 004")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", b"bob_cat")?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-r", keys::ctrl_meta('r'))?;
+    rile.send("regexp", br"\bcat")?;
+    rile.assert_screen_contains(r"Regexp I-search backward: \bcat")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", b"bob_cat")?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-r", keys::ctrl_meta('r'))?;
+    rile.send("regexp", br"\Bcat")?;
+    rile.assert_screen_contains(r"Regexp I-search backward: \Bcat")?;
+    rile.assert_status_contains("Ln 001 Col 003")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", b"bob_cat")?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-r", keys::ctrl_meta('r'))?;
+    rile.send("regexp", br"\b\w+\W")?;
+    rile.assert_screen_contains(r"Regexp I-search backward: \b\w+\W")?;
+    rile.assert_status_contains("Ln 002 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", b"bob_cat")?;
+    rile.assert_status_contains("Ln 003 Col 000")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("C-M-r", keys::ctrl_meta('r'))?;
     rile.send("regexp", br"\<cat\>")?;
     rile.assert_screen_contains(r"Regexp I-search backward: \<cat\>")?;
     rile.assert_status_contains("Ln 002 Col 000")?;

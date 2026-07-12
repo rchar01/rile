@@ -1142,6 +1142,18 @@ mod tests {
         assert_eq!(regexp(r"\>").find_forward_in_line("cat", 0), Some((3, 3)));
         assert_eq!(regexp(r"\B").find_forward_in_line("", 0), Some((0, 0)));
         assert_eq!(regexp(r"\B").find_forward_in_line("!!!", 0), Some((0, 0)));
+        assert_eq!(
+            regexp(r"\<cat\>").find_backward_in_line("cat concatenate cat", 19),
+            Some((16, 19))
+        );
+        assert_eq!(
+            regexp(r"\Bcat").find_backward_in_line("concatenate cat", 15),
+            Some((3, 6))
+        );
+        assert_eq!(
+            regexp(r"\b\w+\W").find_backward_in_line("cat! dog?", 9),
+            Some((5, 9))
+        );
     }
 
     #[test]
