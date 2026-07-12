@@ -20,10 +20,12 @@
 	(is_word_start, is_word_end, is_word_boundary, is_word_at)
 	(is_word_before): New helpers.
 	(tests): Cover word constructs, POSIX classes, nullability, and invalid
-	POSIX classes.
+	POSIX classes.  Cover boundary-only edge cases.
 	* tests/pty_search.rs
 	(regexp_incremental_search_uses_word_and_posix_classes,
-	replace_regexp_uses_word_and_posix_classes): New tests.
+	replace_regexp_uses_word_and_posix_classes,
+	replace_regexp_uses_word_boundary_and_word_character_constructs): New
+	tests.
 	* README.md: Document regexp word constructs and POSIX classes.
 	* NEWS: Add user-visible regexp improvement entry.
 	* docs/development.md: Update current regexp subset.

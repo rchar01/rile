@@ -1139,6 +1139,9 @@ mod tests {
             regexp(r"\W+").find_forward_in_line("abc, def", 0),
             Some((3, 5))
         );
+        assert_eq!(regexp(r"\>").find_forward_in_line("cat", 0), Some((3, 3)));
+        assert_eq!(regexp(r"\B").find_forward_in_line("", 0), Some((0, 0)));
+        assert_eq!(regexp(r"\B").find_forward_in_line("!!!", 0), Some((0, 0)));
     }
 
     #[test]

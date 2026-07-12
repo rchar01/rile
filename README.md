@@ -166,7 +166,9 @@ Basic editor keys:
   constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket
   classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
   `[[:lower:]]`, and `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match
-  literally; use the escaped Emacs forms for regexp operators.
+  literally; use the escaped Emacs forms for regexp operators. Word constructs
+  use Rile's Unicode-aware word definition: alphanumeric characters plus
+  underscore.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward
