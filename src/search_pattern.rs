@@ -1013,6 +1013,17 @@ mod tests {
     }
 
     #[test]
+    fn regexp_match_clears_capture_when_backtracking_skips_optional_group() {
+        let pattern = RegexpPattern::compile(r"\(a\)?a").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("a", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 1));
+        assert_eq!(regexp_match.captures, vec![None]);
+    }
+
+    #[test]
     fn regexp_match_reports_last_repeated_capture() {
         let pattern = RegexpPattern::compile(r"\(ab\)+").expect("regexp should compile");
         let regexp_match = pattern
@@ -1021,6 +1032,17 @@ mod tests {
 
         assert_eq!(regexp_match.range, (0, 4));
         assert_eq!(regexp_match.captures, vec![Some((2, 4))]);
+    }
+
+    #[test]
+    fn regexp_match_reports_zero_width_repeated_capture() {
+        let pattern = RegexpPattern::compile(r"\(\)\{2\}").expect("regexp should compile");
+        let regexp_match = pattern
+            .find_forward_match("abc", 0)
+            .expect("regexp should match");
+
+        assert_eq!(regexp_match.range, (0, 0));
+        assert_eq!(regexp_match.captures, vec![Some((0, 0))]);
     }
 
     #[test]

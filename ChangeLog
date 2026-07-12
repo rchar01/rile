@@ -1,5 +1,13 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add capture backtracking edge tests.
+
+	* src/search_pattern.rs
+	(regexp_match_clears_capture_when_backtracking_skips_optional_group,
+	regexp_match_reports_zero_width_repeated_capture): New tests.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Track regexp captures internally.
 
 	* src/search_pattern.rs (RegexpPattern): Store capture count.
