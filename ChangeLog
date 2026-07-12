@@ -1,5 +1,12 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp conformance tests.
+
+	* src/search_pattern.rs (tests): Add a documented-subset conformance
+	matrix and out-of-scope Emacs construct checks.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Remove completed regexp upgrade plan.
 
 	* docs/plans/regexp-module-upgrade-plan.md: Remove completed plan.

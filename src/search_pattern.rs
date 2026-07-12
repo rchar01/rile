@@ -893,6 +893,151 @@ mod tests {
         SearchPattern::compile(PatternKind::Regexp, pattern).expect("regexp should compile")
     }
 
+    struct RegexpConformanceCase {
+        name: &'static str,
+        pattern: &'static str,
+        line: &'static str,
+        forward: Option<(usize, usize)>,
+        backward: Option<(usize, usize)>,
+        ranges: &'static [(usize, usize)],
+        can_match_empty: bool,
+    }
+
+    #[test]
+    fn regexp_conformance_matrix_covers_documented_subset() {
+        for case in [
+            RegexpConformanceCase {
+                name: "dot and plus",
+                pattern: "f.o+",
+                line: "xx fooo",
+                forward: Some((3, 7)),
+                backward: Some((3, 7)),
+                ranges: &[(3, 7)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "anchors",
+                pattern: "^foo$",
+                line: "foo",
+                forward: Some((0, 3)),
+                backward: Some((0, 3)),
+                ranges: &[(0, 3)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "character class range and repetition",
+                pattern: r"[a-z]\{3\}",
+                line: "123 abc xyz",
+                forward: Some((4, 7)),
+                backward: Some((8, 11)),
+                ranges: &[(4, 7), (8, 11)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "negated class",
+                pattern: r"[^[:space:]]+",
+                line: "a b\tc",
+                forward: Some((0, 1)),
+                backward: Some((4, 5)),
+                ranges: &[(0, 1), (2, 3), (4, 5)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "emacs grouping and alternation",
+                pattern: r"\(cat\|dog\)s",
+                line: "cats dogs cots",
+                forward: Some((0, 4)),
+                backward: Some((5, 9)),
+                ranges: &[(0, 4), (5, 9)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "counted repetition",
+                pattern: r"[[:digit:]]\{4\}",
+                line: "a 1 1234",
+                forward: Some((4, 8)),
+                backward: Some((4, 8)),
+                ranges: &[(4, 8)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "word start and end",
+                pattern: r"\<cat\>",
+                line: "cat concatenate bob_cat cat!",
+                forward: Some((0, 3)),
+                backward: Some((24, 27)),
+                ranges: &[(0, 3), (24, 27)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "word and non-word characters",
+                pattern: r"\b\w+\W",
+                line: "cat! dog?",
+                forward: Some((0, 4)),
+                backward: Some((5, 9)),
+                ranges: &[(0, 4), (5, 9)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "unicode word characters",
+                pattern: r"\b\w+",
+                line: ". déjà_vu!",
+                forward: Some((2, 2 + "déjà_vu".len())),
+                backward: Some((2, 2 + "déjà_vu".len())),
+                ranges: &[(2, 11)],
+                can_match_empty: false,
+            },
+            RegexpConformanceCase {
+                name: "zero-width anchor",
+                pattern: r"^",
+                line: "abc",
+                forward: Some((0, 0)),
+                backward: Some((0, 0)),
+                ranges: &[],
+                can_match_empty: true,
+            },
+        ] {
+            let pattern = regexp(case.pattern);
+            assert_eq!(
+                pattern.find_forward_in_line(case.line, 0),
+                case.forward,
+                "{} forward",
+                case.name
+            );
+            assert_eq!(
+                pattern.find_backward_in_line(case.line, case.line.len()),
+                case.backward,
+                "{} backward",
+                case.name
+            );
+            assert_eq!(
+                pattern.match_ranges_in_line(case.line),
+                case.ranges,
+                "{} ranges",
+                case.name
+            );
+            assert_eq!(
+                pattern.can_match_empty(),
+                case.can_match_empty,
+                "{} nullability",
+                case.name
+            );
+        }
+    }
+
+    #[test]
+    fn regexp_out_of_scope_emacs_constructs_are_not_treated_as_supported_forms() {
+        assert_eq!(
+            regexp(r"\(a\)\1").find_forward_in_line("aa a1", 0),
+            Some((3, 5))
+        );
+        assert_eq!(
+            regexp(r"\sw+").find_forward_in_line("www sw", 0),
+            Some((4, 6))
+        );
+        assert!(SearchPattern::compile(PatternKind::Regexp, r"[[:word:]]").is_err());
+    }
+
     #[test]
     fn regexp_parser_builds_expression_sequence() {
         let pattern = RegexpPattern::compile("^f[ao]+$").expect("regexp should compile");
