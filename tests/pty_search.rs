@@ -216,3 +216,63 @@ fn query_replace_regexp_history_is_separate() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn replace_regexp_replaces_matches() -> Result<()> {
+    let file = fixtures::named_temp_file("foo fxo faa\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo fxo faa")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.assert_screen_contains("Replace regexp:")?;
+    rile.send("regexp", b"f.o")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Replace regexp f.o with:")?;
+    rile.send("replacement", b"bar")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("bar bar faa")?;
+    rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_history_recalls_search_and_replacement() -> Result<()> {
+    let file = fixtures::named_temp_file("foo\nfxo\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", b"f.o")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"bar")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("Replaced 2 occurrences")?;
+
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("search draft", b"draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Replace regexp: f.o")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Replace regexp: draft")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.send("replacement draft", b"draft-replacement")?;
+    rile.send("M-p", keys::meta('p'))?;
+    rile.assert_screen_contains("Replace regexp f.o with: bar")?;
+    rile.send("M-n", keys::meta('n'))?;
+    rile.assert_screen_contains("Replace regexp f.o with: draft-replacement")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+fn execute_m_x(rile: &mut RilePty, command: &[u8]) -> Result<()> {
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("command", command)?;
+    rile.send("Enter", keys::ENTER)
+}
