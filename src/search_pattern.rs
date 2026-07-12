@@ -151,6 +151,10 @@ enum Quantifier {
     ZeroOrMore,
     OneOrMore,
     ZeroOrOne,
+    Counted {
+        minimum: usize,
+        maximum: Option<usize>,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -285,13 +289,17 @@ impl Sequence {
         quantifier: Quantifier,
     ) -> Vec<usize> {
         let (minimum, maximum) = match quantifier {
-            Quantifier::One => (1, 1),
-            Quantifier::ZeroOrMore => (0, slots.len().saturating_sub(slot_index)),
-            Quantifier::OneOrMore => (1, slots.len().saturating_sub(slot_index)),
-            Quantifier::ZeroOrOne => (0, 1),
+            Quantifier::One => (1, Some(1)),
+            Quantifier::ZeroOrMore => (0, None),
+            Quantifier::OneOrMore => (1, None),
+            Quantifier::ZeroOrOne => (0, Some(1)),
+            Quantifier::Counted { minimum, maximum } => (minimum, maximum),
         };
+        let maximum =
+            maximum.unwrap_or_else(|| slots.len().saturating_sub(slot_index).max(minimum));
         let mut results = Vec::new();
         collect_repetition_ends(slots, slot_index, atom, 0, minimum, maximum, &mut results);
+        results.dedup();
         results
     }
 }
@@ -385,6 +393,8 @@ impl<'a> Parser<'a> {
                             self.consume_piece(Atom::Group(expression))?
                         }
                         ')' => return Err(PatternError::new("unmatched group close")),
+                        '{' => return Err(PatternError::new("missing atom before quantifier")),
+                        '}' => return Err(PatternError::new("unmatched counted repetition close")),
                         literal => self.consume_piece(Atom::Literal(literal))?,
                     }
                 }
@@ -413,12 +423,65 @@ impl<'a> Parser<'a> {
                 self.index += 1;
                 Quantifier::ZeroOrOne
             }
+            Some('\\') if self.peek_next() == Some('{') => self.parse_counted_quantifier()?,
             _ => Quantifier::One,
         };
-        if matches!(self.peek(), Some('*' | '+' | '?')) {
+        if matches!(self.peek(), Some('*' | '+' | '?')) || self.peek_escaped() == Some('{') {
             return Err(PatternError::new("repeated quantifier"));
         }
         Ok(Piece::Consume { atom, quantifier })
+    }
+
+    fn parse_counted_quantifier(&mut self) -> Result<Quantifier, PatternError> {
+        self.index += 2;
+        let minimum = self.parse_digits()?;
+        let maximum = match self.peek() {
+            Some(',') => {
+                self.index += 1;
+                if self.peek_escaped() == Some('}') {
+                    self.index += 2;
+                    None
+                } else {
+                    let maximum = self.parse_digits()?;
+                    if maximum < minimum {
+                        return Err(PatternError::new("invalid counted repetition range"));
+                    }
+                    self.consume_counted_close()?;
+                    Some(maximum)
+                }
+            }
+            _ => {
+                self.consume_counted_close()?;
+                Some(minimum)
+            }
+        };
+        Ok(Quantifier::Counted { minimum, maximum })
+    }
+
+    fn parse_digits(&mut self) -> Result<usize, PatternError> {
+        let start = self.index;
+        while self
+            .peek()
+            .is_some_and(|character| character.is_ascii_digit())
+        {
+            self.index += 1;
+        }
+        if self.index == start {
+            return Err(PatternError::new("missing counted repetition number"));
+        }
+        self.chars[start..self.index]
+            .iter()
+            .collect::<String>()
+            .parse()
+            .map_err(|_| PatternError::new("invalid counted repetition number"))
+    }
+
+    fn consume_counted_close(&mut self) -> Result<(), PatternError> {
+        if self.peek_escaped() != Some('}') {
+            return Err(PatternError::new("unterminated counted repetition"));
+        }
+        self.index += 2;
+        Ok(())
     }
 
     fn parse_class(&mut self) -> Result<CharacterClass, PatternError> {
@@ -495,7 +558,17 @@ fn collect_repetition_ends(
     if count < maximum {
         for end_slot in atom.match_ends(slots, slot_index) {
             if end_slot == slot_index {
-                if count + 1 >= minimum {
+                if count + 1 < maximum {
+                    collect_repetition_ends(
+                        slots,
+                        end_slot,
+                        atom,
+                        count + 1,
+                        minimum,
+                        maximum,
+                        results,
+                    );
+                } else if count + 1 >= minimum {
                     results.push(end_slot);
                 }
                 continue;
@@ -567,8 +640,7 @@ mod tests {
 
     #[test]
     fn regexp_parser_preserves_escaped_metacharacters_as_literals() {
-        let pattern =
-            RegexpPattern::compile(r"\.\*\+\?\^\$\[\]\{\}").expect("regexp should compile");
+        let pattern = RegexpPattern::compile(r"\.\*\+\?\^\$\[\]").expect("regexp should compile");
         let pieces = &pattern.expression.alternatives[0].pieces;
         let literals = pieces
             .iter()
@@ -578,7 +650,7 @@ mod tests {
 
         assert_eq!(
             literals,
-            ['.', '*', '+', '?', '^', '$', '[', ']', '{', '}']
+            ['.', '*', '+', '?', '^', '$', '[', ']']
                 .map(|character| (character, Quantifier::One))
                 .to_vec()
         );
@@ -604,7 +676,8 @@ mod tests {
 
     #[test]
     fn regexp_parser_attaches_quantifiers_to_previous_atoms() {
-        let pattern = RegexpPattern::compile("a?b*c+").expect("regexp should compile");
+        let pattern =
+            RegexpPattern::compile(r"a?b*c+d\{2\}e\{1,\}f\{0,3\}").expect("regexp should compile");
         let pieces = &pattern.expression.alternatives[0].pieces;
 
         assert_eq!(
@@ -616,6 +689,27 @@ mod tests {
                 ('a', Quantifier::ZeroOrOne),
                 ('b', Quantifier::ZeroOrMore),
                 ('c', Quantifier::OneOrMore),
+                (
+                    'd',
+                    Quantifier::Counted {
+                        minimum: 2,
+                        maximum: Some(2),
+                    },
+                ),
+                (
+                    'e',
+                    Quantifier::Counted {
+                        minimum: 1,
+                        maximum: None,
+                    },
+                ),
+                (
+                    'f',
+                    Quantifier::Counted {
+                        minimum: 0,
+                        maximum: Some(3),
+                    },
+                ),
             ])
         );
     }
@@ -761,6 +855,30 @@ mod tests {
     }
 
     #[test]
+    fn regexp_supports_counted_repetition() {
+        assert_eq!(
+            regexp(r"ba\{2\}").find_forward_in_line("baa ba", 0),
+            Some((0, 3))
+        );
+        assert_eq!(
+            regexp(r"ba\{2,\}").find_forward_in_line("ba baaa", 0),
+            Some((3, 7))
+        );
+        assert_eq!(
+            regexp(r"ba\{1,2\}").match_ranges_in_line("b ba baa baaa"),
+            vec![(2, 4), (5, 8), (9, 12)]
+        );
+        assert_eq!(
+            regexp(r"\(ab\)\{2\}").find_forward_in_line("ab abab", 0),
+            Some((3, 7))
+        );
+        assert_eq!(
+            regexp(r"ba\{0\}").find_forward_in_line("b ba", 0),
+            Some((0, 1))
+        );
+    }
+
+    #[test]
     fn regexp_supports_nested_groups() {
         assert_eq!(
             regexp(r"a\(b\(c\|d\)\|e\)f").match_ranges_in_line("abcf abdf aef"),
@@ -807,8 +925,11 @@ mod tests {
         assert!(regexp("$").can_match_empty());
         assert!(regexp("a*").can_match_empty());
         assert!(regexp("a?").can_match_empty());
+        assert!(regexp(r"a\{0\}").can_match_empty());
+        assert!(regexp(r"\(a*\)\{2\}").can_match_empty());
         assert!(regexp("^a*$").can_match_empty());
         assert!(!regexp("a+").can_match_empty());
+        assert!(!regexp(r"a\{2\}").can_match_empty());
         assert!(!regexp("f.o").can_match_empty());
         assert!(
             SearchPattern::compile(PatternKind::Literal, "")
@@ -825,7 +946,24 @@ mod tests {
     #[test]
     fn regexp_reports_invalid_patterns() {
         for pattern in [
-            "\\", r"\(", r"\)", r"\(abc", "[abc", "[]", "[z-a]", "*a", "a**",
+            "\\",
+            r"\(",
+            r"\)",
+            r"\(abc",
+            r"\{2\}",
+            r"\}",
+            r"a\{\}",
+            r"a\{,\}",
+            r"a\{2,1\}",
+            r"a\{2",
+            r"a\{2}",
+            r"a\{1\}*",
+            r"a*\{1\}",
+            "[abc",
+            "[]",
+            "[z-a]",
+            "*a",
+            "a**",
         ] {
             assert!(
                 SearchPattern::compile(PatternKind::Regexp, pattern).is_err(),
