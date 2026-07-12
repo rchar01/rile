@@ -1,5 +1,14 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add command-level regexp syntax coverage.
+
+	* tests/pty_search.rs
+	(regexp_incremental_search_uses_groups_alternation_and_counts,
+	replace_regexp_uses_groups_alternation_and_counts): New tests.
+	* README.md: Clarify bare and escaped regexp punctuation.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add Emacs-style regexp groups, alternation, and counts.
 
 	* src/search_pattern.rs (Atom): Add grouped expressions.

@@ -81,6 +81,26 @@ fn regexp_incremental_search_matches_and_repeats() -> Result<()> {
 }
 
 #[test]
+fn regexp_incremental_search_uses_groups_alternation_and_counts() -> Result<()> {
+    let file = fixtures::named_temp_file("xx cats\nxx dogs\nxx dogss\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("xx cats")?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("regexp", br"\(cat\|dog\)s\{1,2\}")?;
+    rile.assert_screen_contains(r"Regexp I-search: \(cat\|dog\)s\{1,2\}")?;
+    rile.assert_status_contains("Ln 001 Col 003")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_status_contains("Ln 002 Col 003")?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.assert_status_contains("Ln 003 Col 003")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn incremental_search_history_recalls_with_meta_keys() -> Result<()> {
     let file = fixtures::named_temp_file("foo\nbar\nféo\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
@@ -233,6 +253,25 @@ fn replace_regexp_replaces_matches() -> Result<()> {
 
     rile.wait_for_screen_contains("bar bar faa")?;
     rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_uses_groups_alternation_and_counts() -> Result<()> {
+    let file = fixtures::named_temp_file("cats dogs dogss cots\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("cats dogs dogss cots")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", br"\(cat\|dog\)s\{1,2\}")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", b"pet")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("pet pet pet cots")?;
+    rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
     Ok(())

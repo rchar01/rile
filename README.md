@@ -162,7 +162,8 @@ Basic editor keys:
   The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`,
   Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
   `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character
-  classes such as `[abc]`, `[^abc]`, and `[a-z]`.
+  classes such as `[abc]`, `[^abc]`, and `[a-z]`. Bare `(`, `)`, `{`, `}`,
+  and `|` match literally; use the escaped Emacs forms for regexp operators.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward
