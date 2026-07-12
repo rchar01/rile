@@ -1,5 +1,16 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp replacement edge coverage.
+
+	* src/editor.rs (tests): Cover UTF-8 capture expansion.
+	* src/editor/search.rs (find_pattern_match): Document why backward matches
+	drop captures.
+	* tests/pty_search.rs
+	(replace_regexp_preserves_unsupported_escapes_and_utf8): New test.
+	* docs/emacs-function-reference.md: Fix stale replacement-expansion note.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add regexp replacement expansion.
 
 	* src/search_pattern.rs (PatternMatch): New type.

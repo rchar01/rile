@@ -33,6 +33,8 @@ pub(super) fn find_pattern_match(
 
     match direction {
         SearchDirection::Forward => find_forward(buffer, pattern, start),
+        // Backward callers currently only need ranges; capture expansion uses
+        // forward replacement matches.
         SearchDirection::Backward => find_backward(buffer, pattern, start).map(|range| {
             range.map(|range| EditorPatternMatch {
                 range,

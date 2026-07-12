@@ -19217,6 +19217,28 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn replace_regexp_expands_utf8_captures() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "éx-ø")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("replace-regexp")
+            .expect("replace regexp should prompt");
+        submit_prompt_text(&mut editor, r"\(éx\)-\(ø\)");
+        submit_prompt_text(&mut editor, r"\2/\1");
+
+        assert_eq!(editor.document().buffer().serialize(), "ø/éx");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Replaced 1 occurrence")
+        );
+    }
+
+    #[test]
     fn replace_regexp_reports_no_matches_and_rejects_invalid_patterns() {
         let mut document = Document::scratch();
         document
