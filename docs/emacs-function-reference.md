@@ -181,10 +181,10 @@ Messages: invalid regexps report `Error: invalid regexp`. Regexps that can match
 empty text report `Error: regexp can match empty string` and are rejected before
 replacement begins.
 
-Rile target: intentional first subset. Matching uses the same line-local regexp
-subset as regexp incremental search. Replacement text is literal; Emacs
-replacement escapes such as `\1`, `\&`, `\,(...)`, and case-conversion
-directives are not expanded yet.
+Rile target: intentional subset. Matching uses the same line-local regexp subset
+as regexp incremental search. Replacement text is literal; Emacs replacement
+escapes such as `\1`, `\&`, `\,(...)`, and case-conversion directives are not
+expanded yet.
 
 Evidence: GNU Emacs command name and default binding; Rile unit and PTY tests for
 command dispatch, prompt history, regexp replacement, invalid patterns,
@@ -225,10 +225,10 @@ Messages: invalid regexps report `Error: invalid regexp`. Regexps that can match
 empty text report `Error: regexp can match empty string`. Completion reports
 `Replaced N occurrences` or `No matches for <regexp>`.
 
-Rile target: intentional first subset. Matching uses the same line-local regexp
-subset as regexp incremental search. Replacement text is literal; Emacs
-replacement escapes such as `\1`, `\&`, `\,(...)`, and case-conversion
-directives are not expanded yet.
+Rile target: intentional subset. Matching uses the same line-local regexp subset
+as regexp incremental search. Replacement text is literal; Emacs replacement
+escapes such as `\1`, `\&`, `\,(...)`, and case-conversion directives are not
+expanded yet.
 
 Evidence: GNU Emacs command name; Rile unit and PTY tests for command dispatch,
 prompt history, regexp replacement from point, no-match reporting, invalid
@@ -252,10 +252,11 @@ boundary failure. `M-p` and `M-n` recall accepted regexp search strings from a
 history separate from literal isearch history.
 
 Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
-`^`, `$`, escaped metacharacters, and character classes such as `[abc]`,
-`[^abc]`, and `[a-z]`. Rile does not yet support grouping, alternation,
-captures, backreferences, counted repetition, word-boundary syntax, syntax
-classes, or multiline regexp matching.
+`^`, `$`, Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
+`\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character classes
+such as `[abc]`, `[^abc]`, and `[a-z]`. Rile does not yet support captures,
+backreferences, word-boundary syntax, syntax classes, or multiline regexp
+matching.
 
 Evidence: GNU Emacs command names and default bindings; Rile unit and PTY tests
 for regexp isearch command dispatch, matching, repeat, wrap, invalid patterns,

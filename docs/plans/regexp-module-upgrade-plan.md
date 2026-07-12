@@ -56,17 +56,17 @@ following and avoids accidentally exposing a second PCRE-like regexp language.
 - `src/search_pattern.rs` now parses regexps into an expression/sequence AST
   foundation.
 - The current matcher handles one line at a time and returns byte ranges.
-- Existing regexp support includes `.`, `*`, `+`, `?`, `^`, `$`, escaped
-  metacharacters, and character classes with ranges and negation.
-- Current code has no alternation, no groups, no captures, and no
-  replacement-expansion API.
+- Existing regexp support includes `.`, `*`, `+`, `?`, `^`, `$`, Emacs-style
+  grouping, alternation, counted repetition, escaped metacharacters, and
+  character classes with ranges and negation.
+- Current code has no captures and no replacement-expansion API.
 - `query-replace-regexp` and `replace-regexp` intentionally use literal
   replacement text today.
 
 ## Assumptions
 
-- A small AST is the right next internal representation; extending the current
-  flat `Vec<Piece>` will become brittle once alternation and captures exist.
+- The small expression/sequence AST should remain the internal representation as
+  capture tracking and replacement expansion are added.
 - Matching should stay line-local until there is a separate design for multiline
   buffer-spanning matches.
 - Captures should be represented as byte ranges into the original line text.
@@ -109,17 +109,17 @@ Goal: Add the most important missing Emacs regexp structure.
 
 Tasks:
 
-- [ ] Add `\(...\)` grouping.
-- [ ] Add `\|` alternation with Emacs-style precedence.
-- [ ] Add counted repetition with `\{m\}`, `\{m,\}`, and `\{m,n\}`.
-- [ ] Keep bare `(`, `)`, `{`, `}`, and `|` as literal characters.
-- [ ] Add tests for nested groups, alternatives, quantified groups, and malformed
+- [x] Add `\(...\)` grouping.
+- [x] Add `\|` alternation with Emacs-style precedence.
+- [x] Add counted repetition with `\{m\}`, `\{m,\}`, and `\{m,n\}`.
+- [x] Keep bare `(`, `)`, `{`, `}`, and `|` as literal characters.
+- [x] Add tests for nested groups, alternatives, quantified groups, and malformed
   escaped constructs.
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
-- [ ] Run focused regexp incremental-search tests.
+- [x] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
+- [x] Run focused regexp incremental-search tests.
 
 ## Phase 3: Match Objects And Captures
 
@@ -238,6 +238,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-07-12 | Phase 2 grouping, alternation, and counted repetition completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 1 AST foundation completed without user-visible regexp changes. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern`, `./scripts/in-container cargo test --locked --lib regexp`, and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Plan created for a practical Emacs-aligned regexp subset. | User requested a durable plan in `docs/plans/`; current `src/search_pattern.rs` and regexp docs inspected. |
 

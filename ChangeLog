@@ -1,5 +1,27 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add Emacs-style regexp groups, alternation, and counts.
+
+	* src/search_pattern.rs (Atom): Add grouped expressions.
+	(Quantifier): Add counted repetition bounds.
+	(Expression::match_ends, Sequence::match_ends): New helpers.
+	(Sequence::match_piece_ends, Sequence::repeat_end_slots): Replace the
+	flat atom-repeat matcher with backtracking over grouped alternatives.
+	(Atom::match_ends): New helper.
+	(Parser::parse_expression): Parse groups and alternatives.
+	(Parser::parse_counted_quantifier, Parser::parse_digits,
+	Parser::consume_counted_close, Parser::peek_escaped): New helpers.
+	(collect_repetition_ends): New helper.
+	(tests): Cover grouped alternatives, nested groups, counted repetition,
+	bare literal punctuation, and malformed escaped constructs.
+	* README.md: Document the expanded regexp subset.
+	* NEWS: Mention grouping, alternation, and counted repetition.
+	* docs/development.md: Update regexp implementation limits.
+	* docs/emacs-function-reference.md: Update regexp command status.
+	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 2 complete.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add a regexp AST foundation.
 
 	* src/search_pattern.rs (RegexpPattern): Store an expression instead of a

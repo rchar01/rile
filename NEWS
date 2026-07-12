@@ -12,6 +12,10 @@ Interface features:
 
 Editing features:
 
+* Rile's built-in regexp subset now supports Emacs-style grouping `\(...\)`,
+  alternation `\|`, and counted repetition `\{m\}`, `\{m,\}`, and `\{m,n\}`
+  in regexp search, `query-replace-regexp`, and `replace-regexp`.
+
 * `replace-regexp` is now available through `M-x`. It replaces regexp matches
   from point to the end of the buffer using Rile's built-in line-local regexp
   subset and literal replacement text.

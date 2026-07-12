@@ -159,8 +159,10 @@ Basic editor keys:
 - `C-s` starts forward incremental search; repeat `C-s` jumps to the next match.
 - `C-r` starts backward incremental search; repeat `C-r` jumps to the previous match.
 - `C-M-s` and `C-M-r` start forward and backward regexp incremental search.
-  The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`, escaped
-  metacharacters, and character classes such as `[abc]`, `[^abc]`, and `[a-z]`.
+  The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`,
+  Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
+  `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character
+  classes such as `[abc]`, `[^abc]`, and `[a-z]`.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward
@@ -181,7 +183,7 @@ Basic editor keys:
   use `y` to replace, `n` to skip, `!` to replace all remaining matches, and `q`
   to quit.
 - `C-M-%` starts regexp query replace using the same line-local regexp subset as
-  regexp incremental search. Replacement text is literal in this first subset,
+  regexp incremental search. Replacement text is literal in the current subset,
   so replacement escapes such as `\1` and `\&` are not expanded. Regexps that
   can match empty text are rejected for replacement.
 - `M-x replace-regexp` prompts for a regexp and replacement string, then replaces
@@ -221,7 +223,7 @@ Basic editor keys:
   searches accepted with Enter.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
+Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, and counted repetition. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.
