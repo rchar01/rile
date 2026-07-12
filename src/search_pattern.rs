@@ -105,6 +105,16 @@ impl SearchPattern {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RegexpPattern {
+    expression: Expression,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Expression {
+    alternatives: Vec<Sequence>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Sequence {
     pieces: Vec<Piece>,
 }
 
@@ -151,8 +161,8 @@ struct CharSlot {
 impl RegexpPattern {
     fn compile(input: &str) -> Result<Self, PatternError> {
         let mut parser = Parser::new(input);
-        let pieces = parser.parse()?;
-        Ok(Self { pieces })
+        let expression = parser.parse()?;
+        Ok(Self { expression })
     }
 
     fn find_forward(&self, line: &str, minimum_byte: usize) -> Option<(usize, usize)> {
@@ -208,11 +218,31 @@ impl RegexpPattern {
     }
 
     fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
-        self.match_piece(slots, 0, start_slot)
+        self.expression.match_from(slots, start_slot)
     }
 
     fn can_match_empty(&self) -> bool {
         self.match_from(&[], 0) == Some(0)
+    }
+}
+
+impl Expression {
+    fn sequence(pieces: Vec<Piece>) -> Self {
+        Self {
+            alternatives: vec![Sequence { pieces }],
+        }
+    }
+
+    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
+        self.alternatives
+            .iter()
+            .find_map(|alternative| alternative.match_from(slots, start_slot))
+    }
+}
+
+impl Sequence {
+    fn match_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<usize> {
+        self.match_piece(slots, 0, start_slot)
     }
 
     fn match_piece(
@@ -299,7 +329,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse(&mut self) -> Result<Vec<Piece>, PatternError> {
+    fn parse(&mut self) -> Result<Expression, PatternError> {
         let mut pieces = Vec::new();
         while let Some(character) = self.next() {
             let piece = match character {
@@ -323,7 +353,7 @@ impl<'a> Parser<'a> {
             };
             pieces.push(piece);
         }
-        Ok(pieces)
+        Ok(Expression::sequence(pieces))
     }
 
     fn consume_piece(&mut self, atom: Atom) -> Result<Piece, PatternError> {
@@ -438,10 +468,18 @@ fn start_slots_from_byte(
 
 #[cfg(test)]
 mod tests {
-    use super::{PatternKind, SearchPattern};
+    use super::{PatternKind, RegexpPattern, SearchPattern};
 
     fn regexp(pattern: &str) -> SearchPattern {
         SearchPattern::compile(PatternKind::Regexp, pattern).expect("regexp should compile")
+    }
+
+    #[test]
+    fn regexp_parser_builds_expression_sequence() {
+        let pattern = RegexpPattern::compile("^f[ao]+$").expect("regexp should compile");
+
+        assert_eq!(pattern.expression.alternatives.len(), 1);
+        assert_eq!(pattern.expression.alternatives[0].pieces.len(), 4);
     }
 
     #[test]
