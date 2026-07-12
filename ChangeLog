@@ -1,5 +1,12 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Remove completed regexp upgrade plan.
+
+	* docs/plans/regexp-module-upgrade-plan.md: Remove completed plan.
+	* docs/README.md: Remove active-plan link.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add regexp word and POSIX class support.
 
 	* src/search_pattern.rs: Use Rile's word-character helper.
