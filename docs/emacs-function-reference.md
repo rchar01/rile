@@ -258,10 +258,12 @@ history separate from literal isearch history.
 Rile target: intentional subset. Rile supports line-local `.`, `*`, `+`, `?`,
 `^`, `$`, Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
 `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character classes
-such as `[abc]`, `[^abc]`, and `[a-z]`. Bare `(`, `)`, `{`, `}`, and `|` match
-literally. Rile tracks numbered captures for regexp replacement expansion but
-does not yet support regexp backreferences, word-boundary syntax, syntax
-classes, or multiline regexp matching.
+such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word constructs `\<`,
+`\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket classes
+`[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`, `[[:lower:]]`, and
+`[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match literally. Rile tracks
+numbered captures for regexp replacement expansion but does not yet support
+regexp backreferences, syntax classes, or multiline regexp matching.
 
 Evidence: GNU Emacs command names and default bindings; Rile unit and PTY tests
 for regexp isearch command dispatch, matching, repeat, wrap, invalid patterns,

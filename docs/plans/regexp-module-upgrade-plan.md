@@ -169,13 +169,13 @@ Goal: Add the regexp forms that matter most in everyday editing searches.
 
 Tasks:
 
-- [ ] Add `\<` and `\>` for beginning and end of word.
-- [ ] Add `\b` and `\B` for word-boundary and non-word-boundary matching.
-- [ ] Add `\w` and `\W` for word and non-word characters.
-- [ ] Add basic POSIX bracket classes inside character classes:
+- [x] Add `\<` and `\>` for beginning and end of word.
+- [x] Add `\b` and `\B` for word-boundary and non-word-boundary matching.
+- [x] Add `\w` and `\W` for word and non-word characters.
+- [x] Add basic POSIX bracket classes inside character classes:
   `[:alpha:]`, `[:digit:]`, `[:alnum:]`, `[:space:]`, `[:lower:]`, and
   `[:upper:]`.
-- [ ] Decide whether `[:word:]` should be supported as a Rile extension or only
+- [x] Decide whether `[:word:]` should be supported as a Rile extension or only
   if reference Emacs behavior justifies it.
 
 Examples:
@@ -185,8 +185,8 @@ Examples:
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
-- [ ] Run focused regexp isearch and replacement PTY tests.
+- [x] Run `./scripts/in-container cargo test --locked --lib search_pattern`.
+- [x] Run focused regexp isearch and replacement PTY tests.
 
 ## Phase 6: Documentation And Release Notes
 
@@ -194,12 +194,12 @@ Goal: Keep user-facing regexp behavior explicit and maintainable.
 
 Tasks:
 
-- [ ] Update `README.md` with the supported regexp subset and replacement
+- [x] Update `README.md` with the supported regexp subset and replacement
   expansion examples.
-- [ ] Update `NEWS` with user-visible regexp improvements.
-- [ ] Update `ChangeLog` with GNU-style source-history entries.
-- [ ] Update `docs/development.md` current limitations.
-- [ ] Update `docs/emacs-function-reference.md` for regexp search,
+- [x] Update `NEWS` with user-visible regexp improvements.
+- [x] Update `ChangeLog` with GNU-style source-history entries.
+- [x] Update `docs/development.md` current limitations.
+- [x] Update `docs/emacs-function-reference.md` for regexp search,
   `query-replace-regexp`, and `replace-regexp`.
 
 Validation gate:
@@ -234,6 +234,7 @@ Validation gate:
 
 | Date | Update | Evidence |
 | --- | --- | --- |
+| 2026-07-12 | Phase 5 word constructs and POSIX bracket classes completed. | `src/search_pattern.rs` and `tests/pty_search.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 4 regexp replacement expansion completed for `\&`, `\1` through `\9`, and `\\`. | `src/editor.rs`, `src/editor/search.rs`, `src/search_pattern.rs`, and `tests/pty_search.rs`; `./scripts/in-container cargo test --locked --lib regexp` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 3 internal match objects and numbered capture ranges completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
 | 2026-07-12 | Phase 2 grouping, alternation, and counted repetition completed. | `src/search_pattern.rs`; `./scripts/in-container cargo test --locked --lib search_pattern` and `./scripts/in-container cargo test --locked --test pty_search regexp` passed. |
@@ -249,4 +250,6 @@ Validation gate:
 | 2026-07-12 | Defer full syntax-table and replacement-expression support. | They are less important than groups, alternation, counts, captures, and ordinary replacement expansion. |
 | 2026-07-12 | Expand unmatched or missing captures to empty text. | This keeps replacement flows total and avoids preserving implementation-looking escapes in edited text. |
 | 2026-07-12 | Preserve unsupported replacement backslash escapes literally. | Rile does not yet implement `\,(...)` or case-conversion directives, so preserving the typed text is safer than silently dropping it. |
+| 2026-07-12 | Use Rile's word-character definition for regexp word constructs. | This aligns regexp `\w` and word boundaries with existing word motion: Unicode alphanumeric characters plus underscore. |
+| 2026-07-12 | Do not add `[:word:]` as a POSIX bracket-class extension yet. | Phase 5 only needs the documented ASCII POSIX classes, and unsupported class names should fail clearly instead of adding an undocumented extension. |
 | 2026-07-12 | Split Phase 1 into an AST foundation before new syntax. | This keeps all existing regexp users stable before adding Emacs grouping, alternation, and captures. |

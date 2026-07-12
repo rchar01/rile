@@ -12,6 +12,11 @@ Interface features:
 
 Editing features:
 
+* Rile's built-in regexp subset now supports common word constructs (`\<`,
+  `\>`, `\b`, `\B`, `\w`, and `\W`) and ASCII POSIX bracket classes such as
+  `[[:alpha:]]`, `[[:digit:]]`, and `[[:space:]]` in regexp search,
+  `query-replace-regexp`, and `replace-regexp`.
+
 * `query-replace-regexp` and `replace-regexp` now expand regexp replacement
   escapes.  `\&` inserts the whole match, `\1` through `\9` insert numbered
   captures, and `\\` inserts a literal backslash.

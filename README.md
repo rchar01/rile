@@ -162,8 +162,11 @@ Basic editor keys:
   The built-in regexp subset supports `.`, `*`, `+`, `?`, `^`, `$`,
   Emacs-style grouping `\(...\)`, alternation `\|`, counted repetition
   `\{m\}`, `\{m,\}`, and `\{m,n\}`, escaped metacharacters, and character
-  classes such as `[abc]`, `[^abc]`, and `[a-z]`. Bare `(`, `)`, `{`, `}`,
-  and `|` match literally; use the escaped Emacs forms for regexp operators.
+  classes such as `[abc]`, `[^abc]`, and `[a-z]`. It also supports word
+  constructs `\<`, `\>`, `\b`, `\B`, `\w`, and `\W`, plus ASCII POSIX bracket
+  classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
+  `[[:lower:]]`, and `[[:upper:]]`. Bare `(`, `)`, `{`, `}`, and `|` match
+  literally; use the escaped Emacs forms for regexp operators.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward
@@ -226,7 +229,7 @@ Basic editor keys:
   searches accepted with Enter.
 - `C-g` cancels minibuffer prompts and prefix keys.
 
-Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, and counted repetition. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
+Current literal search and query replace use exact UTF-8 substring matching within individual lines. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, counted repetition, word constructs, and ASCII POSIX bracket classes. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
 Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.

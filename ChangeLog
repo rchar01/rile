@@ -1,5 +1,37 @@
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
+	Add regexp word and POSIX class support.
+
+	* src/search_pattern.rs: Use Rile's word-character helper.
+	(Piece): Add word-boundary variants.
+	(Atom): Add word and non-word atoms.
+	(ClassItem, PosixClass): Add POSIX class support.
+	(RegexpPattern::can_match_empty, Expression::can_match_empty)
+	(Sequence::can_match_empty, Piece::can_match_empty)
+	(Atom::can_match_empty, Quantifier::minimum): Add structural
+	nullability checks.
+	(Sequence::match_piece_states): Match word-boundary pieces.
+	(Atom::matches, Atom::match_states): Match word and non-word atoms.
+	(CharacterClass::matches): Match POSIX class items.
+	(PosixClass::from_name, PosixClass::matches): New helpers.
+	(Parser::parse_expression): Parse word constructs.
+	(Parser::parse_class, Parser::parse_posix_class): Parse POSIX bracket
+	classes.
+	(is_word_start, is_word_end, is_word_boundary, is_word_at)
+	(is_word_before): New helpers.
+	(tests): Cover word constructs, POSIX classes, nullability, and invalid
+	POSIX classes.
+	* tests/pty_search.rs
+	(regexp_incremental_search_uses_word_and_posix_classes,
+	replace_regexp_uses_word_and_posix_classes): New tests.
+	* README.md: Document regexp word constructs and POSIX classes.
+	* NEWS: Add user-visible regexp improvement entry.
+	* docs/development.md: Update current regexp subset.
+	* docs/emacs-function-reference.md: Update regexp support notes.
+	* docs/plans/regexp-module-upgrade-plan.md: Mark Phase 5 complete.
+
+2026-07-12  Robert Charusta  <rch-public@posteo.net>
+
 	Add regexp replacement edge coverage.
 
 	* src/editor.rs (tests): Cover UTF-8 capture expansion.
