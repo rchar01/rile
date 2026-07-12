@@ -28,6 +28,8 @@ pub enum PromptKind {
     QueryReplaceRegexpSearch,
     QueryReplaceReplacement,
     QueryReplaceSearch,
+    ReplaceRegexpReplacement,
+    ReplaceRegexpSearch,
     RevertBuffer,
     SaveSomeBuffers,
     QuitDirtyBuffers,

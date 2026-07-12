@@ -116,6 +116,8 @@ pub(super) fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::QueryReplaceRegexpSearch
             | PromptKind::QueryReplaceReplacement
             | PromptKind::QueryReplaceSearch
+            | PromptKind::ReplaceRegexpReplacement
+            | PromptKind::ReplaceRegexpSearch
             | PromptKind::RectangleNumberFormat
             | PromptKind::RectangleNumberStart
             | PromptKind::ShellCommand
@@ -250,6 +252,32 @@ mod tests {
         assert_eq!(
             history.recall(PromptKind::QueryReplaceRegexpReplacement, "draft", -1),
             Some("regexp".to_owned())
+        );
+    }
+
+    #[test]
+    fn replace_regexp_histories_are_separate() {
+        let mut history = PromptHistoryStore::new();
+        history.record(PromptKind::QueryReplaceRegexpSearch, "q.e.y");
+        history.record(PromptKind::ReplaceRegexpSearch, "r.e.x");
+        history.record(PromptKind::QueryReplaceRegexpReplacement, "query");
+        history.record(PromptKind::ReplaceRegexpReplacement, "replace");
+
+        assert_eq!(
+            history.recall(PromptKind::QueryReplaceRegexpSearch, "draft", -1),
+            Some("q.e.y".to_owned())
+        );
+        assert_eq!(
+            history.recall(PromptKind::ReplaceRegexpSearch, "draft", -1),
+            Some("r.e.x".to_owned())
+        );
+        assert_eq!(
+            history.recall(PromptKind::QueryReplaceRegexpReplacement, "draft", -1),
+            Some("query".to_owned())
+        );
+        assert_eq!(
+            history.recall(PromptKind::ReplaceRegexpReplacement, "draft", -1),
+            Some("replace".to_owned())
         );
     }
 
