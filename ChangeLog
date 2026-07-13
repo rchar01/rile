@@ -1,5 +1,11 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Remove completed case replacement plan.
+
+	* docs/plans/case-adapted-replacement-plan.md: Remove completed plan.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Add case-adapted replacement.
 
 	* docs/plans/case-adapted-replacement-plan.md: New plan.
