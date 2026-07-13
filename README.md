@@ -207,8 +207,10 @@ Basic editor keys:
   matches, folding spaces and tabs between words while leaving other regexp
   syntax active. `M-s h l`
   (`highlight-lines-matching-regexp`) highlights whole non-empty lines that
-  match a regexp. `M-s h u` (`unhighlight-regexp`) removes highlights whose
-  original prompt text matches the input.
+  match a regexp. Highlight commands prompt for a face name such as `hi-yellow`,
+  `hi-pink`, `hi-green`, or `hi-blue`; press Enter to accept the default.
+  `M-s h u` (`unhighlight-regexp`) pre-fills an editable active highlight
+  pattern to remove, and `C-u M-s h u` removes all current-buffer highlights.
 - `M-p` and `M-n` recall accepted query-replace search and replacement prompt
   history while editing those prompts. Literal and regexp query-replace prompts
   keep separate histories, and `replace-regexp` keeps its own regexp search and

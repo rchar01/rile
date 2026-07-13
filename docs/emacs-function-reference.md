@@ -296,17 +296,20 @@ phrase matches with flexible spaces and tabs, `highlight-lines-matching-regexp`
 highlights whole matching non-empty lines, and `unhighlight-regexp` removes
 stored highlights by exact original prompt text.
 
-Prompt flow: Rile prompts for one string and immediately adds or removes the
-highlight after Enter. Highlight prompts use ordinary prompt history. Rile does
-not prompt for a face name; it cycles built-in match highlight faces and uses a
-separate line-highlight face.
+Prompt flow: highlight commands prompt for the regexp or phrase, then prompt for
+`Highlight using face: ` with a default face name. Supported face names are a
+small Emacs-compatible palette including `hi-yellow`, `hi-pink`, `hi-green`,
+`hi-blue`, `hi-salmon`, `hi-aquamarine`, `hi-black-b`, `hi-blue-b`, `hi-red-b`,
+`hi-green-b`, and `hi-black-hb`. `unhighlight-regexp` pre-fills an editable
+active highlight pattern, preferring a highlight at point and otherwise the most
+recent pattern. Universal-argument `unhighlight-regexp` removes all current-buffer
+highlights.
 
 Rile target: intentional subset. Highlight patterns use Rile's line-local regexp
 subset and smart-case behavior. Patterns that can match empty text are rejected.
 Highlights are buffer-local and ephemeral. Rile does not yet implement Emacs
-hi-lock file comments, arbitrary face-name prompts, prefix-argument subexpression
-highlighting, completion over active highlights for removal, or universal
-argument removal of all highlights.
+hi-lock file comments, fully arbitrary face definitions, prefix-argument
+subexpression highlighting, or completion over active highlights for removal.
 
 Evidence: GNU Emacs 30.2 `hi-lock` command docstrings and local behavior checks;
 Rile command registry, keymap, unit, ANSI render, and PTY tests.

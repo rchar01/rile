@@ -530,10 +530,13 @@ Hi-lock style user highlights are buffer-local and ephemeral. `highlight-regexp`
 `highlight-phrase`, and `highlight-lines-matching-regexp` store persistent
 patterns for the current buffer and render them through the shared decoration
 path. `highlight-phrase` folds spaces and tabs to `[ \t]+` before compiling the
-pattern. `unhighlight-regexp` removes entries whose original prompt text exactly
-matches the input. Rile uses automatic built-in highlight faces instead of
-prompting for arbitrary Emacs face names, and it does not yet persist `Hi-lock:`
-file comments or support subexpression-only highlighting.
+pattern. Highlight commands prompt for a small Emacs-named face palette backed by
+Rile render faces. `unhighlight-regexp` pre-fills an active highlight pattern,
+preferring a highlight at point and otherwise the most recent pattern, and removes
+entries whose original prompt text exactly matches the submitted input.
+Universal-argument `unhighlight-regexp` removes all current-buffer highlights.
+Rile does not yet persist `Hi-lock:` file comments, complete arbitrary face-name
+support, or support subexpression-only highlighting.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail

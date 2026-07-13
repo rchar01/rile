@@ -1,5 +1,35 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Improve hi-lock prompts and face selection.
+
+	* docs/plans/hi-lock-unhighlight-face-plan.md: New plan.
+	* src/render/mod.rs (Face): Add hi-lock face variants.
+	* src/terminal/mod.rs (face_start_code): Map hi-lock face names to ANSI
+	styles and give line highlights an explicit foreground.
+	(tests): Cover hi-lock face rendering.
+	* src/minibuffer.rs (PromptKind): Add HighlightFace.
+	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include the
+	highlight face prompt.
+	* src/editor.rs (Editor): Track pending highlight face prompts.
+	(PendingUserHighlight, HighlightFaceSpec, HIGHLIGHT_FACE_SPECS)
+	(highlight_face_by_name, user_highlight_contains_point): New helpers.
+	(Editor::submit_highlight_face, Editor::start_user_highlight_face_prompt)
+	(Editor::remove_all_user_highlights)
+	(Editor::set_removed_highlights_message)
+	(Editor::default_unhighlight_input, Editor::start_unhighlight_prompt):
+	New helpers.
+	(Editor::command_unhighlight_regexp): Support universal-argument
+	all-removal and pre-filled default deletion.
+	(tests): Cover face prompts and unhighlight defaults.
+	* tests/pty_search.rs (hi_lock_highlight_commands_use_emacs_style_keys):
+	Cover face prompts and universal-argument unhighlighting.
+	* README.md: Document hi-lock face and unhighlight behavior.
+	* NEWS: Add user-visible hi-lock prompt refinements.
+	* docs/development.md: Document hi-lock prompt behavior and limits.
+	* docs/emacs-function-reference.md: Update hi-lock subset reference.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Add hi-lock style user highlights.
 
 	* docs/plans/hi-lock-highlighting-plan.md: New plan.
