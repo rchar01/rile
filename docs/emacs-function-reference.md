@@ -296,15 +296,15 @@ phrase matches with flexible spaces and tabs, `highlight-lines-matching-regexp`
 highlights whole matching non-empty lines, and `unhighlight-regexp` removes
 stored highlights by exact original prompt text.
 
-Prompt flow: highlight commands prompt for the regexp or phrase, then prompt for
-`Highlight using face: ` with a default face name. Supported face names are a
-small Emacs-compatible palette including `hi-yellow`, `hi-pink`, `hi-green`,
-`hi-blue`, `hi-salmon`, `hi-aquamarine`, `hi-black-b`, `hi-blue-b`, `hi-red-b`,
-`hi-green-b`, and `hi-black-hb`. `unhighlight-regexp` pre-fills an editable
-active highlight pattern, preferring a highlight at point and otherwise the most
-recent pattern. Submitting a blank unhighlight prompt accepts the stored default
-pattern, not all-removal. Universal-argument `unhighlight-regexp` removes all
-current-buffer highlights.
+Prompt flow: highlight commands prompt for the regexp or phrase, then prompt with
+`Highlight using face (default NAME): ` and show a completion list for the
+supported face names. The small Emacs-compatible palette includes `hi-yellow`,
+`hi-pink`, `hi-green`, `hi-blue`, `hi-salmon`, `hi-aquamarine`, `hi-black-b`,
+`hi-blue-b`, `hi-red-b`, `hi-green-b`, and `hi-black-hb`. `unhighlight-regexp`
+pre-fills an editable active highlight pattern, preferring a highlight at point
+and otherwise the most recent pattern. Submitting a blank unhighlight prompt
+accepts the stored default pattern, not all-removal. Universal-argument
+`unhighlight-regexp` removes all current-buffer highlights.
 
 Rile target: intentional subset. Highlight patterns use Rile's line-local regexp
 subset and smart-case behavior. Patterns that can match empty text are rejected.

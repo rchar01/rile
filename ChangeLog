@@ -1,5 +1,28 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Add hi-lock face completion.
+
+	* docs/plans/hi-lock-face-completion-plan.md: New plan.
+	* src/completion.rs (CompletionSource): Add HighlightFaces.
+	(CompletionSession::highlight_faces, CompletionSession::non_file_matches):
+	New methods.
+	(tests): Cover highlight face completion candidates.
+	* src/editor/completion_policy.rs (accepted_completion_input): Handle
+	highlight face completion defaults and explicit selections.
+	(tests): Cover highlight face completion acceptance.
+	* src/editor.rs (Editor::start_user_highlight_face_prompt): Start face
+	completion and show the default face in the prompt label.
+	(HighlightFaceSpec): Add annotations.
+	(tests): Cover face completion prompt behavior.
+	* tests/pty_search.rs (hi_lock_highlight_commands_use_emacs_style_keys):
+	Cover the visible face list and selecting a face candidate.
+	* README.md: Document hi-lock face completion.
+	* NEWS: Add user-visible hi-lock face completion note.
+	* docs/development.md: Document face completion behavior.
+	* docs/emacs-function-reference.md: Update hi-lock prompt flow.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Cover blank hi-lock unhighlight submission through PTY.
 
 	* tests/pty_search.rs (hi_lock_highlight_commands_use_emacs_style_keys):

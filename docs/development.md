@@ -530,8 +530,9 @@ Hi-lock style user highlights are buffer-local and ephemeral. `highlight-regexp`
 `highlight-phrase`, and `highlight-lines-matching-regexp` store persistent
 patterns for the current buffer and render them through the shared decoration
 path. `highlight-phrase` folds spaces and tabs to `[ \t]+` before compiling the
-pattern. Highlight commands prompt for a small Emacs-named face palette backed by
-Rile render faces. `unhighlight-regexp` pre-fills an active highlight pattern,
+pattern. Highlight commands prompt with `Highlight using face (default NAME):`
+and attach the existing completion UI to a small Emacs-named face palette backed
+by Rile render faces. `unhighlight-regexp` pre-fills an active highlight pattern,
 preferring a highlight at point and otherwise the most recent pattern, and removes
 entries whose original prompt text exactly matches the submitted input.
 Submitting a blank unhighlight prompt accepts the stored default pattern, not
