@@ -143,6 +143,48 @@ fn regexp_incremental_search_uses_smart_case() -> Result<()> {
 }
 
 #[test]
+fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
+    let file = fixtures::named_temp_file("foo bar\nFoo   bar\nTODO\nplain\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("foo bar")?;
+    rile.send("M-s", keys::meta('s'))?;
+    rile.send("h", b"h")?;
+    rile.send("p", b"p")?;
+    rile.assert_screen_contains("Highlight phrase:")?;
+    rile.send("foo bar", b"foo bar")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Highlighted foo bar")?;
+
+    rile.send("M-s", keys::meta('s'))?;
+    rile.send("h", b"h")?;
+    rile.send("r", b"r")?;
+    rile.assert_screen_contains("Highlight regexp:")?;
+    rile.send("TODO", b"TODO")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Highlighted TODO")?;
+
+    rile.send("M-s", keys::meta('s'))?;
+    rile.send("h", b"h")?;
+    rile.send("l", b"l")?;
+    rile.assert_screen_contains("Highlight lines matching regexp:")?;
+    rile.send("plain", b"plain")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Highlighted lines matching plain")?;
+
+    rile.send("M-s", keys::meta('s'))?;
+    rile.send("h", b"h")?;
+    rile.send("u", b"u")?;
+    rile.assert_screen_contains("Unhighlight regexp:")?;
+    rile.send("TODO", b"TODO")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Removed 1 highlight")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn regexp_incremental_search_smart_case_ignores_escaped_uppercase() -> Result<()> {
     let file = fixtures::named_temp_file("!Cat\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
