@@ -288,6 +288,7 @@ Validation gate:
 | 2026-07-13 | Implemented buffer-local hi-lock style highlights and PTY coverage. | Commits `79d6fc4` and `dcd1d3d`; `./scripts/in-container cargo test --locked --lib` and focused `pty_search hi_lock_highlight_commands_use_emacs_style_keys` passed. |
 | 2026-07-13 | Updated user docs, reference notes, release notes, ChangeLog, and plan progress. | `README.md`, `NEWS`, `ChangeLog`, `docs/development.md`, `docs/emacs-function-reference.md`, and this plan. |
 | 2026-07-13 | Completed full verification and reviewed phrase metacharacter behavior. | `make verify` passed; patch review flagged phrase regexp syntax, but GNU Emacs 30.2 `highlight-phrase "a.b"` highlights both `a.b` and `axb`, so Rile preserves regexp metacharacters and adds a unit test for that behavior. |
+| 2026-07-13 | Completed final verification and review. | Final `make verify` passed. Final patch review reported no must-fix issues; remaining PTY concern is covered by span and ANSI unit tests because the PTY snapshot helper exposes normalized text rather than style attributes. |
 
 ## Decision Log
 
