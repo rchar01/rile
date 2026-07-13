@@ -138,9 +138,10 @@ status after replacement, including the number of replacements made.
 
 Rile target: keep the current choice-key subset. Matching follows Emacs-style
 smart case: lowercase search text matches case-insensitively, while unescaped
-uppercase search text is case-sensitive. Replacement text is inserted exactly as
-typed; Emacs-style case-adapted replacement through `case-replace` remains out of
-scope until a separate design exists.
+uppercase search text is case-sensitive. Case-insensitive matches adapt the
+replacement text's case to the matched text, matching the default Emacs
+`case-replace` behavior. Rile does not yet expose a user option to disable this
+adaptation.
 
 Evidence: GNU Emacs manual, Query Replace; Emacs scenario
 `tools/reference/emacs/scenarios/query-replace-core.scenario`; Rile command
@@ -188,9 +189,10 @@ Rile target: intentional subset. Matching uses the same line-local regexp subset
 as regexp incremental search, including smart-case matching. Replacement text
 expands `\&` to the whole match, `\1` through `\9` to numbered captures, and
 `\\` to a literal backslash. Unmatched or missing captures expand to empty text,
-and unsupported backslash escapes are preserved literally. Rile does not expand
-Emacs replacement expressions such as `\,(...)`, case-conversion directives, or
-case-adapted replacements yet.
+and unsupported backslash escapes are preserved literally. Case-insensitive
+matches adapt replacement casing after expansion. Rile does not expand Emacs
+replacement expressions such as `\,(...)` or explicit case-conversion directives
+yet.
 
 Evidence: GNU Emacs command name and default binding; Rile unit and PTY tests for
 command dispatch, prompt history, regexp replacement, replacement expansion,
@@ -235,9 +237,10 @@ Rile target: intentional subset. Matching uses the same line-local regexp subset
 as regexp incremental search, including smart-case matching. Replacement text
 expands `\&` to the whole match, `\1` through `\9` to numbered captures, and
 `\\` to a literal backslash. Unmatched or missing captures expand to empty text,
-and unsupported backslash escapes are preserved literally. Rile does not expand
-Emacs replacement expressions such as `\,(...)`, case-conversion directives, or
-case-adapted replacements yet.
+and unsupported backslash escapes are preserved literally. Case-insensitive
+matches adapt replacement casing after expansion. Rile does not expand Emacs
+replacement expressions such as `\,(...)` or explicit case-conversion directives
+yet.
 
 Evidence: GNU Emacs command name; Rile unit and PTY tests for command dispatch,
 prompt history, regexp replacement from point, replacement expansion, no-match

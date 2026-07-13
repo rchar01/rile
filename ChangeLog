@@ -1,3 +1,25 @@
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
+	Add case-adapted replacement.
+
+	* docs/plans/case-adapted-replacement-plan.md: New plan.
+	* src/search_pattern.rs (SearchPattern::is_case_sensitive): New method.
+	* src/editor.rs (ReplacementTemplate::expand_for_pattern)
+	(adapt_replacement_case, cased_characters, first_cased_character)
+	(upcase_word_initials): New helpers.
+	(Editor::replace_regexp_matches, Editor::replace_query_replace_current):
+	Use pattern-aware replacement expansion.
+	(tests): Cover replacement case adaptation and regexp expansion order.
+	* tests/pty_search.rs (replace_regexp_adapts_case_after_capture_expansion):
+	New test.
+	(query_replace_uses_smart_case_matching)
+	(query_replace_regexp_uses_smart_case_matching)
+	(replace_regexp_uses_smart_case_matching): Expect adapted replacement case.
+	* README.md: Document case-adapted replacement.
+	* NEWS: Add user-visible replacement casing entry.
+	* docs/development.md: Document replacement case adaptation.
+	* docs/emacs-function-reference.md: Update replacement command notes.
+
 2026-07-12  Robert Charusta  <rch-public@posteo.net>
 
 	Add smart-case search matching.

@@ -521,9 +521,10 @@ escaped character literally unless they are explicitly invalid syntax. Regexp
 replacement commands expand `\&` to the whole match, `\1` through `\9` to numbered
 captures, and `\\` to a literal backslash. Unmatched or missing captures expand to
 empty text, unsupported replacement backslash escapes are preserved literally,
-replacement text is inserted exactly as typed rather than case-adapted, and
-patterns that can match empty text are rejected. Search wraps only after an
-explicit boundary failure, and replacement commands do not wrap.
+and replacement text is case-adapted for case-insensitive matches after regexp
+replacement expansion. Patterns that can match empty text are rejected. Search
+wraps only after an explicit boundary failure, and replacement commands do not
+wrap.
 
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail

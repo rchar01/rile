@@ -35,8 +35,8 @@ replacement text.
 
 - Smart-case matching was added in commits `89dc219`, `dbf7577`, and
   `cd4210e`.
-- Replacement text is currently inserted exactly as typed.
-- Docs intentionally call case-adapted replacement a future follow-up.
+- Before this plan, replacement text was inserted exactly as typed and docs
+  intentionally called case-adapted replacement a future follow-up.
 - Relevant implementation files:
   - `src/editor.rs`: `ReplacementTemplate`, `expand_regexp_replacement`,
     `replace_query_replace_current`, and `replace_regexp_matches`.
@@ -102,19 +102,19 @@ Depends on: Phase 1 findings.
 
 Tasks:
 
-- [ ] Add unit tests in `src/editor.rs` for lowercase, capitalized, all-uppercase,
+- [x] Add unit tests in `src/editor.rs` for lowercase, capitalized, all-uppercase,
   and mixed-case match inputs.
-- [ ] Add unit tests for regexp replacement expansion followed by case
+- [x] Add unit tests for regexp replacement expansion followed by case
   adaptation.
-- [ ] Implement a helper that receives the matched text, expanded replacement
+- [x] Implement a helper that receives the matched text, expanded replacement
   text, and search case mode, then returns the adapted replacement text.
-- [ ] Apply the helper in both query-replace and `replace-regexp` replacement
+- [x] Apply the helper in both query-replace and `replace-regexp` replacement
   paths.
-- [ ] Keep exact replacement behavior when the search is case-sensitive.
+- [x] Keep exact replacement behavior when the search is case-sensitive.
 
 Validation gate:
 
-- [ ] Run `./scripts/in-container cargo test --locked --lib editor`.
+- [x] Run `./scripts/in-container cargo test --locked --lib editor`.
 
 ## Phase 3: PTY Coverage
 
@@ -124,16 +124,16 @@ Depends on: Phase 2 implementation.
 
 Tasks:
 
-- [ ] Add `query-replace` PTY coverage for lowercase replacement adapting
+- [x] Add `query-replace` PTY coverage for lowercase replacement adapting
   `status`, `Status`, and `STATUS`.
-- [ ] Add `query-replace-regexp` PTY coverage for the same behavior.
-- [ ] Add `replace-regexp` PTY coverage for the same behavior.
-- [ ] Add at least one uppercase search PTY case proving exact replacement text
+- [x] Add `query-replace-regexp` PTY coverage for the same behavior.
+- [x] Add `replace-regexp` PTY coverage for the same behavior.
+- [x] Add at least one uppercase search PTY case proving exact replacement text
   still applies when the search is case-sensitive.
 
 Validation gate:
 
-- [ ] Run focused PTY filters in `tests/pty_search.rs`.
+- [x] Run focused PTY filters in `tests/pty_search.rs`.
 
 ## Phase 4: Documentation And Release Notes
 
@@ -143,16 +143,16 @@ Depends on: Phase 3 tests.
 
 Tasks:
 
-- [ ] Update `README.md` replacement command notes.
-- [ ] Update `docs/development.md` current replacement behavior.
-- [ ] Update `docs/emacs-function-reference.md` for `query-replace`,
+- [x] Update `README.md` replacement command notes.
+- [x] Update `docs/development.md` current replacement behavior.
+- [x] Update `docs/emacs-function-reference.md` for `query-replace`,
   `query-replace-regexp`, and `replace-regexp`.
-- [ ] Add a user-visible `NEWS` entry under unreleased changes.
-- [ ] Add a GNU-style `ChangeLog` entry.
+- [x] Add a user-visible `NEWS` entry under unreleased changes.
+- [x] Add a GNU-style `ChangeLog` entry.
 
 Validation gate:
 
-- [ ] Run `git diff --check`.
+- [x] Run `git diff --check`.
 
 ## Phase 5: Final Verification And Cleanup
 
@@ -199,6 +199,8 @@ Validation gate:
 | --- | --- | --- |
 | 2026-07-13 | Plan created for Emacs-style case-adapted replacement follow-up. | User requested a plan under `docs/plans/` before implementation. |
 | 2026-07-13 | Completed Emacs reference discovery. Lowercase `status` to `state` yields `state State STATE`; `StaTUS` maps to capitalized output, lowercase-first mixed case stays lowercase, all-uppercase matches upcase the full replacement, and regexp replacement adaptation happens after capture/whole-match expansion. | Local GNU Emacs `--batch --quick` checks using `replace-string` and `replace-regexp`. |
+| 2026-07-13 | Implemented unit-level case adaptation and terminal coverage. | Commits `650cf91` and `d48ea90`; focused editor/search_pattern unit tests and `pty_search case` passed. |
+| 2026-07-13 | Updated user docs, release notes, ChangeLog, and plan progress. | `README.md`, `NEWS`, `ChangeLog`, `docs/development.md`, `docs/emacs-function-reference.md`; `git diff --check` passed. |
 
 ## Decision Log
 
