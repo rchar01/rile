@@ -110,6 +110,9 @@ pub(super) fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::FindFile
             | PromptKind::FindFileReadOnly
             | PromptKind::GotoLine
+            | PromptKind::HighlightLinesMatchingRegexp
+            | PromptKind::HighlightPhrase
+            | PromptKind::HighlightRegexp
             | PromptKind::InsertFile
             | PromptKind::KillBuffer
             | PromptKind::QueryReplaceRegexpReplacement
@@ -123,6 +126,7 @@ pub(super) fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::ShellCommand
             | PromptKind::StringRectangle
             | PromptKind::SwitchToBuffer
+            | PromptKind::UnhighlightRegexp
             | PromptKind::WriteFile
     )
 }

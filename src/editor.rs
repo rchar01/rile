@@ -98,6 +98,7 @@ pub struct Editor {
     replaying_keyboard_macro: bool,
     universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
+    user_highlights: HashMap<BufferId, Vec<UserHighlight>>,
     query_replace: Option<QueryReplaceState>,
     replace_regexp: Option<ReplaceRegexpState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
@@ -605,6 +606,20 @@ struct SearchState {
     failed_direction: Option<SearchDirection>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct UserHighlight {
+    original_input: String,
+    pattern: SearchPattern,
+    kind: UserHighlightKind,
+    face: Face,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum UserHighlightKind {
+    Match,
+    Line,
+}
+
 impl Editor {
     pub fn new(document: Document) -> Self {
         Self::with_config(document, Config::default())
@@ -653,6 +668,7 @@ impl Editor {
             replaying_keyboard_macro: false,
             universal_argument: None,
             search: None,
+            user_highlights: HashMap::new(),
             query_replace: None,
             replace_regexp: None,
             rectangle_number_prompt: None,
@@ -933,8 +949,11 @@ impl Editor {
             enabled: self.syntax_enabled,
             mode: self.syntax_mode_for_buffer(buffer),
         };
+        let user_highlights = UserHighlightDecorator {
+            highlights: self.user_highlights.get(&buffer).map(Vec::as_slice),
+        };
         if buffer != self.current_buffer {
-            let providers: [&dyn DecorationProvider; 1] = [&syntax];
+            let providers: [&dyn DecorationProvider; 2] = [&syntax, &user_highlights];
             return collect_spans_for_line(&providers, line_index, line);
         }
 
@@ -953,7 +972,13 @@ impl Editor {
             enabled: self.search_highlighting,
             search: self.search.as_ref(),
         };
-        let providers: [&dyn DecorationProvider; 4] = [&syntax, &region, &query_replace, &search];
+        let providers: [&dyn DecorationProvider; 5] = [
+            &syntax,
+            &user_highlights,
+            &region,
+            &query_replace,
+            &search,
+        ];
         collect_spans_for_line(&providers, line_index, line)
     }
 
@@ -1886,6 +1911,11 @@ impl Editor {
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
+            PromptKind::HighlightLinesMatchingRegexp => {
+                self.submit_highlight_lines_matching_regexp(input)
+            }
+            PromptKind::HighlightPhrase => self.submit_highlight_phrase(input),
+            PromptKind::HighlightRegexp => self.submit_highlight_regexp(input),
             PromptKind::InsertFile => self.insert_file(input.trim()),
             PromptKind::IncrementalSearch => Ok(EditorOutcome::Continue),
             PromptKind::KillBuffer => self.kill_buffer(input),
@@ -1909,6 +1939,7 @@ impl Editor {
             PromptKind::ShellCommand => self.submit_shell_command(input.trim()),
             PromptKind::StringRectangle => self.submit_string_rectangle(input),
             PromptKind::SwitchToBuffer => self.switch_to_buffer(input),
+            PromptKind::UnhighlightRegexp => self.submit_unhighlight_regexp(input),
             PromptKind::WriteFile => self.write_file(input.trim()),
         }
     }
@@ -1924,6 +1955,100 @@ impl Editor {
             self.clear_keyboard_macro_prompt_start();
         }
         self.execute_command_by_name(name)
+    }
+
+    fn submit_highlight_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
+        self.add_user_highlight(input, input, UserHighlightKind::Match)
+    }
+
+    fn submit_highlight_phrase(&mut self, input: &str) -> Result<EditorOutcome> {
+        let regexp = highlight_phrase_regexp(input);
+        self.add_user_highlight(input, &regexp, UserHighlightKind::Match)
+    }
+
+    fn submit_highlight_lines_matching_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
+        self.add_user_highlight(input, input, UserHighlightKind::Line)
+    }
+
+    fn submit_unhighlight_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
+        if input.is_empty() {
+            self.minibuffer.set_error("empty highlight regexp");
+            return Ok(EditorOutcome::Continue);
+        }
+        let Some(highlights) = self.user_highlights.get_mut(&self.current_buffer) else {
+            self.minibuffer
+                .set_message(format!("No highlight for {input}"));
+            return Ok(EditorOutcome::Continue);
+        };
+        let before = highlights.len();
+        highlights.retain(|highlight| highlight.original_input != input);
+        let removed = before - highlights.len();
+        if highlights.is_empty() {
+            self.user_highlights.remove(&self.current_buffer);
+        }
+        if removed == 0 {
+            self.minibuffer
+                .set_message(format!("No highlight for {input}"));
+        } else if removed == 1 {
+            self.minibuffer.set_message("Removed 1 highlight");
+        } else {
+            self.minibuffer
+                .set_message(format!("Removed {removed} highlights"));
+        }
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn add_user_highlight(
+        &mut self,
+        original_input: &str,
+        pattern_input: &str,
+        kind: UserHighlightKind,
+    ) -> Result<EditorOutcome> {
+        if original_input.is_empty() {
+            self.minibuffer.set_error("empty highlight regexp");
+            return Ok(EditorOutcome::Continue);
+        }
+        let Ok(pattern) = SearchPattern::compile(PatternKind::Regexp, pattern_input) else {
+            self.minibuffer.set_error("invalid regexp");
+            return Ok(EditorOutcome::Continue);
+        };
+        if pattern.can_match_empty() {
+            self.minibuffer.set_error("regexp can match empty string");
+            return Ok(EditorOutcome::Continue);
+        }
+        let face = self.next_user_highlight_face(kind);
+        self.user_highlights
+            .entry(self.current_buffer)
+            .or_default()
+            .push(UserHighlight {
+                original_input: original_input.to_owned(),
+                pattern,
+                kind,
+                face,
+            });
+        self.minibuffer.set_message(match kind {
+            UserHighlightKind::Match => format!("Highlighted {original_input}"),
+            UserHighlightKind::Line => format!("Highlighted lines matching {original_input}"),
+        });
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn next_user_highlight_face(&self, kind: UserHighlightKind) -> Face {
+        if kind == UserHighlightKind::Line {
+            return Face::UserHighlightLine;
+        }
+        let count = self
+            .user_highlights
+            .get(&self.current_buffer)
+            .into_iter()
+            .flatten()
+            .filter(|highlight| highlight.kind == UserHighlightKind::Match)
+            .count();
+        if count % 2 == 0 {
+            Face::UserHighlight
+        } else {
+            Face::UserHighlightAlt
+        }
     }
 
     fn execute_command(
@@ -2785,6 +2910,30 @@ impl Editor {
         Ok(CommandOutcome::Continue)
     }
 
+    pub(crate) fn command_highlight_lines_matching_regexp(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_highlight_prompt(PromptKind::HighlightLinesMatchingRegexp);
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_highlight_phrase(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_highlight_prompt(PromptKind::HighlightPhrase);
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_highlight_regexp(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_highlight_prompt(PromptKind::HighlightRegexp);
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
     pub(crate) fn command_shell_command(
         &mut self,
         context: CommandContext,
@@ -2845,6 +2994,14 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.start_switch_to_buffer()?;
+        Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_unhighlight_regexp(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        self.start_highlight_prompt(PromptKind::UnhighlightRegexp);
         Ok(CommandOutcome::StartedPrompt)
     }
 
@@ -5701,6 +5858,10 @@ impl Editor {
         ));
         self.update_completion_from_prompt();
         Ok(())
+    }
+
+    fn start_highlight_prompt(&mut self, kind: PromptKind) {
+        self.minibuffer.start_prompt(kind, prompt_label(kind));
     }
 
     fn start_describe_key(&mut self, mode: DescribeKeyMode) -> Result<()> {
@@ -8702,6 +8863,37 @@ struct SearchDecorator<'a> {
     search: Option<&'a SearchState>,
 }
 
+struct UserHighlightDecorator<'a> {
+    highlights: Option<&'a [UserHighlight]>,
+}
+
+impl DecorationProvider for UserHighlightDecorator<'_> {
+    fn spans_for_line(&self, _line_index: usize, line: &str) -> Vec<Span> {
+        let Some(highlights) = self.highlights else {
+            return Vec::new();
+        };
+        let mut spans = Vec::new();
+        for highlight in highlights {
+            match highlight.kind {
+                UserHighlightKind::Match => spans.extend(
+                    highlight
+                        .pattern
+                        .match_ranges_in_line(line)
+                        .into_iter()
+                        .map(|(start, end)| Span::new(start, end, highlight.face)),
+                ),
+                UserHighlightKind::Line => {
+                    if !line.is_empty() && !highlight.pattern.match_ranges_in_line(line).is_empty()
+                    {
+                        spans.push(Span::new(0, line.len(), highlight.face));
+                    }
+                }
+            }
+        }
+        spans
+    }
+}
+
 impl DecorationProvider for SearchDecorator<'_> {
     fn spans_for_line(&self, line_index: usize, line: &str) -> Vec<Span> {
         if !self.enabled {
@@ -8851,6 +9043,9 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::FindFile => "Find file: ",
         PromptKind::FindFileReadOnly => "Find file read-only: ",
         PromptKind::GotoLine => "Goto line: ",
+        PromptKind::HighlightLinesMatchingRegexp => "Highlight lines matching regexp: ",
+        PromptKind::HighlightPhrase => "Highlight phrase: ",
+        PromptKind::HighlightRegexp => "Highlight regexp: ",
         PromptKind::InsertFile => "Insert file: ",
         PromptKind::IncrementalSearch => "I-search: ",
         PromptKind::KillBuffer => "Kill buffer: ",
@@ -8869,6 +9064,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::ShellCommand => "Shell command: ",
         PromptKind::StringRectangle => "String rectangle: ",
         PromptKind::SwitchToBuffer => "Switch to buffer: ",
+        PromptKind::UnhighlightRegexp => "Unhighlight regexp: ",
         PromptKind::WriteFile => "Write file: ",
     }
 }
@@ -8903,6 +9099,23 @@ fn replacement_prompt_kind(kind: PatternKind) -> PromptKind {
         PatternKind::Literal => PromptKind::QueryReplaceReplacement,
         PatternKind::Regexp => PromptKind::QueryReplaceRegexpReplacement,
     }
+}
+
+fn highlight_phrase_regexp(input: &str) -> String {
+    let mut regexp = String::new();
+    let mut in_space = false;
+    for character in input.chars() {
+        if matches!(character, ' ' | '\t') {
+            if !in_space {
+                regexp.push_str("[ \t]+");
+                in_space = true;
+            }
+        } else {
+            regexp.push(character);
+            in_space = false;
+        }
+    }
+    regexp
 }
 
 fn query_replace_replacement_label(kind: PatternKind, query: &str) -> String {
@@ -9008,7 +9221,8 @@ mod tests {
     };
     use super::{
         AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, EditorPatternMatch,
-        KillEntry, file_prompt_base_input, format_rectangle_number,
+        KillEntry, SearchDirection, file_prompt_base_input, format_rectangle_number,
+        highlight_phrase_regexp,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -9128,6 +9342,18 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    fn submit_prompt_command(editor: &mut Editor, command: &str, input: &str) {
+        editor
+            .execute_command_by_name(command)
+            .expect("command should start prompt");
+        editor
+            .handle_key(KeyEvent::Text(input.to_owned()))
+            .expect("prompt text should insert");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("prompt should submit");
     }
 
     fn current_dir_prompt_input() -> String {
@@ -18670,6 +18896,93 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Syntax highlighting disabled")
+        );
+    }
+
+    #[test]
+    fn highlight_regexp_adds_persistent_match_spans() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+
+        assert_eq!(
+            editor.spans_for_line(0, "todo TODO"),
+            vec![
+                Span::new(0, 4, Face::UserHighlight),
+                Span::new(5, 9, Face::UserHighlight),
+            ]
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Highlighted todo")
+        );
+    }
+
+    #[test]
+    fn highlight_phrase_folds_whitespace_and_uses_smart_case() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-phrase", "foo bar");
+
+        assert_eq!(highlight_phrase_regexp("foo  bar"), "foo[ \t]+bar");
+        assert_eq!(
+            editor.spans_for_line(0, "Foo   bar"),
+            vec![Span::new(0, "Foo   bar".len(), Face::UserHighlight)]
+        );
+    }
+
+    #[test]
+    fn highlight_lines_matching_regexp_highlights_whole_non_empty_line() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-lines-matching-regexp", "TODO");
+
+        assert_eq!(
+            editor.spans_for_line(0, "alpha TODO beta"),
+            vec![Span::new(0, "alpha TODO beta".len(), Face::UserHighlightLine)]
+        );
+        assert!(editor.spans_for_line(0, "todo lower").is_empty());
+    }
+
+    #[test]
+    fn unhighlight_regexp_removes_matching_entries() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        assert_eq!(
+            editor.spans_for_line(0, "todo"),
+            vec![Span::new(0, 4, Face::UserHighlight)]
+        );
+
+        submit_prompt_command(&mut editor, "unhighlight-regexp", "todo");
+
+        assert!(editor.spans_for_line(0, "todo").is_empty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Removed 1 highlight")
+        );
+    }
+
+    #[test]
+    fn user_highlights_have_lower_priority_than_active_search() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        editor
+            .document_mut()
+            .buffer_mut()
+            .insert(Position::new(0, 0), "todo")
+            .expect("fixture should insert");
+        editor
+            .start_incremental_search(SearchDirection::Forward, PatternKind::Literal)
+            .expect("search should start");
+        editor
+            .handle_key(KeyEvent::Text("todo".to_owned()))
+            .expect("search should update");
+
+        assert_eq!(
+            editor.spans_for_line(0, "todo"),
+            vec![Span::new(0, 4, Face::CurrentSearchMatch)]
         );
     }
 

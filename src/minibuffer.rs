@@ -20,6 +20,9 @@ pub enum PromptKind {
     FindFile,
     FindFileReadOnly,
     GotoLine,
+    HighlightLinesMatchingRegexp,
+    HighlightPhrase,
+    HighlightRegexp,
     InsertFile,
     IncrementalSearch,
     KillBuffer,
@@ -38,6 +41,7 @@ pub enum PromptKind {
     ShellCommand,
     StringRectangle,
     SwitchToBuffer,
+    UnhighlightRegexp,
     WriteFile,
 }
 

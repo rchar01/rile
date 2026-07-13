@@ -1529,6 +1529,9 @@ fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
             Face::Error => Some("\x1b[31m"),
             Face::Warning => Some("\x1b[33m"),
             Face::LineNumber => Some("\x1b[2m"),
+            Face::UserHighlight => Some("\x1b[43;30m"),
+            Face::UserHighlightAlt => Some("\x1b[45;37m"),
+            Face::UserHighlightLine => Some("\x1b[43m"),
             Face::SyntaxKeyword => Some("\x1b[34;1m"),
             Face::SyntaxString => Some("\x1b[32m"),
             Face::SyntaxComment => Some("\x1b[2m"),
@@ -1537,6 +1540,9 @@ fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
         ThemeName::Mono => match face {
             Face::CurrentSearchMatch | Face::Region | Face::ModeLine => Some("\x1b[7m"),
             Face::SearchMatch => Some("\x1b[4m"),
+            Face::UserHighlight | Face::UserHighlightAlt | Face::UserHighlightLine => {
+                Some("\x1b[4m")
+            }
             Face::Minibuffer | Face::LineNumber | Face::SyntaxComment => Some("\x1b[2m"),
             Face::Error | Face::Warning => Some("\x1b[1m"),
             _ => None,
@@ -1659,6 +1665,20 @@ mod tests {
         assert_eq!(
             terminal.into_inner(),
             b"\x1b[7mone\x1b[0m \x1b[4mtwo\x1b[0m".to_vec()
+        );
+    }
+
+    #[test]
+    fn renders_user_highlight_spans_with_ansi_faces() {
+        let spans = [Span::new(0, 3, Face::UserHighlight)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_line_with_spans(&mut terminal, "one two", &spans, 4, ThemeName::Default)
+            .expect("render should succeed");
+
+        assert_eq!(
+            terminal.into_inner(),
+            b"\x1b[43;30mone\x1b[0m two".to_vec()
         );
     }
 

@@ -57,6 +57,9 @@ pub enum Command {
     ForwardWord,
     GotoLine,
     GlobalAutoRevertMode,
+    HighlightLinesMatchingRegexp,
+    HighlightPhrase,
+    HighlightRegexp,
     IncrementalSearchBackward,
     IncrementalSearchForward,
     IncrementalSearchRegexpBackward,
@@ -121,6 +124,7 @@ pub enum Command {
     UndoOnly,
     UndoRedo,
     UncommentRegion,
+    UnhighlightRegexp,
     UniversalArgument,
     UpcaseRegion,
     UpcaseWord,
@@ -266,9 +270,13 @@ impl CommandCategory {
             | IncrementalSearchForward
             | IncrementalSearchRegexpBackward
             | IncrementalSearchRegexpForward
+            | HighlightLinesMatchingRegexp
+            | HighlightPhrase
+            | HighlightRegexp
             | QueryReplace
             | QueryReplaceRegexp
-            | ReplaceRegexp => Self::Search,
+            | ReplaceRegexp
+            | UnhighlightRegexp => Self::Search,
             ShellCommand | ShellCommandOnRegion | QuitShellOutputWindow => Self::Shell,
             CopyRectangleToRegister
             | CopyToRegister
@@ -360,6 +368,9 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         ForwardWord => "Move point forward by one word.",
         GotoLine => "Prompt for a line or line:column location and move point there.",
         GlobalAutoRevertMode => "Toggle automatic reloads for all clean file buffers.",
+        HighlightLinesMatchingRegexp => "Highlight every line matching a prompted regexp.",
+        HighlightPhrase => "Highlight matches of a prompted phrase in the current buffer.",
+        HighlightRegexp => "Highlight regexp matches in the current buffer.",
         IncrementalSearchBackward => "Start backward incremental search from point.",
         IncrementalSearchForward => "Start forward incremental search from point.",
         IncrementalSearchRegexpBackward => "Start backward regexp incremental search from point.",
@@ -432,6 +443,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         UndoOnly => "Undo an edit without redoing previous undo commands.",
         UndoRedo => "Redo a change that was just undone.",
         UncommentRegion => "Remove line comment markers from the active region.",
+        UnhighlightRegexp => "Remove a persistent highlight pattern from the current buffer.",
         UniversalArgument => "Set or extend the numeric argument for the next command.",
         UpcaseRegion => "Convert the active region to upper case.",
         UpcaseWord => "Convert the following word or words to upper case.",
@@ -906,6 +918,27 @@ pub fn default_commands() -> Vec<CommandSpec> {
         )
         .with_handler(crate::editor::Editor::command_global_auto_revert_mode),
         CommandSpec::new(
+            "highlight-lines-matching-regexp",
+            "Highlight matching lines",
+            true,
+            HighlightLinesMatchingRegexp,
+        )
+        .with_handler(crate::editor::Editor::command_highlight_lines_matching_regexp),
+        CommandSpec::new(
+            "highlight-phrase",
+            "Highlight phrase matches",
+            true,
+            HighlightPhrase,
+        )
+        .with_handler(crate::editor::Editor::command_highlight_phrase),
+        CommandSpec::new(
+            "highlight-regexp",
+            "Highlight regexp matches",
+            true,
+            HighlightRegexp,
+        )
+        .with_handler(crate::editor::Editor::command_highlight_regexp),
+        CommandSpec::new(
             "isearch-backward",
             "Search backward incrementally",
             true,
@@ -1271,6 +1304,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             .with_handler(crate::editor::Editor::command_undo_only),
         CommandSpec::new("undo-redo", "Redo last undo", true, UndoRedo)
             .with_handler(crate::editor::Editor::command_undo_redo),
+        CommandSpec::new(
+            "unhighlight-regexp",
+            "Remove highlight pattern",
+            true,
+            UnhighlightRegexp,
+        )
+        .with_handler(crate::editor::Editor::command_unhighlight_regexp),
         CommandSpec::new(
             "uncomment-region",
             "Uncomment active region",
