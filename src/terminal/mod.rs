@@ -1676,10 +1676,7 @@ mod tests {
         write_line_with_spans(&mut terminal, "one two", &spans, 4, ThemeName::Default)
             .expect("render should succeed");
 
-        assert_eq!(
-            terminal.into_inner(),
-            b"\x1b[43;30mone\x1b[0m two".to_vec()
-        );
+        assert_eq!(terminal.into_inner(), b"\x1b[43;30mone\x1b[0m two".to_vec());
     }
 
     #[test]

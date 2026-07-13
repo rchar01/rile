@@ -972,13 +972,8 @@ impl Editor {
             enabled: self.search_highlighting,
             search: self.search.as_ref(),
         };
-        let providers: [&dyn DecorationProvider; 5] = [
-            &syntax,
-            &user_highlights,
-            &region,
-            &query_replace,
-            &search,
-        ];
+        let providers: [&dyn DecorationProvider; 5] =
+            [&syntax, &user_highlights, &region, &query_replace, &search];
         collect_spans_for_line(&providers, line_index, line)
     }
 
@@ -18939,7 +18934,11 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(
             editor.spans_for_line(0, "alpha TODO beta"),
-            vec![Span::new(0, "alpha TODO beta".len(), Face::UserHighlightLine)]
+            vec![Span::new(
+                0,
+                "alpha TODO beta".len(),
+                Face::UserHighlightLine
+            )]
         );
         assert!(editor.spans_for_line(0, "todo lower").is_empty());
     }
