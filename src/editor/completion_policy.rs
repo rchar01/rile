@@ -27,6 +27,16 @@ pub(super) fn accepted_completion_input(context: CompletionAcceptContext<'_>) ->
         }
         if matches!(
             context.completion.map(CompletionSession::source),
+            Some(CompletionSource::HighlightFaces)
+        ) {
+            return if selection_explicit(context.completion) {
+                selected_value(context.completion).unwrap_or_else(|| input.to_owned())
+            } else {
+                input.to_owned()
+            };
+        }
+        if matches!(
+            context.completion.map(CompletionSession::source),
             Some(CompletionSource::Commands | CompletionSource::Options)
         ) || matches!(
             context.completion.map(CompletionSession::source),
@@ -326,6 +336,50 @@ mod tests {
         });
 
         assert_eq!(accepted, selected);
+    }
+
+    #[test]
+    fn empty_highlight_face_without_explicit_selection_keeps_default_input() {
+        let completion = CompletionSession::highlight_faces(
+            [("hi-yellow", "Hi-lock yellow highlight")],
+            CompletionConfig::default(),
+        );
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::HighlightFace,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, "");
+    }
+
+    #[test]
+    fn empty_highlight_face_with_explicit_selection_accepts_selected_candidate() {
+        let mut completion = CompletionSession::highlight_faces(
+            [
+                ("hi-yellow", "Hi-lock yellow highlight"),
+                ("hi-pink", "Hi-lock pink highlight"),
+            ],
+            CompletionConfig::default(),
+        );
+        completion.move_selection(1);
+        let accepted = accepted_completion_input(CompletionAcceptContext {
+            kind: PromptKind::HighlightFace,
+            input: "",
+            completion: Some(&completion),
+            command_exists: false,
+            option_exists: false,
+            exact_file_exists: false,
+            buffer_exists: false,
+            switch_buffer_default: None,
+        });
+
+        assert_eq!(accepted, "hi-pink");
     }
 
     #[test]

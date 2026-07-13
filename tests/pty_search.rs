@@ -154,7 +154,8 @@ fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
     rile.assert_screen_contains("Highlight phrase:")?;
     rile.send("foo bar", b"foo bar")?;
     rile.send("Enter", keys::ENTER)?;
-    rile.assert_screen_contains("Highlight using face: hi-yellow")?;
+    rile.assert_screen_contains("Highlight using face (default hi-yellow):")?;
+    rile.assert_screen_contains("hi-green")?;
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Highlighted foo bar")?;
 
@@ -164,7 +165,7 @@ fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
     rile.assert_screen_contains("Highlight lines matching regexp:")?;
     rile.send("plain", b"plain")?;
     rile.send("Enter", keys::ENTER)?;
-    rile.assert_screen_contains("Highlight using face: hi-pink")?;
+    rile.assert_screen_contains("Highlight using face (default hi-pink):")?;
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Highlighted lines matching plain")?;
 
@@ -174,7 +175,10 @@ fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
     rile.assert_screen_contains("Highlight regexp:")?;
     rile.send("TODO", b"TODO")?;
     rile.send("Enter", keys::ENTER)?;
-    rile.assert_screen_contains("Highlight using face: hi-green")?;
+    rile.assert_screen_contains("Highlight using face (default hi-green):")?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
+    rile.send("C-n", keys::control('n'))?;
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Highlighted TODO")?;
 

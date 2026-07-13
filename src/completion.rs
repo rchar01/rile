@@ -124,6 +124,7 @@ pub enum CompletionSource {
     Files,
     Buffers,
     Options,
+    HighlightFaces,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,6 +181,28 @@ impl CompletionSession {
         let mut session = Self {
             source: CompletionSource::Options,
             title: "Describe variable".to_owned(),
+            config,
+            base_dir: None,
+            candidates,
+            matches: Vec::new(),
+            selected: 0,
+            selection_explicit: false,
+        };
+        session.update("");
+        session
+    }
+
+    pub fn highlight_faces(
+        faces: impl IntoIterator<Item = (impl Into<String>, impl Into<String>)>,
+        config: CompletionConfig,
+    ) -> Self {
+        let candidates = faces
+            .into_iter()
+            .map(|(name, annotation)| CompletionCandidate::new(name, annotation))
+            .collect::<Vec<_>>();
+        let mut session = Self {
+            source: CompletionSource::HighlightFaces,
+            title: "Highlight faces".to_owned(),
             config,
             base_dir: None,
             candidates,
@@ -255,43 +278,10 @@ impl CompletionSession {
 
     pub fn update(&mut self, input: &str) {
         self.matches = match self.source {
-            CompletionSource::Commands | CompletionSource::Buffers | CompletionSource::Options => {
-                let matching = self.config.matching;
-                if matching == CompletionMatching::Orderless && !input.is_empty() {
-                    let components = parse_orderless_components(input);
-                    let mut matches = self
-                        .candidates
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, candidate)| {
-                            orderless_match_score_for_components(&candidate.value, &components)
-                                .map(|score| (index, score))
-                        })
-                        .collect::<Vec<_>>();
-                    if components.iter().any(|component| !component.negated) {
-                        matches.sort_by(|(left_index, left_score), (right_index, right_score)| {
-                            left_score
-                                .cmp(right_score)
-                                .then_with(|| {
-                                    self.candidates[*left_index]
-                                        .value
-                                        .len()
-                                        .cmp(&self.candidates[*right_index].value.len())
-                                })
-                                .then_with(|| left_index.cmp(right_index))
-                        });
-                    }
-                    matches.into_iter().map(|(index, _)| index).collect()
-                } else {
-                    self.candidates
-                        .iter()
-                        .enumerate()
-                        .filter_map(|(index, candidate)| {
-                            item_matches(matching, &candidate.value, input).then_some(index)
-                        })
-                        .collect()
-                }
-            }
+            CompletionSource::Commands
+            | CompletionSource::Buffers
+            | CompletionSource::Options
+            | CompletionSource::HighlightFaces => self.non_file_matches(input),
             CompletionSource::Files => {
                 self.refresh_file_candidates(input);
                 (0..self.candidates.len()).collect()
@@ -390,6 +380,44 @@ impl CompletionSession {
 
     pub fn has_matches(&self) -> bool {
         !self.matches.is_empty()
+    }
+
+    fn non_file_matches(&self, input: &str) -> Vec<usize> {
+        let matching = self.config.matching;
+        if matching == CompletionMatching::Orderless && !input.is_empty() {
+            let components = parse_orderless_components(input);
+            let mut matches = self
+                .candidates
+                .iter()
+                .enumerate()
+                .filter_map(|(index, candidate)| {
+                    orderless_match_score_for_components(&candidate.value, &components)
+                        .map(|score| (index, score))
+                })
+                .collect::<Vec<_>>();
+            if components.iter().any(|component| !component.negated) {
+                matches.sort_by(|(left_index, left_score), (right_index, right_score)| {
+                    left_score
+                        .cmp(right_score)
+                        .then_with(|| {
+                            self.candidates[*left_index]
+                                .value
+                                .len()
+                                .cmp(&self.candidates[*right_index].value.len())
+                        })
+                        .then_with(|| left_index.cmp(right_index))
+                });
+            }
+            matches.into_iter().map(|(index, _)| index).collect()
+        } else {
+            self.candidates
+                .iter()
+                .enumerate()
+                .filter_map(|(index, candidate)| {
+                    item_matches(matching, &candidate.value, input).then_some(index)
+                })
+                .collect()
+        }
     }
 
     fn refresh_file_candidates(&mut self, input: &str) {
@@ -971,6 +999,42 @@ mod tests {
 
         let candidate = session.selected().expect("save-buffer should be selected");
         assert_eq!(candidate.annotation, "Save current buffer");
+    }
+
+    #[test]
+    fn highlight_face_completion_filters_and_annotates_candidates() {
+        let mut session = CompletionSession::highlight_faces(
+            [
+                ("hi-yellow", "Hi-lock yellow highlight"),
+                ("hi-green", "Hi-lock green highlight"),
+                ("hi-green-b", "Hi-lock bold green highlight"),
+            ],
+            CompletionConfig::default(),
+        );
+
+        assert_eq!(session.match_count(), 3);
+        session.update("green");
+
+        let values = session
+            .view_items()
+            .into_iter()
+            .map(|item| {
+                (
+                    item.candidate.value.clone(),
+                    item.candidate.annotation.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            values,
+            vec![
+                ("hi-green".to_owned(), "Hi-lock green highlight".to_owned()),
+                (
+                    "hi-green-b".to_owned(),
+                    "Hi-lock bold green highlight".to_owned()
+                ),
+            ]
+        );
     }
 
     #[test]

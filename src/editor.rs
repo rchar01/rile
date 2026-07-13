@@ -852,6 +852,7 @@ impl Editor {
                 | PromptKind::ExtendedCommand
                 | PromptKind::FindFile
                 | PromptKind::FindFileReadOnly
+                | PromptKind::HighlightFace
                 | PromptKind::InsertFile
                 | PromptKind::KillBuffer
                 | PromptKind::SwitchToBuffer
@@ -1656,6 +1657,9 @@ impl Editor {
             KeyEvent::Special(SpecialKey::Escape) | KeyEvent::Ctrl('g') => {
                 self.reset_current_prompt_history_navigation();
                 self.keyboard_macro_prompt_start = None;
+                if self.minibuffer.prompt_kind() == Some(PromptKind::HighlightFace) {
+                    self.pending_user_highlight = None;
+                }
                 self.minibuffer.cancel_prompt();
                 self.finish_completion_buffer();
                 self.completion = None;
@@ -2099,9 +2103,15 @@ impl Editor {
         });
         self.minibuffer.start_prompt(
             PromptKind::HighlightFace,
-            prompt_label(PromptKind::HighlightFace),
+            format!("Highlight using face (default {}): ", default_face.name),
         );
-        self.minibuffer.set_prompt_input(default_face.name);
+        self.completion = Some(CompletionSession::highlight_faces(
+            HIGHLIGHT_FACE_SPECS
+                .iter()
+                .map(|face| (face.name, face.annotation)),
+            self.completion_config,
+        ));
+        self.update_completion_from_prompt();
         Ok(EditorOutcome::Continue)
     }
 
@@ -9229,52 +9239,64 @@ fn highlight_phrase_regexp(input: &str) -> String {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HighlightFaceSpec {
     name: &'static str,
+    annotation: &'static str,
     face: Face,
 }
 
 const HIGHLIGHT_FACE_SPECS: [HighlightFaceSpec; 11] = [
     HighlightFaceSpec {
         name: "hi-yellow",
+        annotation: "Hi-lock yellow highlight",
         face: Face::UserHighlight,
     },
     HighlightFaceSpec {
         name: "hi-pink",
+        annotation: "Hi-lock pink highlight",
         face: Face::UserHighlightAlt,
     },
     HighlightFaceSpec {
         name: "hi-green",
+        annotation: "Hi-lock green highlight",
         face: Face::UserHighlightGreen,
     },
     HighlightFaceSpec {
         name: "hi-blue",
+        annotation: "Hi-lock blue highlight",
         face: Face::UserHighlightBlue,
     },
     HighlightFaceSpec {
         name: "hi-salmon",
+        annotation: "Hi-lock salmon highlight",
         face: Face::UserHighlightSalmon,
     },
     HighlightFaceSpec {
         name: "hi-aquamarine",
+        annotation: "Hi-lock aquamarine highlight",
         face: Face::UserHighlightAquamarine,
     },
     HighlightFaceSpec {
         name: "hi-black-b",
+        annotation: "Hi-lock bold black highlight",
         face: Face::UserHighlightBlackBold,
     },
     HighlightFaceSpec {
         name: "hi-blue-b",
+        annotation: "Hi-lock bold blue highlight",
         face: Face::UserHighlightBlueBold,
     },
     HighlightFaceSpec {
         name: "hi-red-b",
+        annotation: "Hi-lock bold red highlight",
         face: Face::UserHighlightRedBold,
     },
     HighlightFaceSpec {
         name: "hi-green-b",
+        annotation: "Hi-lock bold green highlight",
         face: Face::UserHighlightGreenBold,
     },
     HighlightFaceSpec {
         name: "hi-black-hb",
+        annotation: "Hi-lock heavy black highlight",
         face: Face::UserHighlightBlackHeavyBold,
     },
 ];
@@ -9548,6 +9570,7 @@ mod tests {
             Some(PromptKind::HighlightFace)
         );
         editor.minibuffer.set_prompt_input(face);
+        editor.update_completion_from_prompt();
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("face prompt should submit");
@@ -19136,6 +19159,65 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn highlight_regexp_face_prompt_starts_completion_list() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("highlight-regexp")
+            .expect("command should start prompt");
+        editor.minibuffer.set_prompt_input("todo");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("highlight prompt should submit");
+
+        assert_eq!(editor.minibuffer.prompt_input(), Some(""));
+        assert_eq!(
+            editor
+                .minibuffer()
+                .prompt()
+                .map(|prompt| prompt.label.as_str()),
+            Some("Highlight using face (default hi-yellow): ")
+        );
+        assert_eq!(
+            editor.completion().map(CompletionSession::match_count),
+            Some(11)
+        );
+        let first = editor
+            .completion()
+            .and_then(CompletionSession::selected)
+            .expect("face completion should select default candidate");
+        assert_eq!(first.value, "hi-yellow");
+        assert_eq!(first.annotation, "Hi-lock yellow highlight");
+    }
+
+    #[test]
+    fn highlight_regexp_accepts_selected_face_completion() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("highlight-regexp")
+            .expect("command should start prompt");
+        editor.minibuffer.set_prompt_input("todo");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("highlight prompt should submit");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("selection should move");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::ArrowDown))
+            .expect("selection should move");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("face prompt should submit");
+
+        assert_eq!(
+            editor.spans_for_line(0, "todo"),
+            vec![Span::new(0, 4, Face::UserHighlightGreen)]
+        );
+    }
+
+    #[test]
     fn highlight_regexp_rejects_unknown_face() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -19147,6 +19229,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("highlight prompt should submit");
         editor.minibuffer.set_prompt_input("unknown-face");
+        editor.update_completion_from_prompt();
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("face prompt should submit");
