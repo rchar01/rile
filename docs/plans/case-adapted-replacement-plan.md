@@ -162,16 +162,16 @@ Depends on: Phases 1 through 4.
 
 Tasks:
 
-- [ ] Run `make verify`.
-- [ ] Run patch review over the case-adapted replacement commits.
-- [ ] Address any review findings with focused tests and rerun relevant gates.
-- [ ] Commit implementation, docs, and follow-ups in logical commits.
-- [ ] Update this plan's Progress Log and Decision Log.
+- [x] Run `make verify`.
+- [x] Run patch review over the case-adapted replacement commits.
+- [x] Address any review findings with focused tests and rerun relevant gates.
+- [x] Commit implementation, docs, and follow-ups in logical commits.
+- [x] Update this plan's Progress Log and Decision Log.
 
 Validation gate:
 
-- [ ] `make verify` passes.
-- [ ] Patch review reports no must-fix findings.
+- [x] `make verify` passes.
+- [x] Patch review findings are fixed or documented.
 - [ ] Worktree is clean after commits.
 
 ## Risks
@@ -187,11 +187,11 @@ Validation gate:
 
 ## Validation Summary
 
-- [ ] Focused unit tests pass.
-- [ ] Focused PTY tests pass.
-- [ ] `git diff --check` passes.
-- [ ] `make verify` passes.
-- [ ] Patch review is clean or documented.
+- [x] Focused unit tests pass.
+- [x] Focused PTY tests pass.
+- [x] `git diff --check` passes.
+- [x] `make verify` passes.
+- [x] Patch review is clean or documented.
 
 ## Progress Log
 
@@ -201,6 +201,8 @@ Validation gate:
 | 2026-07-13 | Completed Emacs reference discovery. Lowercase `status` to `state` yields `state State STATE`; `StaTUS` maps to capitalized output, lowercase-first mixed case stays lowercase, all-uppercase matches upcase the full replacement, and regexp replacement adaptation happens after capture/whole-match expansion. | Local GNU Emacs `--batch --quick` checks using `replace-string` and `replace-regexp`. |
 | 2026-07-13 | Implemented unit-level case adaptation and terminal coverage. | Commits `650cf91` and `d48ea90`; focused editor/search_pattern unit tests and `pty_search case` passed. |
 | 2026-07-13 | Updated user docs, release notes, ChangeLog, and plan progress. | `README.md`, `NEWS`, `ChangeLog`, `docs/development.md`, `docs/emacs-function-reference.md`; `git diff --check` passed. |
+| 2026-07-13 | Fixed uncased-match adaptation and completed verification. | Commit `dd65a86`; focused unit/PTY regressions passed; final `make verify` passed. |
+| 2026-07-13 | Reviewed capitalization semantics and retained internal-uppercase preservation. | Patch review questioned `newSTATE` handling; local GNU Emacs `replace-string`, `replace-regexp`, and `replace-match` all produced `NewSTATE` for a `Status` match. |
 
 ## Decision Log
 
@@ -208,3 +210,4 @@ Validation gate:
 | --- | --- | --- |
 | 2026-07-13 | Treat case-adapted replacement as separate from smart-case search. | Smart-case search is already implemented; replacement casing has additional Emacs-specific edge cases. |
 | 2026-07-13 | Implement first pass as always-on default behavior instead of adding `case_replace` config. | This matches Emacs defaults and avoids introducing configuration before there is a user need for disabling it. |
+| 2026-07-13 | Preserve existing internal replacement casing when adapting capitalized matches. | GNU Emacs uppercases word initials but does not lowercase the rest of replacement words; `Status` plus `newSTATE` becomes `NewSTATE`. |
