@@ -148,7 +148,7 @@ full Emacs face system.
 
 - [x] Run `./scripts/in-container cargo test --locked --lib`.
 - [x] Run `./scripts/in-container cargo test --locked --test pty_search hi_lock`.
-- [ ] Run `make verify` before considering the work complete.
+- [x] Run `make verify` before considering the work complete.
 
 ## Risks
 
@@ -166,6 +166,7 @@ full Emacs face system.
 | --- | --- | --- |
 | 2026-07-13 | Plan created. | User requested plan under `docs/plans/`; Emacs 30.2 behavior verified with local `emacs -Q --batch` docstrings/source metadata. |
 | 2026-07-13 | Implemented unhighlight defaults, face selection, and contrast fixes. | Commits `15dc18b` and `1e6799a`; `./scripts/in-container cargo test --locked --lib`, `./scripts/in-container cargo test --locked --lib highlight`, `./scripts/in-container cargo test --locked --lib unhighlight`, and `./scripts/in-container cargo test --locked --test pty_search hi_lock` passed. |
+| 2026-07-13 | Completed full verification after fixing a Clippy lint. | `make verify` passed with 830/830 Rust tests and 4/4 snapshots after removing a needless borrow in `tests/pty_search.rs`. |
 
 ## Decision Log
 
