@@ -534,6 +534,8 @@ pattern. Highlight commands prompt for a small Emacs-named face palette backed b
 Rile render faces. `unhighlight-regexp` pre-fills an active highlight pattern,
 preferring a highlight at point and otherwise the most recent pattern, and removes
 entries whose original prompt text exactly matches the submitted input.
+Submitting a blank unhighlight prompt accepts the stored default pattern, not
+all-removal.
 Universal-argument `unhighlight-regexp` removes all current-buffer highlights.
 Rile does not yet persist `Hi-lock:` file comments, complete arbitrary face-name
 support, or support subexpression-only highlighting.

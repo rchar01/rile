@@ -302,8 +302,9 @@ small Emacs-compatible palette including `hi-yellow`, `hi-pink`, `hi-green`,
 `hi-blue`, `hi-salmon`, `hi-aquamarine`, `hi-black-b`, `hi-blue-b`, `hi-red-b`,
 `hi-green-b`, and `hi-black-hb`. `unhighlight-regexp` pre-fills an editable
 active highlight pattern, preferring a highlight at point and otherwise the most
-recent pattern. Universal-argument `unhighlight-regexp` removes all current-buffer
-highlights.
+recent pattern. Submitting a blank unhighlight prompt accepts the stored default
+pattern, not all-removal. Universal-argument `unhighlight-regexp` removes all
+current-buffer highlights.
 
 Rile target: intentional subset. Highlight patterns use Rile's line-local regexp
 subset and smart-case behavior. Patterns that can match empty text are rejected.

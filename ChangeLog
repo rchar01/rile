@@ -1,5 +1,18 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Fix blank hi-lock unhighlight submission.
+
+	* src/editor.rs (Editor): Store pending unhighlight defaults.
+	(Editor::submit_unhighlight_regexp): Accept the stored default when the
+	prompt is submitted blank.
+	(tests): Cover blank submission after clearing the pre-filled prompt.
+	* docs/development.md: Document blank unhighlight prompt behavior.
+	* docs/emacs-function-reference.md: Likewise.
+	* docs/plans/hi-lock-unhighlight-face-plan.md: Record the decision and
+	final validation.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Improve hi-lock prompts and face selection.
 
 	* docs/plans/hi-lock-unhighlight-face-plan.md: New plan.

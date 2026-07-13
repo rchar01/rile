@@ -100,6 +100,7 @@ pub struct Editor {
     search: Option<SearchState>,
     user_highlights: HashMap<BufferId, Vec<UserHighlight>>,
     pending_user_highlight: Option<PendingUserHighlight>,
+    pending_unhighlight_default: Option<String>,
     query_replace: Option<QueryReplaceState>,
     replace_regexp: Option<ReplaceRegexpState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
@@ -679,6 +680,7 @@ impl Editor {
             search: None,
             user_highlights: HashMap::new(),
             pending_user_highlight: None,
+            pending_unhighlight_default: None,
             query_replace: None,
             replace_regexp: None,
             rectangle_number_prompt: None,
@@ -1560,6 +1562,9 @@ impl Editor {
                 if self.minibuffer.prompt_kind() == Some(PromptKind::HighlightFace) {
                     self.pending_user_highlight = None;
                 }
+                if self.minibuffer.prompt_kind() == Some(PromptKind::UnhighlightRegexp) {
+                    self.pending_unhighlight_default = None;
+                }
                 if self.minibuffer.prompt_kind() == Some(PromptKind::ShellCommand) {
                     self.shell_command_prompt = None;
                 }
@@ -1997,10 +2002,16 @@ impl Editor {
     }
 
     fn submit_unhighlight_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
-        if input.is_empty() {
-            self.minibuffer.set_error("empty highlight regexp");
-            return Ok(EditorOutcome::Continue);
-        }
+        let input = if input.is_empty() {
+            let Some(default) = self.pending_unhighlight_default.take() else {
+                self.minibuffer.set_error("empty highlight regexp");
+                return Ok(EditorOutcome::Continue);
+            };
+            default
+        } else {
+            self.pending_unhighlight_default = None;
+            input.to_owned()
+        };
         let Some(highlights) = self.user_highlights.get_mut(&self.current_buffer) else {
             self.minibuffer
                 .set_message(format!("No highlight for {input}"));
@@ -2025,6 +2036,7 @@ impl Editor {
     }
 
     fn remove_all_user_highlights(&mut self) -> CommandOutcome {
+        self.pending_unhighlight_default = None;
         let removed = self
             .user_highlights
             .remove(&self.current_buffer)
@@ -5954,7 +5966,8 @@ impl Editor {
             PromptKind::UnhighlightRegexp,
             prompt_label(PromptKind::UnhighlightRegexp),
         );
-        self.minibuffer.set_prompt_input(default);
+        self.minibuffer.set_prompt_input(default.clone());
+        self.pending_unhighlight_default = Some(default);
         true
     }
 
@@ -19221,6 +19234,27 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.spans_for_line(0, "todo fixme"),
             vec![Span::new(0, 4, Face::UserHighlight)]
         );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Removed 1 highlight")
+        );
+    }
+
+    #[test]
+    fn unhighlight_regexp_blank_input_accepts_prefilled_default() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        editor
+            .execute_command_by_name("unhighlight-regexp")
+            .expect("unhighlight should start prompt");
+        assert_eq!(editor.minibuffer.prompt_input(), Some("todo"));
+        editor.minibuffer.set_prompt_input("");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("blank unhighlight prompt should submit default");
+
+        assert!(editor.spans_for_line(0, "todo").is_empty());
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Removed 1 highlight")

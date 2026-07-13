@@ -71,6 +71,8 @@ full Emacs face system.
 - If no highlight at point is found, use the most recently added current-buffer
   highlight pattern.
 - Let the user edit the pre-filled text before pressing `RET`.
+- If the prompt is cleared and submitted blank, accept the stored default pattern
+  rather than treating blank input as all-removal.
 - On `RET`, remove all current-buffer entries whose original prompt text matches
   the submitted input, preserving the current exact-input removal behavior.
 - If there are no active highlights, show `No highlighting to remove` and do not
@@ -118,6 +120,8 @@ full Emacs face system.
 - [x] Add universal-argument all-removal to `command_unhighlight_regexp`.
 - [x] Add unit tests for default selection, editable deletion, no-highlight
   behavior, and all-removal.
+- [x] Add a regression test for clearing the pre-filled default and submitting
+  blank input.
 - [x] Add or update PTY coverage for `M-s h u RET` removing the pre-filled
   default and `C-u M-s h u` removing all highlights.
 
@@ -167,6 +171,7 @@ full Emacs face system.
 | 2026-07-13 | Plan created. | User requested plan under `docs/plans/`; Emacs 30.2 behavior verified with local `emacs -Q --batch` docstrings/source metadata. |
 | 2026-07-13 | Implemented unhighlight defaults, face selection, and contrast fixes. | Commits `15dc18b` and `1e6799a`; `./scripts/in-container cargo test --locked --lib`, `./scripts/in-container cargo test --locked --lib highlight`, `./scripts/in-container cargo test --locked --lib unhighlight`, and `./scripts/in-container cargo test --locked --test pty_search hi_lock` passed. |
 | 2026-07-13 | Completed full verification after fixing a Clippy lint. | `make verify` passed with 830/830 Rust tests and 4/4 snapshots after removing a needless borrow in `tests/pty_search.rs`. |
+| 2026-07-13 | Fixed blank unhighlight submission semantics and reverified. | Added unit coverage so clearing the pre-filled prompt and pressing Enter accepts the stored default pattern instead of erroring or removing all highlights. `./scripts/in-container cargo test --locked --lib unhighlight`, `./scripts/in-container cargo test --locked --test pty_search hi_lock`, and final `make verify` passed with 831 Rust tests. |
 
 ## Decision Log
 
@@ -174,4 +179,5 @@ full Emacs face system.
 | --- | --- | --- |
 | 2026-07-13 | Empty `unhighlight-regexp` input should not remove all. | GNU Emacs uses universal argument for all-removal; plain prompt accepts an editable default pattern. |
 | 2026-07-13 | Use a pre-filled default pattern for `unhighlight-regexp`. | This gives Emacs-like default deletion while still letting the user edit the regexp before submission. |
+| 2026-07-13 | Blank `unhighlight-regexp` submission accepts the stored default. | This preserves Emacs-style default acceptance while avoiding a blank-input all-removal shortcut. |
 | 2026-07-13 | Add face selection as a small named palette. | It matches Emacs' prompt shape without requiring a full face system. |
