@@ -18964,6 +18964,29 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn highlight_regexp_rejects_empty_invalid_and_zero_width_patterns() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: empty highlight regexp")
+        );
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "[");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: invalid regexp")
+        );
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "^");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: regexp can match empty string")
+        );
+    }
+
+    #[test]
     fn user_highlights_have_lower_priority_than_active_search() {
         let mut editor = Editor::new(Document::scratch());
 
