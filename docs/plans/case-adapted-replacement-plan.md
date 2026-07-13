@@ -172,7 +172,7 @@ Validation gate:
 
 - [x] `make verify` passes.
 - [x] Patch review findings are fixed or documented.
-- [ ] Worktree is clean after commits.
+- [x] Worktree is clean after commits.
 
 ## Risks
 
