@@ -245,7 +245,8 @@ Depends on: Phase 3.
 Tasks:
 
 - [x] Add PTY tests for `M-s h r`, `M-s h p`, `M-s h l`, and `M-s h u` prompt
-  flows and visible highlighting side effects where stable.
+  flows. Rendering effects are covered by span and ANSI unit tests because PTY
+  tests parse normalized screen text, not raw color attributes.
 - [x] Update `README.md` with commands, key bindings, and current limits.
 - [x] Update `NEWS` with the user-visible feature entry.
 - [x] Update `ChangeLog` with GNU-style source-history entries.

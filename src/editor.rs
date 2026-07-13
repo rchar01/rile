@@ -12207,6 +12207,9 @@ mod tests {
             PromptKind::FindFile,
             PromptKind::FindFileReadOnly,
             PromptKind::GotoLine,
+            PromptKind::HighlightLinesMatchingRegexp,
+            PromptKind::HighlightPhrase,
+            PromptKind::HighlightRegexp,
             PromptKind::InsertFile,
             PromptKind::KillBuffer,
             PromptKind::QueryReplaceRegexpReplacement,
@@ -12218,6 +12221,7 @@ mod tests {
             PromptKind::ShellCommand,
             PromptKind::StringRectangle,
             PromptKind::SwitchToBuffer,
+            PromptKind::UnhighlightRegexp,
             PromptKind::WriteFile,
         ];
 

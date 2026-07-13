@@ -913,6 +913,46 @@ mod tests {
             KeyResolution::Prefix
         );
         assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('s')]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('s'), KeyEvent::Text("h".to_owned())]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Meta('s'),
+                KeyEvent::Text("h".to_owned()),
+                KeyEvent::Text("r".to_owned())
+            ]),
+            KeyResolution::Command(HighlightRegexp)
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Meta('s'),
+                KeyEvent::Text("h".to_owned()),
+                KeyEvent::Text("p".to_owned())
+            ]),
+            KeyResolution::Command(HighlightPhrase)
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Meta('s'),
+                KeyEvent::Text("h".to_owned()),
+                KeyEvent::Text("l".to_owned())
+            ]),
+            KeyResolution::Command(HighlightLinesMatchingRegexp)
+        );
+        assert_eq!(
+            keymap.resolve(&[
+                KeyEvent::Meta('s'),
+                KeyEvent::Text("h".to_owned()),
+                KeyEvent::Text("u".to_owned())
+            ]),
+            KeyResolution::Command(UnhighlightRegexp)
+        );
+        assert_eq!(
             keymap.resolve(&[KeyEvent::Ctrl('h')]),
             KeyResolution::Prefix
         );

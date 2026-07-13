@@ -1409,6 +1409,9 @@ mod tests {
         assert!(registry.contains("forward-word"));
         assert!(registry.contains("goto-line"));
         assert!(registry.contains("global-auto-revert-mode"));
+        assert!(registry.contains("highlight-lines-matching-regexp"));
+        assert!(registry.contains("highlight-phrase"));
+        assert!(registry.contains("highlight-regexp"));
         assert!(registry.contains("isearch-forward"));
         assert!(registry.contains("isearch-backward"));
         assert!(registry.contains("isearch-forward-regexp"));
@@ -1445,6 +1448,7 @@ mod tests {
         assert!(registry.contains("undo"));
         assert!(registry.contains("undo-only"));
         assert!(registry.contains("undo-redo"));
+        assert!(registry.contains("unhighlight-regexp"));
         assert!(registry.contains("universal-argument"));
         assert!(registry.contains("view-echo-area-messages"));
         assert!(registry.contains("what-cursor-position"));
