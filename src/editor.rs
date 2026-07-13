@@ -425,6 +425,20 @@ impl ReplacementTemplate {
             Self::Regexp(text) => expand_regexp_replacement(text, buffer, pattern_match),
         }
     }
+
+    fn expand_for_pattern(
+        &self,
+        buffer: &Buffer,
+        pattern: &SearchPattern,
+        pattern_match: &EditorPatternMatch,
+    ) -> Result<String> {
+        let expanded = self.expand(buffer, pattern_match)?;
+        if pattern.is_case_sensitive() {
+            return Ok(expanded);
+        }
+        let matched_text = buffer.text_in_range(pattern_match.range)?;
+        Ok(adapt_replacement_case(&matched_text, &expanded))
+    }
 }
 
 fn expand_regexp_replacement(
@@ -456,6 +470,44 @@ fn expand_regexp_replacement(
         }
     }
     Ok(expanded)
+}
+
+fn adapt_replacement_case(matched_text: &str, replacement: &str) -> String {
+    if cased_characters(matched_text).all(char::is_uppercase) {
+        return replacement.to_uppercase();
+    }
+    if first_cased_character(matched_text).is_some_and(char::is_uppercase) {
+        return upcase_word_initials(replacement);
+    }
+    replacement.to_owned()
+}
+
+fn cased_characters(text: &str) -> impl Iterator<Item = char> + '_ {
+    text.chars()
+        .filter(|character| character.is_lowercase() || character.is_uppercase())
+}
+
+fn first_cased_character(text: &str) -> Option<char> {
+    cased_characters(text).next()
+}
+
+fn upcase_word_initials(text: &str) -> String {
+    let mut upcased = String::new();
+    let mut at_word_start = true;
+    for character in text.chars() {
+        if character.is_alphanumeric() {
+            if at_word_start {
+                upcased.extend(character.to_uppercase());
+                at_word_start = false;
+            } else {
+                upcased.push(character);
+            }
+        } else {
+            upcased.push(character);
+            at_word_start = true;
+        }
+    }
+    upcased
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6579,7 +6631,11 @@ impl Editor {
             SearchDirection::Forward,
         )? {
             let range = pattern_match.range;
-            let replacement_text = replacement.expand(self.document().buffer(), &pattern_match)?;
+            let replacement_text = replacement.expand_for_pattern(
+                self.document().buffer(),
+                pattern,
+                &pattern_match,
+            )?;
             let new_end = self.replace_text_range(range, &replacement_text, range.start)?;
             self.cursor = new_end;
             self.goal_display_column = None;
@@ -6734,18 +6790,22 @@ impl Editor {
         if !self.ensure_buffer_editable() {
             return Ok(self.cursor);
         }
-        let Some((pattern_match, replacement_template)) =
+        let Some((pattern_match, pattern, replacement_template)) =
             self.query_replace.as_ref().and_then(|state| {
                 state
                     .current
                     .clone()
-                    .map(|current| (current, state.replacement.clone()))
+                    .map(|current| (current, state.pattern.clone(), state.replacement.clone()))
             })
         else {
             return Ok(self.cursor);
         };
         let old_range = pattern_match.range;
-        let replacement = replacement_template.expand(self.document().buffer(), &pattern_match)?;
+        let replacement = replacement_template.expand_for_pattern(
+            self.document().buffer(),
+            &pattern,
+            &pattern_match,
+        )?;
 
         let old_text = self.document_mut().buffer_mut().delete_range(old_range)?;
         let new_end = self
@@ -8929,8 +8989,8 @@ mod tests {
         format_describe_mode_help, format_describe_variable_help,
     };
     use super::{
-        AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, KillEntry,
-        file_prompt_base_input, format_rectangle_number,
+        AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, EditorPatternMatch,
+        KillEntry, file_prompt_base_input, format_rectangle_number,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -8945,6 +9005,7 @@ mod tests {
     use crate::mode::{ModeId, ModeRegistry};
     use crate::option::{OptionId, OptionRegistry, OptionValue};
     use crate::render::{DecorationProvider, Face, Span};
+    use crate::search_pattern::{PatternKind, SearchPattern};
     use crate::syntax::{MajorMode, SyntaxMode};
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -9084,6 +9145,58 @@ mod tests {
             .completion()
             .and_then(|completion| completion.selected())
             .map(|candidate| candidate.value.as_str())
+    }
+
+    #[test]
+    fn replacement_case_adaptation_matches_emacs_shapes() {
+        assert_eq!(
+            super::adapt_replacement_case("status", "new-state"),
+            "new-state"
+        );
+        assert_eq!(
+            super::adapt_replacement_case("Status", "new-state"),
+            "New-State"
+        );
+        assert_eq!(
+            super::adapt_replacement_case("StaTUS", "new-state"),
+            "New-State"
+        );
+        assert_eq!(
+            super::adapt_replacement_case("stATUS", "new-state"),
+            "new-state"
+        );
+        assert_eq!(
+            super::adapt_replacement_case("STATUS", "new-state"),
+            "NEW-STATE"
+        );
+        assert_eq!(
+            super::adapt_replacement_case("Status", "newSTATE"),
+            "NewSTATE"
+        );
+        assert_eq!(super::adapt_replacement_case("ÉCHO", "état"), "ÉTAT");
+    }
+
+    #[test]
+    fn regexp_replacement_case_adaptation_runs_after_expansion() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "Foo-Bar")
+            .expect("fixture should insert");
+        let pattern = SearchPattern::compile(PatternKind::Regexp, r"\(foo\)-\(bar\)")
+            .expect("regexp should compile");
+        let pattern_match = EditorPatternMatch {
+            range: TextRange::new(Position::new(0, 0), Position::new(0, 7)),
+            captures: vec![
+                Some(TextRange::new(Position::new(0, 0), Position::new(0, 3))),
+                Some(TextRange::new(Position::new(0, 4), Position::new(0, 7))),
+            ],
+        };
+        let replacement = super::ReplacementTemplate::regexp(r"x\1-y\2")
+            .expand_for_pattern(document.buffer(), &pattern, &pattern_match)
+            .expect("replacement should expand");
+
+        assert_eq!(replacement, "XFoo-YBar");
     }
 
     fn assert_completion_movement_keys(

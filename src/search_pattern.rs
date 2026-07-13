@@ -120,6 +120,10 @@ impl SearchPattern {
                 .can_match_empty(),
         }
     }
+
+    pub(crate) fn is_case_sensitive(&self) -> bool {
+        self.case_sensitive
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
