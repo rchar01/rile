@@ -170,13 +170,16 @@ Removal behavior:
 
 ## Open Questions
 
-- [ ] Should `unhighlight-regexp` remove all matching entries across match and
+- [x] Should `unhighlight-regexp` remove all matching entries across match and
   line-highlight kinds, or only entries created by `highlight-regexp` and
-  `highlight-phrase`?
-- [ ] Should the first pass include an `unhighlight-all` command or universal
+  `highlight-phrase`? Decision: remove all entries whose original prompt text
+  matches, regardless of highlight kind.
+- [x] Should the first pass include an `unhighlight-all` command or universal
   argument support, or defer all-removal until prefix arguments are broader?
-- [ ] Should user highlights be saved in sessions/config later, or remain purely
-  ephemeral like the first implementation proposes?
+  Decision: defer all-removal.
+- [x] Should user highlights be saved in sessions/config later, or remain purely
+  ephemeral like the first implementation proposes? Decision: keep them
+  ephemeral for the first pass.
 
 ## Phase 1: Reference And Architecture Plan
 
@@ -186,12 +189,12 @@ Tasks:
 
 - [x] Capture GNU Emacs 30.2 command bindings and representative behavior.
 - [x] Inspect Rile render/decorator/search/prompt infrastructure.
-- [ ] Add the hi-lock command entries to `docs/emacs-function-reference.md` as
+- [x] Add the hi-lock command entries to `docs/emacs-function-reference.md` as
   durable behavior notes.
 
 Validation gate:
 
-- [ ] Behavior notes clearly separate Emacs behavior from Rile first-pass scope.
+- [x] Behavior notes clearly separate Emacs behavior from Rile first-pass scope.
 
 ## Phase 2: Core Data Model And Rendering
 
@@ -200,16 +203,16 @@ yet.
 
 Tasks:
 
-- [ ] Add user-highlight storage to editor/buffer state without persisting it to
+- [x] Add user-highlight storage to editor/buffer state without persisting it to
   disk.
-- [ ] Add `Face` variants and terminal ANSI mappings for user highlights.
-- [ ] Add `UserHighlightDecorator` and wire it into `spans_for_buffer_line`.
-- [ ] Ensure user-highlight priority sits above syntax and below region/search.
+- [x] Add `Face` variants and terminal ANSI mappings for user highlights.
+- [x] Add `UserHighlightDecorator` and wire it into `spans_for_buffer_line`.
+- [x] Ensure user-highlight priority sits above syntax and below region/search.
 
 Validation gate:
 
-- [ ] Unit tests cover span production, line highlighting, and priority merging.
-- [ ] Terminal render unit tests cover new faces.
+- [x] Unit tests cover span production, line highlighting, and priority merging.
+- [x] Terminal render unit tests cover new faces.
 
 ## Phase 3: Commands And Prompts
 
@@ -219,19 +222,19 @@ Depends on: Phase 2.
 
 Tasks:
 
-- [ ] Add command registry entries and handlers for the four hi-lock commands.
-- [ ] Add prompt kinds, prompt labels, submission handlers, and prompt history.
-- [ ] Add default key bindings under `M-s h`.
-- [ ] Implement regexp highlight creation using `SearchPattern::compile`.
-- [ ] Implement phrase transformation and highlight creation.
-- [ ] Implement whole-line highlight creation.
-- [ ] Implement exact-input unhighlight removal.
+- [x] Add command registry entries and handlers for the four hi-lock commands.
+- [x] Add prompt kinds, prompt labels, submission handlers, and prompt history.
+- [x] Add default key bindings under `M-s h`.
+- [x] Implement regexp highlight creation using `SearchPattern::compile`.
+- [x] Implement phrase transformation and highlight creation.
+- [x] Implement whole-line highlight creation.
+- [x] Implement exact-input unhighlight removal.
 
 Validation gate:
 
-- [ ] Unit tests cover command submission, invalid input, empty input, history,
+- [x] Unit tests cover command submission, invalid input, empty input, history,
   and unhighlight removal.
-- [ ] Keymap and command registry tests cover the new commands and bindings.
+- [x] Keymap and command registry tests cover the new commands and bindings.
 
 ## Phase 4: Integration Tests And Docs
 
@@ -241,18 +244,18 @@ Depends on: Phase 3.
 
 Tasks:
 
-- [ ] Add PTY tests for `M-s h r`, `M-s h p`, `M-s h l`, and `M-s h u` prompt
+- [x] Add PTY tests for `M-s h r`, `M-s h p`, `M-s h l`, and `M-s h u` prompt
   flows and visible highlighting side effects where stable.
-- [ ] Update `README.md` with commands, key bindings, and current limits.
-- [ ] Update `NEWS` with the user-visible feature entry.
-- [ ] Update `ChangeLog` with GNU-style source-history entries.
-- [ ] Update `docs/development.md` with implementation notes and limitations.
+- [x] Update `README.md` with commands, key bindings, and current limits.
+- [x] Update `NEWS` with the user-visible feature entry.
+- [x] Update `ChangeLog` with GNU-style source-history entries.
+- [x] Update `docs/development.md` with implementation notes and limitations.
 
 Validation gate:
 
-- [ ] Focused unit tests pass.
-- [ ] Focused PTY tests pass.
-- [ ] `git diff --check` passes.
+- [x] Focused unit tests pass.
+- [x] Focused PTY tests pass.
+- [x] `git diff --check` passes.
 - [ ] `make verify` passes before final completion.
 
 ## Risks
@@ -269,11 +272,11 @@ Validation gate:
 
 ## Validation Summary
 
-- [ ] Behavior cache reviewed against GNU Emacs 30.2 evidence.
-- [ ] Core rendering/unit tests pass.
-- [ ] Command/prompt/keymap tests pass.
-- [ ] PTY command-flow tests pass.
-- [ ] Documentation updated.
+- [x] Behavior cache reviewed against GNU Emacs 30.2 evidence.
+- [x] Core rendering/unit tests pass.
+- [x] Command/prompt/keymap tests pass.
+- [x] PTY command-flow tests pass.
+- [x] Documentation updated.
 - [ ] `make verify` passes.
 
 ## Progress Log
@@ -281,6 +284,8 @@ Validation gate:
 | Date | Update | Evidence |
 | --- | --- | --- |
 | 2026-07-13 | Plan created with cached GNU Emacs 30.2 hi-lock behavior. | Local `emacs --batch --quick` checks; `src/render/mod.rs`, `src/editor.rs`, `src/minibuffer.rs`, and `src/keymap.rs` inspected. |
+| 2026-07-13 | Implemented buffer-local hi-lock style highlights and PTY coverage. | Commits `79d6fc4` and `dcd1d3d`; `./scripts/in-container cargo test --locked --lib` and focused `pty_search hi_lock_highlight_commands_use_emacs_style_keys` passed. |
+| 2026-07-13 | Updated user docs, reference notes, release notes, ChangeLog, and plan progress. | `README.md`, `NEWS`, `ChangeLog`, `docs/development.md`, `docs/emacs-function-reference.md`, and this plan. |
 
 ## Decision Log
 
@@ -288,3 +293,4 @@ Validation gate:
 | --- | --- | --- |
 | 2026-07-13 | First pass uses Rile decorations instead of a general overlay subsystem. | Existing span rendering already supports overlapping highlights and terminal output. |
 | 2026-07-13 | First pass uses automatic built-in highlight faces instead of prompting for face names. | This delivers the core feature without adding face-name completion or arbitrary face parsing. |
+| 2026-07-13 | `unhighlight-regexp` removes every current-buffer entry whose original prompt text matches. | This keeps removal simple while covering regexp, phrase, and line highlights consistently. |

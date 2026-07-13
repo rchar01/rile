@@ -202,6 +202,12 @@ Basic editor keys:
   all matches from point to the end of the buffer without asking at each match.
   It uses the same line-local regexp subset and replacement expansion as
   `query-replace-regexp`.
+- `M-s h r` (`highlight-regexp`) adds a persistent highlight for regexp matches
+  in the current buffer. `M-s h p` (`highlight-phrase`) highlights phrase
+  matches, folding spaces and tabs between words. `M-s h l`
+  (`highlight-lines-matching-regexp`) highlights whole non-empty lines that
+  match a regexp. `M-s h u` (`unhighlight-regexp`) removes highlights whose
+  original prompt text matches the input.
 - `M-p` and `M-n` recall accepted query-replace search and replacement prompt
   history while editing those prompts. Literal and regexp query-replace prompts
   keep separate histories, and `replace-regexp` keeps its own regexp search and
@@ -236,7 +242,7 @@ Basic editor keys:
 - `C-g` cancels minibuffer prompts and prefix keys.
 
 Current search and replacement matching is line-local and uses smart case: lowercase search text matches case-insensitively, while unescaped uppercase search text is case-sensitive. Replacement commands adapt replacement text casing for case-insensitive matches, so replacing `status` with `state` can produce `state`, `State`, or `STATE` to match the original text. Regexp incremental search, regexp query replace, and `replace-regexp` use Rile's built-in line-local regexp subset without an external regex dependency, including Emacs-style grouping, alternation, counted repetition, word constructs, and ASCII POSIX bracket classes. Incremental search wraps after an explicit boundary failure; replacement commands do not wrap, and no search command matches across line breaks yet.
-Highlighting now flows through shared face spans and deterministic priority merging for region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
+Highlighting now flows through shared face spans and deterministic priority merging for syntax, persistent user highlights, region, search, query-replace, mode-line, minibuffer, and error faces. Minibuffer completion counters and prompt labels use minibuffer styling while editable prompt input and ordinary messages stay in the default face. Region highlighting stays visible on horizontally clipped long lines and selected line-end space.
 Syntax modes are selected from file extensions for Rust, C, shell, Markdown, and TOML, with a plain-text fallback.
 Window splitting stores per-window cursor state and scrolls automatically to keep point visible, including Emacs-style horizontal recentering on clipped long lines. Side-by-side splits reserve a visible separator column. Empty rows are left blank rather than filled with marker characters.
 Undo is buffer-local for current-buffer edits, groups normal typing, tracks the

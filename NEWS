@@ -12,6 +12,11 @@ Interface features:
 
 Editing features:
 
+* `highlight-regexp`, `highlight-phrase`,
+  `highlight-lines-matching-regexp`, and `unhighlight-regexp` now provide
+  buffer-local persistent user highlights through Emacs-style `M-s h r`,
+  `M-s h p`, `M-s h l`, and `M-s h u` bindings.
+
 * Replacement commands now adapt replacement casing for case-insensitive
   matches.  For example, replacing `status` with `state` can now produce
   `state`, `State`, or `STATE` to match the original text's case in

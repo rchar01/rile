@@ -284,6 +284,33 @@ architecture, and PTY tests for regexp isearch command dispatch, matching,
 repeat, wrap, invalid patterns, highlighting, and shared built-in regexp module
 ownership.
 
+### Hi-Lock Highlight Commands
+
+Status: `implemented` in Rile as a small hi-lock style subset.
+
+Default binding: `M-s h r`, `M-s h p`, `M-s h l`, and `M-s h u`.
+
+Purpose: add or remove persistent user highlights in the current buffer.
+`highlight-regexp` highlights regexp matches, `highlight-phrase` highlights
+phrase matches with flexible spaces and tabs, `highlight-lines-matching-regexp`
+highlights whole matching non-empty lines, and `unhighlight-regexp` removes
+stored highlights by exact original prompt text.
+
+Prompt flow: Rile prompts for one string and immediately adds or removes the
+highlight after Enter. Highlight prompts use ordinary prompt history. Rile does
+not prompt for a face name; it cycles built-in match highlight faces and uses a
+separate line-highlight face.
+
+Rile target: intentional subset. Highlight patterns use Rile's line-local regexp
+subset and smart-case behavior. Patterns that can match empty text are rejected.
+Highlights are buffer-local and ephemeral. Rile does not yet implement Emacs
+hi-lock file comments, arbitrary face-name prompts, prefix-argument subexpression
+highlighting, completion over active highlights for removal, or universal
+argument removal of all highlights.
+
+Evidence: GNU Emacs 30.2 `hi-lock` command docstrings and local behavior checks;
+Rile command registry, keymap, unit, ANSI render, and PTY tests.
+
 ## First-Batch Reference Entries
 
 ### `downcase-word`

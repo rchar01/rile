@@ -526,6 +526,15 @@ replacement expansion. Patterns that can match empty text are rejected. Search
 wraps only after an explicit boundary failure, and replacement commands do not
 wrap.
 
+Hi-lock style user highlights are buffer-local and ephemeral. `highlight-regexp`,
+`highlight-phrase`, and `highlight-lines-matching-regexp` store persistent
+patterns for the current buffer and render them through the shared decoration
+path. `highlight-phrase` folds spaces and tabs to `[ \t]+` before compiling the
+pattern. `unhighlight-regexp` removes entries whose original prompt text exactly
+matches the input. Rile uses automatic built-in highlight faces instead of
+prompting for arbitrary Emacs face names, and it does not yet persist `Hi-lock:`
+file comments or support subexpression-only highlighting.
+
 Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail
 with an explicit message.  Backups remain disabled by default.  The optional

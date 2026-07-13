@@ -1,5 +1,37 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Add hi-lock style user highlights.
+
+	* docs/plans/hi-lock-highlighting-plan.md: New plan.
+	* src/render/mod.rs (Face): Add user highlight faces and priorities.
+	* src/terminal/mod.rs (face_start_code): Render user highlight faces.
+	(tests): Cover user highlight ANSI rendering.
+	* src/minibuffer.rs (PromptKind): Add highlight prompt kinds.
+	* src/editor/prompt_history.rs (prompt_kind_uses_history): Include
+	highlight prompts.
+	* src/command.rs (Command, default_doc_for_command, default_commands):
+	Register highlight commands.
+	* src/keymap.rs (default_bindings): Bind Emacs-style `M-s h` highlight
+	commands.
+	* src/editor.rs (Editor): Store buffer-local user highlights.
+	(UserHighlight, UserHighlightKind, UserHighlightDecorator)
+	(Editor::start_highlight_prompt, Editor::submit_highlight_regexp)
+	(Editor::submit_highlight_phrase)
+	(Editor::submit_highlight_lines_matching_regexp)
+	(Editor::submit_unhighlight_regexp, Editor::add_user_highlight)
+	(Editor::next_user_highlight_face, highlight_phrase_regexp): New helpers.
+	(Editor::spans_for_buffer_line): Include user highlights.
+	(prompt_label): Add highlight prompt labels.
+	(tests): Cover persistent highlight behavior.
+	* tests/pty_search.rs (hi_lock_highlight_commands_use_emacs_style_keys):
+	New test.
+	* README.md: Document highlight commands.
+	* NEWS: Add user-visible highlight entry.
+	* docs/development.md: Document highlight implementation limits.
+	* docs/emacs-function-reference.md: Add hi-lock subset reference.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Remove completed case replacement plan.
 
 	* docs/plans/case-adapted-replacement-plan.md: Remove completed plan.
