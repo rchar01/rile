@@ -135,7 +135,7 @@ keyboard-selectable without claiming support for arbitrary Emacs face objects.
 - [x] Run `./scripts/in-container cargo test --locked --lib completion`.
 - [x] Run `./scripts/in-container cargo test --locked --lib highlight`.
 - [x] Run `./scripts/in-container cargo test --locked --test pty_search hi_lock`.
-- [ ] Run `make verify` before considering the work complete.
+- [x] Run `make verify` before considering the work complete.
 
 ## Risks
 
@@ -152,6 +152,7 @@ keyboard-selectable without claiming support for arbitrary Emacs face objects.
 | --- | --- | --- |
 | 2026-07-13 | Plan created. | User requested a plan for a selectable `Highlight using face:` list similar to `M-x` and other completion prompts. |
 | 2026-07-13 | Implemented hi-lock face completion. | Commit `536a9d2`; targeted `completion`, `highlight`, and `pty_search hi_lock` tests passed. |
+| 2026-07-13 | Completed full verification. | `make verify` passed with 836/836 Rust tests and 4/4 snapshots. |
 
 ## Decision Log
 
