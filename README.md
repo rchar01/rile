@@ -204,7 +204,8 @@ Basic editor keys:
   `query-replace-regexp`.
 - `M-s h r` (`highlight-regexp`) adds a persistent highlight for regexp matches
   in the current buffer. `M-s h p` (`highlight-phrase`) highlights phrase
-  matches, folding spaces and tabs between words. `M-s h l`
+  matches, folding spaces and tabs between words while leaving other regexp
+  syntax active. `M-s h l`
   (`highlight-lines-matching-regexp`) highlights whole non-empty lines that
   match a regexp. `M-s h u` (`unhighlight-regexp`) removes highlights whose
   original prompt text matches the input.

@@ -256,7 +256,7 @@ Validation gate:
 - [x] Focused unit tests pass.
 - [x] Focused PTY tests pass.
 - [x] `git diff --check` passes.
-- [ ] `make verify` passes before final completion.
+- [x] `make verify` passes before final completion.
 
 ## Risks
 
@@ -277,7 +277,7 @@ Validation gate:
 - [x] Command/prompt/keymap tests pass.
 - [x] PTY command-flow tests pass.
 - [x] Documentation updated.
-- [ ] `make verify` passes.
+- [x] `make verify` passes.
 
 ## Progress Log
 
@@ -286,6 +286,7 @@ Validation gate:
 | 2026-07-13 | Plan created with cached GNU Emacs 30.2 hi-lock behavior. | Local `emacs --batch --quick` checks; `src/render/mod.rs`, `src/editor.rs`, `src/minibuffer.rs`, and `src/keymap.rs` inspected. |
 | 2026-07-13 | Implemented buffer-local hi-lock style highlights and PTY coverage. | Commits `79d6fc4` and `dcd1d3d`; `./scripts/in-container cargo test --locked --lib` and focused `pty_search hi_lock_highlight_commands_use_emacs_style_keys` passed. |
 | 2026-07-13 | Updated user docs, reference notes, release notes, ChangeLog, and plan progress. | `README.md`, `NEWS`, `ChangeLog`, `docs/development.md`, `docs/emacs-function-reference.md`, and this plan. |
+| 2026-07-13 | Completed full verification and reviewed phrase metacharacter behavior. | `make verify` passed; patch review flagged phrase regexp syntax, but GNU Emacs 30.2 `highlight-phrase "a.b"` highlights both `a.b` and `axb`, so Rile preserves regexp metacharacters and adds a unit test for that behavior. |
 
 ## Decision Log
 
@@ -294,3 +295,4 @@ Validation gate:
 | 2026-07-13 | First pass uses Rile decorations instead of a general overlay subsystem. | Existing span rendering already supports overlapping highlights and terminal output. |
 | 2026-07-13 | First pass uses automatic built-in highlight faces instead of prompting for face names. | This delivers the core feature without adding face-name completion or arbitrary face parsing. |
 | 2026-07-13 | `unhighlight-regexp` removes every current-buffer entry whose original prompt text matches. | This keeps removal simple while covering regexp, phrase, and line highlights consistently. |
+| 2026-07-13 | Preserve regexp metacharacters in `highlight-phrase` input. | GNU Emacs documents that a phrase can be any regexp, and local Emacs 30.2 behavior confirms `a.b` matches `axb`. |

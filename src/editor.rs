@@ -18927,6 +18927,18 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn highlight_phrase_preserves_regexp_metacharacters_like_emacs() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-phrase", "a.b");
+
+        assert_eq!(
+            editor.spans_for_line(0, "axb"),
+            vec![Span::new(0, 3, Face::UserHighlight)]
+        );
+    }
+
+    #[test]
     fn highlight_lines_matching_regexp_highlights_whole_non_empty_line() {
         let mut editor = Editor::new(Document::scratch());
 
