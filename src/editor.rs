@@ -473,22 +473,40 @@ fn expand_regexp_replacement(
 }
 
 fn adapt_replacement_case(matched_text: &str, replacement: &str) -> String {
-    if cased_characters(matched_text).all(char::is_uppercase) {
+    let shape = replacement_case_shape(matched_text);
+    if shape.has_cased && shape.all_uppercase {
         return replacement.to_uppercase();
     }
-    if first_cased_character(matched_text).is_some_and(char::is_uppercase) {
+    if shape.first_uppercase {
         return upcase_word_initials(replacement);
     }
     replacement.to_owned()
 }
 
-fn cased_characters(text: &str) -> impl Iterator<Item = char> + '_ {
-    text.chars()
-        .filter(|character| character.is_lowercase() || character.is_uppercase())
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ReplacementCaseShape {
+    has_cased: bool,
+    all_uppercase: bool,
+    first_uppercase: bool,
 }
 
-fn first_cased_character(text: &str) -> Option<char> {
-    cased_characters(text).next()
+fn replacement_case_shape(text: &str) -> ReplacementCaseShape {
+    let mut shape = ReplacementCaseShape {
+        has_cased: false,
+        all_uppercase: true,
+        first_uppercase: false,
+    };
+    for character in text
+        .chars()
+        .filter(|character| character.is_lowercase() || character.is_uppercase())
+    {
+        if !shape.has_cased {
+            shape.first_uppercase = character.is_uppercase();
+        }
+        shape.has_cased = true;
+        shape.all_uppercase &= character.is_uppercase();
+    }
+    shape
 }
 
 fn upcase_word_initials(text: &str) -> String {
@@ -9169,6 +9187,7 @@ mod tests {
             super::adapt_replacement_case("STATUS", "new-state"),
             "NEW-STATE"
         );
+        assert_eq!(super::adapt_replacement_case("1234", "hit"), "hit");
         assert_eq!(
             super::adapt_replacement_case("Status", "newSTATE"),
             "NewSTATE"
