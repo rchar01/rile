@@ -350,8 +350,9 @@ Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 The preferred development workflow uses Podman, `make`, and the project dev
 container. See [docs/README.md](docs/README.md) for maintainer documentation,
 [docs/self-documentation.md](docs/self-documentation.md) for the implemented
-help/metadata architecture, and [docs/testing.md](docs/testing.md) for the
-testing workflow. The host only needs:
+help/metadata architecture, [docs/testing.md](docs/testing.md) for the testing
+workflow, and [docs/external-projects.md](docs/external-projects.md) for links
+to external tooling and dependencies. The host only needs:
 
 - `podman`
 - `make`

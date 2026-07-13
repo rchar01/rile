@@ -6,8 +6,9 @@ SPDX-License-Identifier: GPL-3.0-or-later
 # Release Checklist
 
 Rile releases use the installed `release-tools` CLI and GoReleaser from the dev
-container.  The repository owns `.release-tools.env` and `.goreleaser.yaml`; the
-shared release behavior stays in `release-tools`.
+container. The repository owns `.release-tools.env` and `.goreleaser.yaml`; the
+shared release behavior stays in `release-tools`. See
+[External Projects](external-projects.md) for release-tooling links.
 
 ## Pre-Release Checks
 

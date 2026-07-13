@@ -5,7 +5,11 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 # Testing Guide
 
-Rile uses automated Rust tests, real-terminal PTY integration tests, parsed VT100 snapshots, and optional VHS visual review. Automated PTY and snapshot tests are the correctness gates. GIF and PNG outputs are review evidence only.
+Rile uses automated Rust tests, real-terminal PTY integration tests, parsed VT100
+snapshots, and optional VHS visual review. Automated PTY and snapshot tests are
+the correctness gates. GIF and PNG outputs are review evidence only. See
+[External Projects](external-projects.md) for links to the testing, visual, and
+reference tools named here.
 
 ## Quick Commands
 

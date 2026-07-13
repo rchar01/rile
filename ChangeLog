@@ -1,5 +1,15 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Add external project links.
+
+	* docs/external-projects.md: New guide.
+	* docs/README.md: Link it.
+	* README.md: Point development readers to it.
+	* docs/release-checklist.md: Link release tooling references.
+	* docs/testing.md: Link testing and visual tooling references.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Remove completed hi-lock implementation plans.
 
 	* docs/plans/hi-lock-highlighting-plan.md: Delete completed plan.
