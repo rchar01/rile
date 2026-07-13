@@ -185,6 +185,12 @@ fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Removed 1 highlight")?;
 
+    rile.send("C-u", &keys::control('u'))?;
+    rile.send("M-s", keys::meta('s'))?;
+    rile.send("h", b"h")?;
+    rile.send("u", b"u")?;
+    rile.assert_screen_contains("Removed 2 highlights")?;
+
     rile.quit()?;
     Ok(())
 }
