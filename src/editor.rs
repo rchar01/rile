@@ -99,6 +99,7 @@ pub struct Editor {
     universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
     user_highlights: HashMap<BufferId, Vec<UserHighlight>>,
+    pending_user_highlight: Option<PendingUserHighlight>,
     query_replace: Option<QueryReplaceState>,
     replace_regexp: Option<ReplaceRegexpState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
@@ -614,6 +615,14 @@ struct UserHighlight {
     face: Face,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingUserHighlight {
+    original_input: String,
+    pattern: SearchPattern,
+    kind: UserHighlightKind,
+    default_face: &'static HighlightFaceSpec,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UserHighlightKind {
     Match,
@@ -669,6 +678,7 @@ impl Editor {
             universal_argument: None,
             search: None,
             user_highlights: HashMap::new(),
+            pending_user_highlight: None,
             query_replace: None,
             replace_regexp: None,
             rectangle_number_prompt: None,
@@ -1547,6 +1557,9 @@ impl Editor {
                 ) {
                     self.rectangle_number_prompt = None;
                 }
+                if self.minibuffer.prompt_kind() == Some(PromptKind::HighlightFace) {
+                    self.pending_user_highlight = None;
+                }
                 if self.minibuffer.prompt_kind() == Some(PromptKind::ShellCommand) {
                     self.shell_command_prompt = None;
                 }
@@ -1906,6 +1919,7 @@ impl Editor {
             PromptKind::FindFile => self.find_file(input.trim()),
             PromptKind::FindFileReadOnly => self.find_file_read_only(input.trim()),
             PromptKind::GotoLine => self.goto_line(input.trim()),
+            PromptKind::HighlightFace => self.submit_highlight_face(input),
             PromptKind::HighlightLinesMatchingRegexp => {
                 self.submit_highlight_lines_matching_regexp(input)
             }
@@ -1953,16 +1967,33 @@ impl Editor {
     }
 
     fn submit_highlight_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
-        self.add_user_highlight(input, input, UserHighlightKind::Match)
+        self.start_user_highlight_face_prompt(input, input, UserHighlightKind::Match)
     }
 
     fn submit_highlight_phrase(&mut self, input: &str) -> Result<EditorOutcome> {
         let regexp = highlight_phrase_regexp(input);
-        self.add_user_highlight(input, &regexp, UserHighlightKind::Match)
+        self.start_user_highlight_face_prompt(input, &regexp, UserHighlightKind::Match)
     }
 
     fn submit_highlight_lines_matching_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
-        self.add_user_highlight(input, input, UserHighlightKind::Line)
+        self.start_user_highlight_face_prompt(input, input, UserHighlightKind::Line)
+    }
+
+    fn submit_highlight_face(&mut self, input: &str) -> Result<EditorOutcome> {
+        let Some(pending) = self.pending_user_highlight.take() else {
+            self.minibuffer.set_error("no pending highlight");
+            return Ok(EditorOutcome::Continue);
+        };
+        let face_name = if input.trim().is_empty() {
+            pending.default_face.name
+        } else {
+            input.trim()
+        };
+        let Some(face) = highlight_face_by_name(face_name) else {
+            self.minibuffer.set_error("unknown highlight face");
+            return Ok(EditorOutcome::Continue);
+        };
+        self.add_user_highlight(pending, face.face)
     }
 
     fn submit_unhighlight_regexp(&mut self, input: &str) -> Result<EditorOutcome> {
@@ -1993,7 +2024,43 @@ impl Editor {
         Ok(EditorOutcome::Continue)
     }
 
-    fn add_user_highlight(
+    fn remove_all_user_highlights(&mut self) -> CommandOutcome {
+        let removed = self
+            .user_highlights
+            .remove(&self.current_buffer)
+            .map_or(0, |highlights| highlights.len());
+        self.set_removed_highlights_message(removed);
+        CommandOutcome::Continue
+    }
+
+    fn set_removed_highlights_message(&mut self, removed: usize) {
+        if removed == 0 {
+            self.minibuffer.set_message("No highlighting to remove");
+        } else if removed == 1 {
+            self.minibuffer.set_message("Removed 1 highlight");
+        } else {
+            self.minibuffer
+                .set_message(format!("Removed {removed} highlights"));
+        }
+    }
+
+    fn default_unhighlight_input(&self) -> Option<String> {
+        let highlights = self.user_highlights.get(&self.current_buffer)?;
+        let line = self
+            .document()
+            .buffer()
+            .line(self.cursor.line)
+            .unwrap_or("");
+        let point = self.cursor.byte.min(line.len());
+        highlights
+            .iter()
+            .rev()
+            .find(|highlight| user_highlight_contains_point(highlight, line, point))
+            .or_else(|| highlights.last())
+            .map(|highlight| highlight.original_input.clone())
+    }
+
+    fn start_user_highlight_face_prompt(
         &mut self,
         original_input: &str,
         pattern_input: &str,
@@ -2011,39 +2078,52 @@ impl Editor {
             self.minibuffer.set_error("regexp can match empty string");
             return Ok(EditorOutcome::Continue);
         }
-        let face = self.next_user_highlight_face(kind);
+        let default_face = self.next_user_highlight_face();
+        self.pending_user_highlight = Some(PendingUserHighlight {
+            original_input: original_input.to_owned(),
+            pattern,
+            kind,
+            default_face,
+        });
+        self.minibuffer.start_prompt(
+            PromptKind::HighlightFace,
+            prompt_label(PromptKind::HighlightFace),
+        );
+        self.minibuffer.set_prompt_input(default_face.name);
+        Ok(EditorOutcome::Continue)
+    }
+
+    fn add_user_highlight(
+        &mut self,
+        pending: PendingUserHighlight,
+        face: Face,
+    ) -> Result<EditorOutcome> {
         self.user_highlights
             .entry(self.current_buffer)
             .or_default()
             .push(UserHighlight {
-                original_input: original_input.to_owned(),
-                pattern,
-                kind,
+                original_input: pending.original_input.clone(),
+                pattern: pending.pattern,
+                kind: pending.kind,
                 face,
             });
-        self.minibuffer.set_message(match kind {
-            UserHighlightKind::Match => format!("Highlighted {original_input}"),
-            UserHighlightKind::Line => format!("Highlighted lines matching {original_input}"),
+        self.minibuffer.set_message(match pending.kind {
+            UserHighlightKind::Match => format!("Highlighted {}", pending.original_input),
+            UserHighlightKind::Line => {
+                format!("Highlighted lines matching {}", pending.original_input)
+            }
         });
         Ok(EditorOutcome::Continue)
     }
 
-    fn next_user_highlight_face(&self, kind: UserHighlightKind) -> Face {
-        if kind == UserHighlightKind::Line {
-            return Face::UserHighlightLine;
-        }
+    fn next_user_highlight_face(&self) -> &'static HighlightFaceSpec {
         let count = self
             .user_highlights
             .get(&self.current_buffer)
             .into_iter()
             .flatten()
-            .filter(|highlight| highlight.kind == UserHighlightKind::Match)
             .count();
-        if count % 2 == 0 {
-            Face::UserHighlight
-        } else {
-            Face::UserHighlightAlt
-        }
+        &HIGHLIGHT_FACE_SPECS[count % HIGHLIGHT_FACE_SPECS.len()]
     }
 
     fn execute_command(
@@ -2994,10 +3074,16 @@ impl Editor {
 
     pub(crate) fn command_unhighlight_regexp(
         &mut self,
-        _context: CommandContext,
+        context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.start_highlight_prompt(PromptKind::UnhighlightRegexp);
-        Ok(CommandOutcome::StartedPrompt)
+        if context.argument.is_some() {
+            return Ok(self.remove_all_user_highlights());
+        }
+        if self.start_unhighlight_prompt() {
+            Ok(CommandOutcome::StartedPrompt)
+        } else {
+            Ok(CommandOutcome::Continue)
+        }
     }
 
     pub(crate) fn command_toggle_line_numbers(
@@ -5857,6 +5943,19 @@ impl Editor {
 
     fn start_highlight_prompt(&mut self, kind: PromptKind) {
         self.minibuffer.start_prompt(kind, prompt_label(kind));
+    }
+
+    fn start_unhighlight_prompt(&mut self) -> bool {
+        let Some(default) = self.default_unhighlight_input() else {
+            self.minibuffer.set_message("No highlighting to remove");
+            return false;
+        };
+        self.minibuffer.start_prompt(
+            PromptKind::UnhighlightRegexp,
+            prompt_label(PromptKind::UnhighlightRegexp),
+        );
+        self.minibuffer.set_prompt_input(default);
+        true
     }
 
     fn start_describe_key(&mut self, mode: DescribeKeyMode) -> Result<()> {
@@ -9038,6 +9137,7 @@ fn prompt_label(kind: PromptKind) -> &'static str {
         PromptKind::FindFile => "Find file: ",
         PromptKind::FindFileReadOnly => "Find file read-only: ",
         PromptKind::GotoLine => "Goto line: ",
+        PromptKind::HighlightFace => "Highlight using face: ",
         PromptKind::HighlightLinesMatchingRegexp => "Highlight lines matching regexp: ",
         PromptKind::HighlightPhrase => "Highlight phrase: ",
         PromptKind::HighlightRegexp => "Highlight regexp: ",
@@ -9111,6 +9211,74 @@ fn highlight_phrase_regexp(input: &str) -> String {
         }
     }
     regexp
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HighlightFaceSpec {
+    name: &'static str,
+    face: Face,
+}
+
+const HIGHLIGHT_FACE_SPECS: [HighlightFaceSpec; 11] = [
+    HighlightFaceSpec {
+        name: "hi-yellow",
+        face: Face::UserHighlight,
+    },
+    HighlightFaceSpec {
+        name: "hi-pink",
+        face: Face::UserHighlightAlt,
+    },
+    HighlightFaceSpec {
+        name: "hi-green",
+        face: Face::UserHighlightGreen,
+    },
+    HighlightFaceSpec {
+        name: "hi-blue",
+        face: Face::UserHighlightBlue,
+    },
+    HighlightFaceSpec {
+        name: "hi-salmon",
+        face: Face::UserHighlightSalmon,
+    },
+    HighlightFaceSpec {
+        name: "hi-aquamarine",
+        face: Face::UserHighlightAquamarine,
+    },
+    HighlightFaceSpec {
+        name: "hi-black-b",
+        face: Face::UserHighlightBlackBold,
+    },
+    HighlightFaceSpec {
+        name: "hi-blue-b",
+        face: Face::UserHighlightBlueBold,
+    },
+    HighlightFaceSpec {
+        name: "hi-red-b",
+        face: Face::UserHighlightRedBold,
+    },
+    HighlightFaceSpec {
+        name: "hi-green-b",
+        face: Face::UserHighlightGreenBold,
+    },
+    HighlightFaceSpec {
+        name: "hi-black-hb",
+        face: Face::UserHighlightBlackHeavyBold,
+    },
+];
+
+fn highlight_face_by_name(name: &str) -> Option<&'static HighlightFaceSpec> {
+    HIGHLIGHT_FACE_SPECS.iter().find(|face| face.name == name)
+}
+
+fn user_highlight_contains_point(highlight: &UserHighlight, line: &str, point: usize) -> bool {
+    match highlight.kind {
+        UserHighlightKind::Line => !highlight.pattern.match_ranges_in_line(line).is_empty(),
+        UserHighlightKind::Match => highlight
+            .pattern
+            .match_ranges_in_line(line)
+            .into_iter()
+            .any(|(start, end)| start <= point && point < end),
+    }
 }
 
 fn query_replace_replacement_label(kind: PatternKind, query: &str) -> String {
@@ -9343,12 +9511,33 @@ mod tests {
         editor
             .execute_command_by_name(command)
             .expect("command should start prompt");
-        editor
-            .handle_key(KeyEvent::Text(input.to_owned()))
-            .expect("prompt text should insert");
+        editor.minibuffer.set_prompt_input(input);
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("prompt should submit");
+        if editor.minibuffer.prompt_kind() == Some(PromptKind::HighlightFace) {
+            editor
+                .handle_key(KeyEvent::Special(SpecialKey::Enter))
+                .expect("default face prompt should submit");
+        }
+    }
+
+    fn submit_highlight_with_face(editor: &mut Editor, command: &str, input: &str, face: &str) {
+        editor
+            .execute_command_by_name(command)
+            .expect("command should start prompt");
+        editor.minibuffer.set_prompt_input(input);
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("highlight prompt should submit");
+        assert_eq!(
+            editor.minibuffer.prompt_kind(),
+            Some(PromptKind::HighlightFace)
+        );
+        editor.minibuffer.set_prompt_input(face);
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("face prompt should submit");
     }
 
     fn current_dir_prompt_input() -> String {
@@ -18918,6 +19107,45 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn highlight_regexp_accepts_named_face() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_highlight_with_face(&mut editor, "highlight-regexp", "todo", "hi-green");
+
+        assert_eq!(
+            editor.spans_for_line(0, "todo"),
+            vec![Span::new(0, 4, Face::UserHighlightGreen)]
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Highlighted todo")
+        );
+    }
+
+    #[test]
+    fn highlight_regexp_rejects_unknown_face() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("highlight-regexp")
+            .expect("command should start prompt");
+        editor.minibuffer.set_prompt_input("todo");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("highlight prompt should submit");
+        editor.minibuffer.set_prompt_input("unknown-face");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("face prompt should submit");
+
+        assert!(editor.spans_for_line(0, "todo").is_empty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: unknown highlight face")
+        );
+    }
+
+    #[test]
     fn highlight_phrase_folds_whitespace_and_uses_smart_case() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -18950,11 +19178,7 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(
             editor.spans_for_line(0, "alpha TODO beta"),
-            vec![Span::new(
-                0,
-                "alpha TODO beta".len(),
-                Face::UserHighlightLine
-            )]
+            vec![Span::new(0, "alpha TODO beta".len(), Face::UserHighlight)]
         );
         assert!(editor.spans_for_line(0, "todo lower").is_empty());
     }
@@ -18975,6 +19199,85 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Removed 1 highlight")
+        );
+    }
+
+    #[test]
+    fn unhighlight_regexp_prefills_most_recent_highlight() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        submit_prompt_command(&mut editor, "highlight-regexp", "fixme");
+        editor
+            .execute_command_by_name("unhighlight-regexp")
+            .expect("unhighlight should start prompt");
+
+        assert_eq!(editor.minibuffer.prompt_input(), Some("fixme"));
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("unhighlight prompt should submit");
+
+        assert_eq!(
+            editor.spans_for_line(0, "todo fixme"),
+            vec![Span::new(0, 4, Face::UserHighlight)]
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Removed 1 highlight")
+        );
+    }
+
+    #[test]
+    fn unhighlight_regexp_prefers_highlight_at_point() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .document_mut()
+            .buffer_mut()
+            .insert(Position::new(0, 0), "todo fixme")
+            .expect("fixture should insert");
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        submit_prompt_command(&mut editor, "highlight-regexp", "fixme");
+        editor.cursor = Position::new(0, 1);
+        editor
+            .execute_command_by_name("unhighlight-regexp")
+            .expect("unhighlight should start prompt");
+
+        assert_eq!(editor.minibuffer.prompt_input(), Some("todo"));
+    }
+
+    #[test]
+    fn universal_argument_unhighlight_regexp_removes_all_entries() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        submit_prompt_command(&mut editor, "highlight-regexp", "fixme");
+        editor
+            .command_unhighlight_regexp(crate::command::CommandContext {
+                argument: Some(4),
+                invoked_by: crate::command::Invocation::ExtendedCommand,
+            })
+            .expect("unhighlight all should run");
+
+        assert!(editor.spans_for_line(0, "todo fixme").is_empty());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Removed 2 highlights")
+        );
+    }
+
+    #[test]
+    fn unhighlight_regexp_without_highlights_shows_message() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("unhighlight-regexp")
+            .expect("unhighlight should run");
+
+        assert!(editor.minibuffer.prompt().is_none());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("No highlighting to remove")
         );
     }
 

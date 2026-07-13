@@ -110,6 +110,7 @@ pub(super) fn prompt_kind_uses_history(kind: PromptKind) -> bool {
             | PromptKind::FindFile
             | PromptKind::FindFileReadOnly
             | PromptKind::GotoLine
+            | PromptKind::HighlightFace
             | PromptKind::HighlightLinesMatchingRegexp
             | PromptKind::HighlightPhrase
             | PromptKind::HighlightRegexp

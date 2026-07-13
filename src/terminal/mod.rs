@@ -1531,7 +1531,16 @@ fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
             Face::LineNumber => Some("\x1b[2m"),
             Face::UserHighlight => Some("\x1b[43;30m"),
             Face::UserHighlightAlt => Some("\x1b[45;37m"),
-            Face::UserHighlightLine => Some("\x1b[43m"),
+            Face::UserHighlightLine => Some("\x1b[43;30m"),
+            Face::UserHighlightGreen => Some("\x1b[42;30m"),
+            Face::UserHighlightBlue => Some("\x1b[44;37m"),
+            Face::UserHighlightSalmon => Some("\x1b[41;37m"),
+            Face::UserHighlightAquamarine => Some("\x1b[46;30m"),
+            Face::UserHighlightBlackBold => Some("\x1b[40;37;1m"),
+            Face::UserHighlightBlueBold => Some("\x1b[44;37;1m"),
+            Face::UserHighlightRedBold => Some("\x1b[41;37;1m"),
+            Face::UserHighlightGreenBold => Some("\x1b[42;30;1m"),
+            Face::UserHighlightBlackHeavyBold => Some("\x1b[40;97;1m"),
             Face::SyntaxKeyword => Some("\x1b[34;1m"),
             Face::SyntaxString => Some("\x1b[32m"),
             Face::SyntaxComment => Some("\x1b[2m"),
@@ -1540,9 +1549,18 @@ fn face_start_code(face: Face, theme: ThemeName) -> Option<&'static str> {
         ThemeName::Mono => match face {
             Face::CurrentSearchMatch | Face::Region | Face::ModeLine => Some("\x1b[7m"),
             Face::SearchMatch => Some("\x1b[4m"),
-            Face::UserHighlight | Face::UserHighlightAlt | Face::UserHighlightLine => {
-                Some("\x1b[4m")
-            }
+            Face::UserHighlight
+            | Face::UserHighlightAlt
+            | Face::UserHighlightLine
+            | Face::UserHighlightGreen
+            | Face::UserHighlightBlue
+            | Face::UserHighlightSalmon
+            | Face::UserHighlightAquamarine
+            | Face::UserHighlightBlackBold
+            | Face::UserHighlightBlueBold
+            | Face::UserHighlightRedBold
+            | Face::UserHighlightGreenBold
+            | Face::UserHighlightBlackHeavyBold => Some("\x1b[4m"),
             Face::Minibuffer | Face::LineNumber | Face::SyntaxComment => Some("\x1b[2m"),
             Face::Error | Face::Warning => Some("\x1b[1m"),
             _ => None,
@@ -1670,13 +1688,63 @@ mod tests {
 
     #[test]
     fn renders_user_highlight_spans_with_ansi_faces() {
-        let spans = [Span::new(0, 3, Face::UserHighlight)];
-        let mut terminal = AnsiTerminal::new(Vec::new());
+        let cases = [
+            (Face::UserHighlight, b"\x1b[43;30mone\x1b[0m two".to_vec()),
+            (
+                Face::UserHighlightAlt,
+                b"\x1b[45;37mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightLine,
+                b"\x1b[43;30mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightGreen,
+                b"\x1b[42;30mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightBlue,
+                b"\x1b[44;37mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightSalmon,
+                b"\x1b[41;37mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightAquamarine,
+                b"\x1b[46;30mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightBlackBold,
+                b"\x1b[40;37;1mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightBlueBold,
+                b"\x1b[44;37;1mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightRedBold,
+                b"\x1b[41;37;1mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightGreenBold,
+                b"\x1b[42;30;1mone\x1b[0m two".to_vec(),
+            ),
+            (
+                Face::UserHighlightBlackHeavyBold,
+                b"\x1b[40;97;1mone\x1b[0m two".to_vec(),
+            ),
+        ];
 
-        write_line_with_spans(&mut terminal, "one two", &spans, 4, ThemeName::Default)
-            .expect("render should succeed");
+        for (face, expected) in cases {
+            let spans = [Span::new(0, 3, face)];
+            let mut terminal = AnsiTerminal::new(Vec::new());
 
-        assert_eq!(terminal.into_inner(), b"\x1b[43;30mone\x1b[0m two".to_vec());
+            write_line_with_spans(&mut terminal, "one two", &spans, 4, ThemeName::Default)
+                .expect("render should succeed");
+
+            assert_eq!(terminal.into_inner(), expected);
+        }
     }
 
     #[test]

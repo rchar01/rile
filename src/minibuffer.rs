@@ -20,6 +20,7 @@ pub enum PromptKind {
     FindFile,
     FindFileReadOnly,
     GotoLine,
+    HighlightFace,
     HighlightLinesMatchingRegexp,
     HighlightPhrase,
     HighlightRegexp,
