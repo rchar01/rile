@@ -152,7 +152,7 @@ keyboard-selectable without claiming support for arbitrary Emacs face objects.
 | --- | --- | --- |
 | 2026-07-13 | Plan created. | User requested a plan for a selectable `Highlight using face:` list similar to `M-x` and other completion prompts. |
 | 2026-07-13 | Implemented hi-lock face completion. | Commit `536a9d2`; targeted `completion`, `highlight`, and `pty_search hi_lock` tests passed. |
-| 2026-07-13 | Completed full verification. | `make verify` passed with 836/836 Rust tests and 4/4 snapshots. |
+| 2026-07-13 | Preselected the displayed default face and completed full verification. | Added coverage for rotated defaults; `./scripts/in-container cargo test --locked --lib completion`, `./scripts/in-container cargo test --locked --lib highlight_regexp_face`, `./scripts/in-container cargo test --locked --test pty_search hi_lock`, and `make verify` passed with 838 Rust tests plus snapshots. |
 
 ## Decision Log
 

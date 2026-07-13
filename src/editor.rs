@@ -2105,12 +2105,14 @@ impl Editor {
             PromptKind::HighlightFace,
             format!("Highlight using face (default {}): ", default_face.name),
         );
-        self.completion = Some(CompletionSession::highlight_faces(
+        let mut completion = CompletionSession::highlight_faces(
             HIGHLIGHT_FACE_SPECS
                 .iter()
                 .map(|face| (face.name, face.annotation)),
             self.completion_config,
-        ));
+        );
+        completion.select_value(default_face.name);
+        self.completion = Some(completion);
         self.update_completion_from_prompt();
         Ok(EditorOutcome::Continue)
     }
@@ -19188,6 +19190,35 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("face completion should select default candidate");
         assert_eq!(first.value, "hi-yellow");
         assert_eq!(first.annotation, "Hi-lock yellow highlight");
+    }
+
+    #[test]
+    fn highlight_regexp_face_completion_selects_rotated_default() {
+        let mut editor = Editor::new(Document::scratch());
+
+        submit_prompt_command(&mut editor, "highlight-regexp", "todo");
+        editor
+            .execute_command_by_name("highlight-regexp")
+            .expect("command should start prompt");
+        editor.minibuffer.set_prompt_input("fixme");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("highlight prompt should submit");
+
+        assert_eq!(
+            editor
+                .minibuffer()
+                .prompt()
+                .map(|prompt| prompt.label.as_str()),
+            Some("Highlight using face (default hi-pink): ")
+        );
+        assert_eq!(
+            editor
+                .completion()
+                .and_then(CompletionSession::selected)
+                .map(|candidate| candidate.value.as_str()),
+            Some("hi-pink")
+        );
     }
 
     #[test]

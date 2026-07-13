@@ -338,6 +338,17 @@ impl CompletionSession {
         self.selection_explicit
     }
 
+    pub fn select_value(&mut self, value: &str) {
+        if let Some(index) = self.matches.iter().position(|candidate_index| {
+            self.candidates
+                .get(*candidate_index)
+                .is_some_and(|candidate| candidate.value == value)
+        }) {
+            self.selected = index;
+            self.selection_explicit = false;
+        }
+    }
+
     pub fn common_prefix(&self, input: &str) -> Option<String> {
         let mut values = self.matches.iter().filter_map(|index| {
             self.candidates
@@ -1035,6 +1046,26 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn completion_selection_can_be_seeded_by_value() {
+        let mut session = CompletionSession::highlight_faces(
+            [
+                ("hi-yellow", "Hi-lock yellow highlight"),
+                ("hi-pink", "Hi-lock pink highlight"),
+                ("hi-green", "Hi-lock green highlight"),
+            ],
+            CompletionConfig::default(),
+        );
+
+        session.select_value("hi-green");
+
+        assert_eq!(
+            session.selected().map(|candidate| candidate.value.as_str()),
+            Some("hi-green")
+        );
+        assert!(!session.selection_explicit());
     }
 
     #[test]

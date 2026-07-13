@@ -1,5 +1,16 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Preselect hi-lock face completion defaults.
+
+	* src/completion.rs (CompletionSession::select_value): New method.
+	(tests): Cover seeded completion selection.
+	* src/editor.rs (Editor::start_user_highlight_face_prompt): Preselect the
+	completion candidate that matches the displayed default face.
+	(tests): Cover rotated face default selection.
+	* docs/plans/hi-lock-face-completion-plan.md: Record final verification.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Add hi-lock face completion.
 
 	* docs/plans/hi-lock-face-completion-plan.md: New plan.
