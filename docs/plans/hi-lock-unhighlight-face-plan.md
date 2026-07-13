@@ -171,7 +171,7 @@ full Emacs face system.
 | 2026-07-13 | Plan created. | User requested plan under `docs/plans/`; Emacs 30.2 behavior verified with local `emacs -Q --batch` docstrings/source metadata. |
 | 2026-07-13 | Implemented unhighlight defaults, face selection, and contrast fixes. | Commits `15dc18b` and `1e6799a`; `./scripts/in-container cargo test --locked --lib`, `./scripts/in-container cargo test --locked --lib highlight`, `./scripts/in-container cargo test --locked --lib unhighlight`, and `./scripts/in-container cargo test --locked --test pty_search hi_lock` passed. |
 | 2026-07-13 | Completed full verification after fixing a Clippy lint. | `make verify` passed with 830/830 Rust tests and 4/4 snapshots after removing a needless borrow in `tests/pty_search.rs`. |
-| 2026-07-13 | Fixed blank unhighlight submission semantics and reverified. | Added unit coverage so clearing the pre-filled prompt and pressing Enter accepts the stored default pattern instead of erroring or removing all highlights. `./scripts/in-container cargo test --locked --lib unhighlight`, `./scripts/in-container cargo test --locked --test pty_search hi_lock`, and final `make verify` passed with 831 Rust tests. |
+| 2026-07-13 | Fixed blank unhighlight submission semantics and reverified. | Added unit and PTY coverage so clearing the pre-filled prompt and pressing Enter accepts the stored default pattern instead of erroring or removing all highlights. `./scripts/in-container cargo test --locked --lib unhighlight`, `./scripts/in-container cargo test --locked --test pty_search hi_lock`, and final `make verify` passed with 831 Rust tests and 4/4 snapshots. |
 
 ## Decision Log
 

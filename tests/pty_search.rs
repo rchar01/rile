@@ -182,6 +182,9 @@ fn hi_lock_highlight_commands_use_emacs_style_keys() -> Result<()> {
     rile.send("h", b"h")?;
     rile.send("u", b"u")?;
     rile.assert_screen_contains("Unhighlight regexp: foo bar")?;
+    rile.send("C-a", keys::control('a'))?;
+    rile.send("C-k", keys::control('k'))?;
+    rile.assert_screen_contains("Unhighlight regexp:")?;
     rile.send("Enter", keys::ENTER)?;
     rile.assert_screen_contains("Removed 1 highlight")?;
 

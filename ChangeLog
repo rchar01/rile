@@ -1,5 +1,13 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Cover blank hi-lock unhighlight submission through PTY.
+
+	* tests/pty_search.rs (hi_lock_highlight_commands_use_emacs_style_keys):
+	Clear the pre-filled unhighlight prompt before accepting the default.
+	* docs/plans/hi-lock-unhighlight-face-plan.md: Record final verification.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Fix blank hi-lock unhighlight submission.
 
 	* src/editor.rs (Editor): Store pending unhighlight defaults.
