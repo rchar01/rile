@@ -339,7 +339,7 @@ fn query_replace_uses_smart_case_matching() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
     rile.send("replace all", b"!")?;
 
-    rile.wait_for_screen_contains("state state state")?;
+    rile.wait_for_screen_contains("State state STATE")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
@@ -442,7 +442,7 @@ fn query_replace_regexp_uses_smart_case_matching() -> Result<()> {
     rile.send("Enter", keys::ENTER)?;
     rile.send("replace all", b"!")?;
 
-    rile.wait_for_screen_contains("state state state")?;
+    rile.wait_for_screen_contains("State state STATE")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
@@ -635,7 +635,7 @@ fn replace_regexp_uses_smart_case_matching() -> Result<()> {
     rile.send("replacement", b"state")?;
     rile.send("Enter", keys::ENTER)?;
 
-    rile.wait_for_screen_contains("state state state")?;
+    rile.wait_for_screen_contains("State state STATE")?;
     rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
@@ -675,6 +675,25 @@ fn replace_regexp_expands_whole_match_and_captures() -> Result<()> {
 
     rile.wait_for_screen_contains("[foo-bar]=bar/foo [foo-baz]=baz/foo")?;
     rile.assert_screen_contains("Replaced 2 occurrences")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn replace_regexp_adapts_case_after_capture_expansion() -> Result<()> {
+    let file = fixtures::named_temp_file("Foo-Bar FOO-BAR foo-bar\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("Foo-Bar FOO-BAR foo-bar")?;
+    execute_m_x(&mut rile, b"replace-regexp")?;
+    rile.send("regexp", br"\(foo\)-\(bar\)")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.send("replacement", br"x\1-y\2")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("XFoo-YBar XFOO-YBAR xfoo-ybar")?;
+    rile.assert_screen_contains("Replaced 3 occurrences")?;
 
     rile.quit()?;
     Ok(())
