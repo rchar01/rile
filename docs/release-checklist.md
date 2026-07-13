@@ -27,6 +27,7 @@ make verify
 - Run release-tool validation inside the dev container:
 
 ```sh
+make release-tools-check
 make release-doctor
 make release-check
 make release-snapshot
@@ -53,8 +54,9 @@ Use the configured remote and release branch for other clones.
 
 ## Publish
 
-Publishing requires a Codeberg-compatible token.  Prefer passing the token as an
-environment variable so no token path needs to be mounted into the container:
+Publishing requires a Codeberg-compatible token. Prefer `RELEASE_TOKEN`, a
+native forge token variable such as `GITEA_TOKEN`, or environment-only
+`RELEASE_TOKEN_FILE`. Do not commit token paths to `.release-tools.env`.
 
 ```sh
 RELEASE_TOKEN=... make release-publish-tag RELEASE_VERSION=v0.9.0

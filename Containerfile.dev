@@ -3,11 +3,13 @@
 
 ARG RUST_VERSION=1.96.1
 ARG GORELEASER_VERSION=2.17.0
-ARG RELEASE_TOOLS_VERSION=3.3.0
+ARG RELEASE_TOOLS_VERSION=3.5.0
+ARG RELEASE_TOOLS_SHA256=bd2eb0eec47aa2b198d9a3983bb1768572beb5cd8c5824dafcb57bc41cf24d44
 FROM docker.io/library/rust:${RUST_VERSION}-bookworm
 
 ARG GORELEASER_VERSION=2.17.0
-ARG RELEASE_TOOLS_VERSION=3.3.0
+ARG RELEASE_TOOLS_VERSION=3.5.0
+ARG RELEASE_TOOLS_SHA256=bd2eb0eec47aa2b198d9a3983bb1768572beb5cd8c5824dafcb57bc41cf24d44
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -37,6 +39,7 @@ RUN curl -fsSL -o /tmp/goreleaser.tar.gz \
 
 RUN curl -fsSL -o /usr/local/bin/release-tools \
     "https://codeberg.org/rch/release-tools/releases/download/v${RELEASE_TOOLS_VERSION}/release-tools_${RELEASE_TOOLS_VERSION}_linux_amd64" \
+ && printf '%s  %s\n' "${RELEASE_TOOLS_SHA256}" /usr/local/bin/release-tools | sha256sum -c - \
  && chmod 0755 /usr/local/bin/release-tools
 
 RUN chmod -R a+rwX /usr/local/cargo /usr/local/rustup \

@@ -1,5 +1,16 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Update release-tools integration.
+
+	* Containerfile.dev: Bump release-tools to 3.5.0 and verify the
+	downloaded binary checksum.
+	* .release-tools.env: Set RELEASE_ARTIFACTS explicitly to binaries.
+	* Makefile (release-tools-check): New target.
+	* docs/release-checklist.md: Add release-tools tool checks and clarify
+	token handling.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Add external project links.
 
 	* docs/external-projects.md: New guide.

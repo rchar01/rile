@@ -15,7 +15,7 @@ IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 RELEASE_IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/release-in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container
 
-.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run release-doctor release-check release-snapshot release-notes release-publish-tag perf-smoke reference-capture reference-capture-all visual-demos visual-frames clean
+.PHONY: help shell tools build test test-cargo snapshot-test fmt fmt-check lint audit unused-deps verify run release-tools-check release-doctor release-check release-snapshot release-notes release-publish-tag perf-smoke reference-capture reference-capture-all visual-demos visual-frames clean
 
 ## Show available commands
 help:
@@ -83,6 +83,10 @@ verify:
 ## Run the Rile binary in the dev container; pass ARGS='--help'
 run:
 	$(IN_CONTAINER) ./scripts/run $(ARGS)
+
+## Check tools needed by the configured release flow
+release-tools-check:
+	$(RELEASE_IN_CONTAINER) release-tools tools-check
 
 ## Check release-tools and GoReleaser configuration
 release-doctor:
