@@ -2330,7 +2330,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_sentence_backward,
             Self::move_sentence_forward,
@@ -2707,7 +2707,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_sentence_forward,
             Self::move_sentence_backward,
@@ -3378,6 +3378,25 @@ impl Editor {
         let action = if argument >= 0 { positive } else { negative };
         for _ in 0..count {
             action(self)?;
+        }
+        Ok(())
+    }
+
+    fn repeat_signed_motion(
+        &mut self,
+        argument: Option<i32>,
+        positive: fn(&mut Self) -> Result<()>,
+        negative: fn(&mut Self) -> Result<()>,
+    ) -> Result<()> {
+        let argument = argument.unwrap_or(1);
+        let count = argument.unsigned_abs() as usize;
+        let action = if argument >= 0 { positive } else { negative };
+        for _ in 0..count {
+            let previous = self.cursor;
+            action(self)?;
+            if self.cursor == previous {
+                break;
+            }
         }
         Ok(())
     }
@@ -8093,73 +8112,118 @@ fn paragraph_backward_position(buffer: &Buffer, position: Position) -> Result<Po
 
 fn sentence_forward_position(buffer: &Buffer, position: Position) -> Result<Position> {
     buffer.validate_position(position)?;
-    let text = buffer.serialize();
-    let absolute = position_to_absolute(buffer, position)?;
-    let sentence_end = next_sentence_end(&text, absolute).unwrap_or(text.len());
-    let paragraph_end = next_paragraph_boundary(&text, absolute)
-        .filter(|boundary| *boundary > absolute)
-        .unwrap_or(text.len());
-    Ok(absolute_to_position(&text, sentence_end.min(paragraph_end)))
+    let lines = buffer.lines();
+    let mut ignore_paragraph_boundaries = false;
+
+    for line_index in position.line..lines.len() {
+        let line = &lines[line_index];
+        let separator_run_start = (line_index != position.line || position.byte == 0)
+            && is_paragraph_separator_line(line)
+            && (line_index == 0 || !is_paragraph_separator_line(&lines[line_index - 1]));
+        if separator_run_start {
+            let boundary = if line_index == 0 {
+                Position::new(0, 0)
+            } else {
+                Position::new(line_index - 1, lines[line_index - 1].len())
+            };
+            if boundary == position {
+                ignore_paragraph_boundaries = true;
+            } else if boundary > position && !ignore_paragraph_boundaries {
+                return Ok(boundary);
+            }
+        }
+
+        let start = if line_index == position.line {
+            position.byte
+        } else {
+            0
+        };
+        if let Some(byte) = next_sentence_end(line, start) {
+            return Ok(Position::new(line_index, byte));
+        }
+    }
+
+    Ok(buffer.end_position())
 }
 
 fn sentence_backward_position(buffer: &Buffer, position: Position) -> Result<Position> {
     buffer.validate_position(position)?;
-    let text = buffer.serialize();
-    let absolute = position_to_absolute(buffer, position)?;
-    let start = previous_sentence_start(&text, absolute).unwrap_or(0);
-    Ok(absolute_to_position(&text, start))
+    let lines = buffer.lines();
+    let mut paragraph_start: Option<Position> = None;
+    let mut preceding_content_line = None;
+
+    for line_index in (0..=position.line).rev() {
+        let line = &lines[line_index];
+        let before = if line_index == position.line {
+            position.byte
+        } else {
+            line.len()
+        };
+        for (byte, character) in line[..before].char_indices().rev() {
+            if !matches!(character, '.' | '?' | '!') {
+                continue;
+            }
+            let punctuation_end = byte + character.len_utf8();
+            let end = sentence_end_after_closers(line, punctuation_end);
+            let end_position = Position::new(line_index, end);
+            if end_position >= position || !sentence_boundary_after(line, end) {
+                continue;
+            }
+            let start = skip_sentence_space(buffer, end_position);
+            if start < position && start < buffer.end_position() {
+                return Ok(paragraph_start.map_or(start, |paragraph| paragraph.max(start)));
+            }
+        }
+
+        if preceding_content_line == Some(line_index) {
+            return Ok(paragraph_start.expect("preceding content follows a paragraph start"));
+        }
+
+        let candidate = Position::new(line_index, 0);
+        if candidate < position
+            && !is_paragraph_separator_line(line)
+            && (line_index == 0 || is_paragraph_separator_line(&lines[line_index - 1]))
+            && paragraph_start.is_none()
+        {
+            paragraph_start = Some(candidate);
+            if line_index == 0 {
+                return Ok(candidate);
+            }
+
+            let mut previous = line_index - 1;
+            while is_paragraph_separator_line(&lines[previous]) {
+                if previous == 0 {
+                    return Ok(candidate);
+                }
+                previous -= 1;
+            }
+            preceding_content_line = Some(previous);
+        }
+    }
+
+    Ok(paragraph_start.unwrap_or(Position::new(0, 0)))
 }
 
-fn next_sentence_end(text: &str, from: usize) -> Option<usize> {
-    for (offset, character) in text[from..].char_indices() {
+fn next_sentence_end(line: &str, from: usize) -> Option<usize> {
+    for (offset, character) in line[from..].char_indices() {
         if !matches!(character, '.' | '?' | '!') {
             continue;
         }
         let punctuation_end = from + offset + character.len_utf8();
-        let end = sentence_end_after_closers(text, punctuation_end);
-        if sentence_boundary_after(text, end) {
+        let end = sentence_end_after_closers(line, punctuation_end);
+        if sentence_boundary_after(line, end) {
             return Some(end);
         }
     }
     None
 }
 
-fn previous_sentence_start(text: &str, from: usize) -> Option<usize> {
-    let mut starts = vec![0];
-    for end in sentence_end_positions_before(text, from) {
-        let start = skip_sentence_space(text, end);
-        if start < text.len() {
-            starts.push(start);
-        }
-    }
-    for start in paragraph_start_positions_before(text, from) {
-        starts.push(start);
-    }
-    starts.into_iter().filter(|start| *start < from).max()
-}
-
-fn sentence_end_positions_before(text: &str, before: usize) -> Vec<usize> {
-    let mut positions = Vec::new();
-    let mut search = 0;
-    while search < before {
-        let Some(end) = next_sentence_end(text, search) else {
-            break;
-        };
-        if end >= before {
-            break;
-        }
-        positions.push(end);
-        search = end;
-    }
-    positions
-}
-
-fn sentence_end_after_closers(text: &str, mut byte: usize) -> usize {
-    while byte < text.len() {
-        let character = text[byte..]
+fn sentence_end_after_closers(line: &str, mut byte: usize) -> usize {
+    while byte < line.len() {
+        let character = line[byte..]
             .chars()
             .next()
-            .expect("byte before text end has a character");
+            .expect("byte before line end has a character");
         if !matches!(character, '"' | '\'' | ')' | ']' | '}') {
             break;
         }
@@ -8168,79 +8232,42 @@ fn sentence_end_after_closers(text: &str, mut byte: usize) -> usize {
     byte
 }
 
-fn sentence_boundary_after(text: &str, byte: usize) -> bool {
-    if byte >= text.len() {
+fn sentence_boundary_after(line: &str, byte: usize) -> bool {
+    if byte >= line.len() {
         return true;
     }
-    if text[byte..].starts_with("  ") {
+    if line[byte..].starts_with("  ") {
         return true;
     }
 
-    let bytes = text.as_bytes();
+    let bytes = line.as_bytes();
     let mut cursor = byte;
     while cursor < bytes.len() && is_horizontal_space_byte(bytes[cursor]) {
         cursor += 1;
     }
-    cursor >= bytes.len() || bytes[cursor] == b'\n'
+    cursor >= bytes.len()
 }
 
-fn skip_sentence_space(text: &str, mut byte: usize) -> usize {
-    while byte < text.len() {
-        let character = text[byte..]
-            .chars()
-            .next()
-            .expect("byte before text end has a character");
-        if !character.is_whitespace() {
-            break;
-        }
-        byte += character.len_utf8();
-    }
-    byte
-}
-
-fn next_paragraph_boundary(text: &str, from: usize) -> Option<usize> {
-    paragraph_boundaries(text)
-        .into_iter()
-        .map(|(boundary, _)| boundary)
-        .find(|boundary| *boundary >= from)
-}
-
-fn paragraph_start_positions_before(text: &str, before: usize) -> Vec<usize> {
-    paragraph_boundaries(text)
-        .into_iter()
-        .filter_map(|(boundary, start)| (boundary < before && start < before).then_some(start))
-        .collect()
-}
-
-fn paragraph_boundaries(text: &str) -> Vec<(usize, usize)> {
-    let mut boundaries = Vec::new();
-    let mut separator_start = None;
-    let mut line_start = 0;
-
-    while line_start <= text.len() {
-        let line_end = text[line_start..]
-            .find('\n')
-            .map(|offset| line_start + offset)
-            .unwrap_or(text.len());
-        let line = &text[line_start..line_end];
-
-        if is_paragraph_separator_line(line) {
-            separator_start.get_or_insert_with(|| line_start.saturating_sub(1));
-        } else if let Some(boundary) = separator_start.take() {
-            boundaries.push((boundary, line_start));
+fn skip_sentence_space(buffer: &Buffer, mut position: Position) -> Position {
+    let lines = buffer.lines();
+    loop {
+        let line = &lines[position.line];
+        while position.byte < line.len() {
+            let character = line[position.byte..]
+                .chars()
+                .next()
+                .expect("byte before line end has a character");
+            if !character.is_whitespace() {
+                return position;
+            }
+            position.byte += character.len_utf8();
         }
 
-        if line_end == text.len() {
-            break;
+        if position.line + 1 >= lines.len() {
+            return position;
         }
-        line_start = line_end + 1;
+        position = Position::new(position.line + 1, 0);
     }
-
-    if let Some(boundary) = separator_start {
-        boundaries.push((boundary, text.len()));
-    }
-
-    boundaries
 }
 
 fn fill_line_bounds(
@@ -9499,7 +9526,7 @@ mod tests {
         file_prompt_base_input, format_rectangle_number, highlight_phrase_regexp,
     };
     use crate::buffer::{BufferId, Position, TextRange};
-    use crate::command::{Command, CommandRegistry};
+    use crate::command::{Command, CommandContext, CommandRegistry, Invocation};
     use crate::completion::{
         CompletionConfig, CompletionMatching, CompletionSession, CompletionStyle,
     };
@@ -10190,6 +10217,119 @@ mod tests {
     }
 
     #[test]
+    fn sentence_movement_preserves_utf8_formfeed_and_crlf_boundaries() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "Sans ponctuation\n\x0c\nÉté.  Fin.")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Meta('e'))
+            .expect("M-e should stop before a formfeed separator");
+        assert_eq!(editor.cursor(), Position::new(0, "Sans ponctuation".len()));
+        editor
+            .handle_key(KeyEvent::Meta('e'))
+            .expect("M-e should retain UTF-8 byte positions");
+        assert_eq!(editor.cursor(), Position::new(2, "Été.".len()));
+        editor
+            .handle_key(KeyEvent::Meta('a'))
+            .expect("M-a should return to the UTF-8 paragraph start");
+        assert_eq!(editor.cursor(), Position::new(2, 0));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "First.\n\x0c\n  Été.")
+            .expect("indented fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = editor.document().buffer().end_position();
+        editor
+            .handle_key(KeyEvent::Meta('a'))
+            .expect("M-a should skip whitespace after the prior sentence");
+        assert_eq!(editor.cursor(), Position::new(2, 2));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "One.\r\nTwo.")
+            .expect("CRLF fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta('e'))
+            .expect("retained carriage return should preserve boundary behavior");
+        assert_eq!(editor.cursor(), Position::new(1, "Two.".len()));
+        editor
+            .handle_key(KeyEvent::Meta('a'))
+            .expect("M-a should preserve the matching CRLF behavior");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn sentence_movement_stops_saturated_arguments_at_buffer_edges() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "One.  Two.")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .command_forward_sentence(CommandContext {
+                argument: Some(i32::MAX),
+                invoked_by: Invocation::Test,
+            })
+            .expect("saturated forward movement should stop at buffer end");
+        assert_eq!(editor.cursor(), editor.document().buffer().end_position());
+
+        editor
+            .command_backward_sentence(CommandContext {
+                argument: Some(i32::MAX),
+                invoked_by: Invocation::Test,
+            })
+            .expect("saturated backward movement should stop at buffer start");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        editor
+            .command_backward_sentence(CommandContext {
+                argument: Some(i32::MIN),
+                invoked_by: Invocation::Test,
+            })
+            .expect("minimum backward argument should stop at buffer end");
+        assert_eq!(editor.cursor(), editor.document().buffer().end_position());
+
+        editor
+            .command_forward_sentence(CommandContext {
+                argument: Some(i32::MIN),
+                invoked_by: Invocation::Test,
+            })
+            .expect("minimum forward argument should stop at buffer start");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\n\ntwo\n\nthree")
+            .expect("punctuation-free fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .command_forward_sentence(CommandContext {
+                argument: Some(i32::MAX),
+                invoked_by: Invocation::Test,
+            })
+            .expect("saturated movement should cross finite paragraphs");
+        assert_eq!(editor.cursor(), editor.document().buffer().end_position());
+        editor
+            .command_backward_sentence(CommandContext {
+                argument: Some(i32::MAX),
+                invoked_by: Invocation::Test,
+            })
+            .expect("saturated movement should not rescan prior paragraphs");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
     fn sentence_movement_handles_separator_start_and_punctuation_free_paragraphs() {
         let mut document = Document::scratch();
         document
@@ -10220,6 +10360,17 @@ mod tests {
             .handle_key(KeyEvent::Meta('a'))
             .expect("M-a should cross punctuation-free paragraph");
         assert_eq!(editor.cursor(), Position::new(0, 0));
+
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "\ntext\n\n")
+            .expect("leading separator fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta('e'))
+            .expect("M-e should preserve exact-boundary behavior");
+        assert_eq!(editor.cursor(), editor.document().buffer().end_position());
     }
 
     #[test]

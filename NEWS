@@ -15,6 +15,10 @@ Interface features:
 
 Security fixes:
 
+* Sentence movement now scans stored lines directly without copying complete
+  buffers or collecting every prior boundary. Large numeric arguments also stop
+  once point reaches a buffer edge.
+
 * Cursor-position and buffer-list size reporting no longer duplicate entire
   buffers to count bytes, preventing avoidable memory exhaustion on large files.
 

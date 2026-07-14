@@ -1,5 +1,22 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Make sentence movement allocation-free and bounded by progress.
+
+	* src/editor.rs (Editor::command_backward_sentence,
+	Editor::command_forward_sentence): Use stable motion repetition.
+	(Editor::repeat_signed_motion): New method.
+	(sentence_forward_position, sentence_backward_position,
+	next_sentence_end, sentence_end_after_closers, sentence_boundary_after,
+	skip_sentence_space): Traverse stored lines directly without full-buffer
+	copies or boundary vectors.
+	(sentence_movement_preserves_utf8_formfeed_and_crlf_boundaries,
+	sentence_movement_stops_saturated_arguments_at_buffer_edges): New tests.
+	* NEWS: Announce the sentence movement availability fix.
+	* docs/development.md: Document allocation-free sentence traversal.
+	* docs/testing.md: Document sentence movement security regressions.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Avoid full-buffer copies when reporting byte lengths.
 
 	* src/buffer/mod.rs (Buffer::serialized_len): New method.

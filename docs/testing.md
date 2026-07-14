@@ -49,6 +49,10 @@ flaky wall-clock thresholds. A representative PTY regression sends a failing
 optional-chain regexp through incremental search and confirms redraw and later
 input remain responsive.
 
+Sentence movement unit tests cover UTF-8 byte positions, formfeed paragraph
+separators, retained CRLF behavior, and saturated numeric arguments that must
+stop at buffer edges. PTY coverage exercises the default `M-a` and `M-e` paths.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

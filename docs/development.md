@@ -246,9 +246,10 @@ Post-Milestone 14 sentence movement polish adds `forward-sentence` on `M-e` and
 newline, or end-of-buffer sentence boundary rule with optional horizontal space
 before newline or end of buffer, and paragraph-boundary stops.
 It supports positive and negative numeric arguments, works in read-only buffers,
-and does not mutate buffer text or create undo entries. It intentionally defers
-customizable sentence variables, language-specific rules, and mode-specific
-sentence functions.
+and does not mutate buffer text or create undo entries. Sentence traversal scans
+stored lines directly with constant auxiliary memory, and repeated movement stops
+when point no longer changes. It intentionally defers customizable sentence
+variables, language-specific rules, and mode-specific sentence functions.
 
 Post-Milestone 14 fill polish adds `fill-paragraph` on `M-q`. The first subset
 fills plain-text paragraphs by collapsing internal whitespace and wrapping words
