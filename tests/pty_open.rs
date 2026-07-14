@@ -46,6 +46,48 @@ fn escapes_terminal_controls_from_file_name_and_contents() -> Result<()> {
 }
 
 #[test]
+fn opened_message_escapes_sgr_from_file_name_across_redraw() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let hostile = directory.path().join("conceal_\u{1b}[8m.txt");
+    std::fs::write(&start, "start\n")?;
+    std::fs::write(&hostile, "VISIBLE AFTER REDRAW\n")?;
+    let mut rile = RilePty::spawn(&start, 10, 180)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.send("file prefix", b"conceal_")?;
+    rile.wait_for_screen_contains("conceal_\\u{1b}[8m.txt")?;
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("Opened ")?;
+    let opened_row = rile
+        .screen_rows()
+        .into_iter()
+        .find(|row| row.contains("Opened "))
+        .unwrap_or_default();
+    assert!(
+        opened_row.contains("conceal_\\u{1b}[8m.txt"),
+        "opened-file message should display the escaped SGR\n{}",
+        rile.screen_dump()
+    );
+    rile.assert_raw_output_excludes(b"\x1b[8m")?;
+
+    rile.send("C-f", keys::control('f'))?;
+    rile.wait_for_screen_contains("VISIBLE AFTER REDRAW")?;
+    assert!(
+        !rile.snapshot_text().contains("Opened "),
+        "movement should clear the opened-file message\n{}",
+        rile.screen_dump()
+    );
+    rile.assert_raw_output_excludes(b"\x1b[8m")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn opens_file_read_only_and_blocks_editing() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");

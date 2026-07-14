@@ -1,5 +1,12 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Cover SGR escaping in opened-file minibuffer messages.
+
+	* tests/pty_open.rs
+	(opened_message_escapes_sgr_from_file_name_across_redraw): New test.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Prevent auto-save files from broadening file permissions.
 
 	* src/file.rs (Document::auto_save_if_dirty): Write with source-aware
