@@ -1,5 +1,14 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Document regexp engine trade-offs and review thresholds.
+
+	* docs/regexp-engine-comparison.md: New file comparing a safe built-in VM
+	with the regex crate and recording size baselines, fallback criteria, and
+	measurement steps.
+	* docs/README.md: Link the regexp engine comparison.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Cover SGR escaping in opened-file minibuffer messages.
 
 	* tests/pty_open.rs
