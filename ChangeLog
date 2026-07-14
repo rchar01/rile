@@ -1,5 +1,18 @@
 2026-07-13  Robert Charusta  <rch-public@posteo.net>
 
+	Avoid exposing release tokens in podman arguments.
+
+	* scripts/release-in-container (expand_host_path,
+	canonical_existing_file): New helpers.
+	(RELEASE_TOKEN_FILE): Mount token files read-only and pass the
+	container-side path to release-tools.
+	(env_flags): Pass inherited token-capable variables by name.
+	* Makefile (release-publish-tag): Prefer RELEASE_TOKEN_FILE in help.
+	* docs/release-checklist.md: Prefer RELEASE_TOKEN_FILE and document
+	argv-safe token handling.
+
+2026-07-13  Robert Charusta  <rch-public@posteo.net>
+
 	Update release-tools integration.
 
 	* Containerfile.dev: Bump release-tools to 3.5.0 and verify the

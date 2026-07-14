@@ -12,10 +12,33 @@ fi
 IMAGE=${IMAGE:-rile-dev}
 PODMAN=${PODMAN:-podman}
 CONTAINERFILE=${CONTAINERFILE:-Containerfile.dev}
+TOKEN_FILE_CONTAINER_PATH=/run/secrets/rile-release-token
 user_flags=(--user "$(id -u):$(id -g)")
 if [ "$($PODMAN info --format '{{.Host.Security.Rootless}}')" = true ]; then
   user_flags=(--userns=keep-id)
 fi
+
+expand_host_path() {
+  case $1 in
+    '~') printf '%s\n' "$HOME" ;;
+    '~/'*) printf '%s/%s\n' "$HOME" "${1#~/}" ;;
+    '$HOME') printf '%s\n' "$HOME" ;;
+    '$HOME/'*) printf '%s/%s\n' "$HOME" "${1#\$HOME/}" ;;
+    '${HOME}') printf '%s\n' "$HOME" ;;
+    '${HOME}/'*) printf '%s/%s\n' "$HOME" "${1#\$\{HOME\}/}" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+canonical_existing_file() {
+  path=$1
+  case $path in
+    /*) ;;
+    *) path=$PWD/$path ;;
+  esac
+  dir=$(CDPATH= cd -- "$(dirname -- "$path")" && pwd -P) || return 1
+  printf '%s/%s\n' "$dir" "$(basename -- "$path")"
+}
 
 "$PODMAN" build --ignorefile .containerignore -f "$CONTAINERFILE" -t "$IMAGE" .
 
@@ -23,6 +46,25 @@ env_flags=(
   -e CARGO_TERM_COLOR=always
   -e HOME=/tmp
 )
+mount_flags=()
+
+if [ -n "${RELEASE_TOKEN_FILE-}" ]; then
+  token_file=$(canonical_existing_file "$(expand_host_path "$RELEASE_TOKEN_FILE")")
+  if [ ! -f "$token_file" ]; then
+    printf 'RELEASE_TOKEN_FILE is not a regular file: %s\n' "$RELEASE_TOKEN_FILE" >&2
+    exit 2
+  fi
+  if [ ! -r "$token_file" ]; then
+    printf 'RELEASE_TOKEN_FILE is not readable: %s\n' "$RELEASE_TOKEN_FILE" >&2
+    exit 2
+  fi
+  if [ ! -s "$token_file" ]; then
+    printf 'RELEASE_TOKEN_FILE is empty: %s\n' "$RELEASE_TOKEN_FILE" >&2
+    exit 2
+  fi
+  mount_flags+=("-v" "$token_file:$TOKEN_FILE_CONTAINER_PATH:ro,Z")
+  env_flags+=("-e" "RELEASE_TOKEN_FILE=$TOKEN_FILE_CONTAINER_PATH")
+fi
 
 for name in \
   GIT_AUTHOR_NAME \
@@ -30,7 +72,6 @@ for name in \
   GIT_COMMITTER_NAME \
   GIT_COMMITTER_EMAIL \
   RELEASE_TOKEN \
-  RELEASE_TOKEN_FILE \
   GITEA_TOKEN \
   GITHUB_TOKEN \
   GITLAB_TOKEN \
@@ -39,13 +80,16 @@ for name in \
   GORELEASER_BIN
 do
   if [ -n "${!name-}" ]; then
-    env_flags+=("-e" "$name=${!name}")
+    # Pass inherited variables by name so secret values stay out of the host
+    # container-runtime argv.
+    env_flags+=("-e" "$name")
   fi
 done
 
 "$PODMAN" run --rm \
   "${user_flags[@]}" \
   "${env_flags[@]}" \
+  "${mount_flags[@]}" \
   -v "$PWD":/workspace:z \
   -w /workspace \
   "$IMAGE" "$@"

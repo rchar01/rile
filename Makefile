@@ -104,7 +104,7 @@ release-snapshot:
 release-notes:
 	$(RELEASE_IN_CONTAINER) release-tools notes $(RELEASE_VERSION)
 
-## Publish an existing tag; set RELEASE_TOKEN and RELEASE_VERSION
+## Publish an existing tag; set RELEASE_TOKEN_FILE and RELEASE_VERSION
 release-publish-tag:
 	$(RELEASE_IN_CONTAINER) release-tools publish-tag $(RELEASE_VERSION)
 

@@ -54,13 +54,19 @@ Use the configured remote and release branch for other clones.
 
 ## Publish
 
-Publishing requires a Codeberg-compatible token. Prefer `RELEASE_TOKEN`, a
-native forge token variable such as `GITEA_TOKEN`, or environment-only
-`RELEASE_TOKEN_FILE`. Do not commit token paths to `.release-tools.env`.
+Publishing requires a Codeberg-compatible token. Prefer an environment-only
+`RELEASE_TOKEN_FILE` for local maintainer releases; the container wrapper mounts
+that file read-only and passes only the container-side token path to
+`release-tools`:
 
 ```sh
-RELEASE_TOKEN=... make release-publish-tag RELEASE_VERSION=v0.9.0
+RELEASE_TOKEN_FILE=~/.config/forge/token make release-publish-tag RELEASE_VERSION=v0.9.0
 ```
+
+`RELEASE_TOKEN`, `GITEA_TOKEN`, `GITHUB_TOKEN`, and `GITLAB_TOKEN` remain
+supported fallbacks, but the wrapper passes inherited token variables by name so
+token values are not serialized into the host `podman run` arguments. Do not
+commit token values or token paths to `.release-tools.env`.
 
 `release-tools publish-tag` publishes from a clean temporary clone of the exact
 local tag.  This prevents uncommitted or post-tag worktree changes from leaking
