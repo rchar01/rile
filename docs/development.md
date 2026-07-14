@@ -555,10 +555,12 @@ creation failures block the save so the original file contents remain intact.
 Auto-save is a separate default-off feature.  When `auto_save = true`, dirty
 file-visiting buffers write Emacs-style `#file#` auto-save files after the
 configured handled-key interval or idle timeout.  Auto-save writes do not mark
-buffers clean and do not modify visited files.  Explicit saves delete matching
-current-session auto-save files by default while preserving pre-existing
-recovery files, and opening a file with a newer auto-save file emits a warning
-so the auto-save file can be opened manually for recovery.
+buffers clean and do not modify visited files.  On Unix, recovery files inherit
+visited-file permissions and rewrites intersect those permissions with any
+existing recovery-file mode so auto-save cannot broaden access.  Explicit saves
+delete matching current-session auto-save files by default while preserving
+pre-existing recovery files, and opening a file with a newer auto-save file
+emits a warning so the auto-save file can be opened manually for recovery.
 
 Visual terminal testing has started with `--visual-test` and `--test-size
 WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and

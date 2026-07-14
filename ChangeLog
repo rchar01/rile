@@ -1,5 +1,25 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Prevent auto-save files from broadening file permissions.
+
+	* src/file.rs (Document::auto_save_if_dirty): Write with source-aware
+	permissions.
+	(auto_save_permissions): New helper that selects restrictive recovery-file
+	permissions.
+	(create_temporary_file): Create temporary files with requested permissions
+	before writing sensitive contents.
+	(auto_save_inherits_visited_file_permissions,
+	auto_save_for_missing_visited_file_uses_private_permissions,
+	configured_auto_save_directory_inherits_visited_file_permissions,
+	auto_save_rewrites_use_most_restrictive_permissions): New tests.
+	(temporary_file_uses_requested_permissions_before_writing): New test.
+	* README.md: Document Unix auto-save permission behavior.
+	* docs/backups-and-auto-save.md: Likewise.
+	* docs/development.md: Likewise.
+	* NEWS: Announce the auto-save permission fix.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Extend file completion terminal-control regressions.
 
 	* tests/pty_completion.rs (exercise_find_file_control_escaping): New

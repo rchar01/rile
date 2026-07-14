@@ -63,7 +63,10 @@ backup directories.
 
 Auto-save writes are non-cleaning writes.  They serialize the current buffer
 contents to the auto-save file, but they do not modify the visited file and do
-not mark the buffer clean.
+not mark the buffer clean.  On Unix, a new auto-save file inherits the visited
+file's permissions.  Rewriting an existing auto-save uses the intersection of
+the visited and recovery file modes so the write cannot make either policy more
+permissive.  Auto-save files for not-yet-created visited files use mode `0600`.
 
 Auto-save can be triggered in two ways:
 

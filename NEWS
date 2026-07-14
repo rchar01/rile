@@ -13,6 +13,12 @@ Interface features:
   names, paths, prompts, completions, messages, and command output as visible
   escapes instead of sending them to the terminal.
 
+Security fixes:
+
+* Auto-save files on Unix now use permissions no broader than the visited file
+  or an existing recovery file, preventing permissive process umasks from
+  exposing private buffer contents.
+
 Editing features:
 
 * `highlight-regexp`, `highlight-phrase`,

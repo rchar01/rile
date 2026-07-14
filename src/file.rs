@@ -369,10 +369,14 @@ Rile is free software under GPL-3.0-or-later.\n",
         if !self.auto_save || self.kind != DocumentKind::Normal || !self.is_dirty() {
             return Ok(None);
         }
+        let Some(visited_path) = self.path.as_deref() else {
+            return Ok(None);
+        };
         let Some(path) = self.auto_save_path() else {
             return Ok(None);
         };
-        safe_write(&path, self.buffer.serialize().as_bytes())?;
+        let permissions = auto_save_permissions(visited_path, &path)?;
+        safe_write_with_permissions(&path, self.buffer.serialize().as_bytes(), permissions)?;
         self.auto_save_written = true;
         Ok(Some(path))
     }
@@ -663,7 +667,7 @@ fn safe_write_with_permissions(
     bytes: &[u8],
     permissions: Option<fs::Permissions>,
 ) -> Result<()> {
-    let (temporary, mut file) = create_temporary_file(path)?;
+    let (temporary, mut file) = create_temporary_file(path, permissions.as_ref())?;
     let result = (|| -> Result<()> {
         file.write_all(bytes)?;
         if let Some(permissions) = permissions {
@@ -690,15 +694,48 @@ fn existing_file_permissions(path: &Path) -> Result<Option<fs::Permissions>> {
     }
 }
 
-fn create_temporary_file(path: &Path) -> Result<(PathBuf, fs::File)> {
+fn auto_save_permissions(
+    visited_path: &Path,
+    auto_save_path: &Path,
+) -> Result<Option<fs::Permissions>> {
+    let visited = existing_file_permissions(visited_path)?;
+    let auto_save = existing_file_permissions(auto_save_path)?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let visited_mode = visited.map_or(0o600, |permissions| permissions.mode());
+        let mode = auto_save.map_or(visited_mode, |permissions| {
+            visited_mode & permissions.mode()
+        });
+        Ok(Some(fs::Permissions::from_mode(mode & 0o7777)))
+    }
+
+    #[cfg(not(unix))]
+    {
+        Ok(auto_save.or(visited))
+    }
+}
+
+fn create_temporary_file(
+    path: &Path,
+    permissions: Option<&fs::Permissions>,
+) -> Result<(PathBuf, fs::File)> {
+    #[cfg(not(unix))]
+    let _ = permissions;
     let mut last_error = None;
     for _ in 0..16 {
         let temporary = temporary_path(path);
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temporary)
-        {
+        let mut options = OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        if let Some(permissions) = permissions {
+            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+
+            options.mode(permissions.mode() & 0o7777);
+        }
+        match options.open(&temporary) {
             Ok(file) => return Ok((temporary, file)),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 last_error = Some(error);
@@ -1021,6 +1058,157 @@ mod tests {
             "old\nnew\n"
         );
         assert!(document.is_dirty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auto_save_inherits_visited_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("private.txt");
+        let auto_save = directory.path().join("#private.txt#");
+        fs::write(&path, "secret\n").expect("file should be written");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("permissions should be set");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "unsaved\n")
+            .expect("insert should succeed");
+
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+
+        assert_eq!(
+            fs::metadata(&auto_save)
+                .expect("auto-save metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auto_save_for_missing_visited_file_uses_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("new-private.txt");
+        let auto_save = directory.path().join("#new-private.txt#");
+        let mut document = Document::open(&path).expect("missing file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "unsaved secret\n")
+            .expect("insert should succeed");
+
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+
+        assert_eq!(
+            fs::metadata(&auto_save)
+                .expect("auto-save metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn configured_auto_save_directory_inherits_visited_file_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let auto_save_directory = directory.path().join("auto-save");
+        fs::create_dir(&auto_save_directory).expect("auto-save directory should create");
+        let path = directory.path().join("private.txt");
+        fs::write(&path, "secret\n").expect("file should be written");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o640))
+            .expect("permissions should be set");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document.set_auto_save_directory(Some(auto_save_directory));
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "unsaved\n")
+            .expect("insert should succeed");
+
+        let written = document
+            .auto_save_if_dirty()
+            .expect("auto-save should write")
+            .expect("dirty file-backed document should auto-save");
+
+        assert_eq!(
+            fs::metadata(written)
+                .expect("auto-save metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o640
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn auto_save_rewrites_use_most_restrictive_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("private.txt");
+        let auto_save = directory.path().join("#private.txt#");
+        fs::write(&path, "secret\n").expect("file should be written");
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644))
+            .expect("visited permissions should be set");
+        fs::write(&auto_save, "older recovery\n").expect("auto-save should be written");
+        fs::set_permissions(&auto_save, fs::Permissions::from_mode(0o600))
+            .expect("auto-save permissions should be set");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(1, 0), "first\n")
+            .expect("insert should succeed");
+
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should preserve restrictive mode");
+        assert_eq!(
+            fs::metadata(&auto_save)
+                .expect("auto-save metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600))
+            .expect("visited permissions should be tightened");
+        fs::set_permissions(&auto_save, fs::Permissions::from_mode(0o644))
+            .expect("auto-save permissions should be widened for regression setup");
+        document
+            .buffer_mut()
+            .insert(Position::new(2, 0), "second\n")
+            .expect("second insert should succeed");
+
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should tighten permissive mode");
+        assert_eq!(
+            fs::metadata(&auto_save)
+                .expect("auto-save metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
     }
 
     #[test]
@@ -1469,6 +1657,30 @@ mod tests {
                 & 0o777,
             0o444
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn temporary_file_uses_requested_permissions_before_writing() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("private.txt");
+        let permissions = fs::Permissions::from_mode(0o600);
+
+        let (temporary, file) = super::create_temporary_file(&path, Some(&permissions))
+            .expect("temporary file should be created");
+        drop(file);
+
+        assert_eq!(
+            fs::metadata(&temporary)
+                .expect("temporary metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+        fs::remove_file(temporary).expect("temporary file should be removed");
     }
 
     #[test]
