@@ -78,6 +78,10 @@ impl Buffer {
         self.lines.join("\n")
     }
 
+    pub fn serialized_len(&self) -> usize {
+        self.lines.iter().map(String::len).sum::<usize>() + self.lines.len().saturating_sub(1)
+    }
+
     pub fn line_count(&self) -> usize {
         self.lines.len()
     }
@@ -510,6 +514,13 @@ mod tests {
         assert_eq!(buffer.lines(), &["alpha", "beta", ""]);
         assert!(buffer.final_newline());
         assert_eq!(buffer.serialize(), "alpha\nbeta\n");
+    }
+
+    #[test]
+    fn serialized_len_counts_text_bytes_and_line_separators() {
+        for text in ["", "alpha", "alpha\nbeta\n", "\n\n", "é\r\n"] {
+            assert_eq!(Buffer::from_text(text).serialized_len(), text.len());
+        }
     }
 
     #[test]

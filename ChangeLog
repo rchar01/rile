@@ -1,5 +1,18 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Avoid full-buffer copies when reporting byte lengths.
+
+	* src/buffer/mod.rs (Buffer::serialized_len): New method.
+	(serialized_len_counts_text_bytes_and_line_separators): New test.
+	* src/editor.rs (Editor::what_cursor_position,
+	Editor::buffer_list_contents): Use it.
+	* tests/pty_movement.rs (what_cursor_position_reports_location): Check the
+	complete point report.
+	* NEWS: Announce the large-buffer availability fix.
+	* docs/development.md: Document non-allocating size reporting.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Cover terminal-control escaping in save-some-buffers prompts.
 
 	* tests/pty_save.rs

@@ -229,7 +229,8 @@ Post-Milestone 14 movement polish adds `move-to-window-line-top-bottom` on
 the current window, places point at column zero, does not scroll, and leaves
 buffer text unchanged. `what-cursor-position` on `C-x =` reports the current
 one-based line, display column, and byte-oriented point position in the echo
-area.
+area. Cursor-position and buffer-list size reporting compute serialized byte
+lengths from stored lines without materializing a second copy of buffer text.
 
 Post-Milestone 14 paragraph movement polish adds `forward-paragraph` on `M-}`
 and `backward-paragraph` on `M-{`. The first subset treats empty lines and lines

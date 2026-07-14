@@ -3901,7 +3901,7 @@ impl Editor {
         self.clear_insert_group();
         let buffer = self.document().buffer();
         let absolute = position_to_absolute(buffer, self.cursor)?;
-        let total = buffer.serialize().len();
+        let total = buffer.serialized_len();
         let column = buffer.display_column(self.cursor)?;
         let percentage = absolute
             .saturating_mul(100)
@@ -6519,7 +6519,7 @@ impl Editor {
             };
             let read_only = if document.is_read_only() { '%' } else { ' ' };
             let modified = if document.is_dirty() { '*' } else { ' ' };
-            let size = document.buffer().serialize().len();
+            let size = document.buffer().serialized_len();
             let mode = MajorMode::for_path(document.path()).name();
             let file = document
                 .path()

@@ -15,6 +15,9 @@ Interface features:
 
 Security fixes:
 
+* Cursor-position and buffer-list size reporting no longer duplicate entire
+  buffers to count bytes, preventing avoidable memory exhaustion on large files.
+
 * Auto-revert metadata, read, and decode failures are now reported without
   ending the editor session and potentially losing unsaved changes in other
   buffers.

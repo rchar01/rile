@@ -205,7 +205,7 @@ fn what_cursor_position_reports_location() -> Result<()> {
     rile.send("C-x", keys::control('x'))?;
     rile.send("=", b"=")?;
 
-    rile.assert_screen_contains("Line 2, column 1")?;
+    rile.assert_screen_contains("Line 2, column 1, point 8 of 12 (63%)")?;
 
     rile.quit()?;
     Ok(())
