@@ -277,7 +277,9 @@ tracks numbered captures for regexp replacement expansion but does not yet suppo
 regexp backreferences, syntax classes, or multiline regexp matching. Current
 unrecognized regexp escapes match the escaped character literally unless they are
 explicitly invalid syntax; do not treat that as Emacs-compatible support for the
-escaped construct.
+escaped construct. Patterns are limited to 1,024 characters, 32 captures, 64
+nested groups, and 4,096 compiled instructions. Unbounded repetition of an atom
+that can match empty text is invalid.
 
 Evidence: GNU Emacs command names and default bindings; Rile unit, source
 architecture, and PTY tests for regexp isearch command dispatch, matching,

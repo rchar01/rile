@@ -4,6 +4,19 @@
 use crate::matching::is_smart_case_sensitive;
 use crate::text::is_word_character;
 
+#[cfg(test)]
+use std::cell::Cell;
+
+const MAX_PATTERN_CHARS: usize = 1024;
+const MAX_CAPTURES: usize = 32;
+const MAX_PROGRAM_INSTRUCTIONS: usize = 4096;
+const MAX_GROUP_NESTING: usize = 64;
+
+#[cfg(test)]
+thread_local! {
+    static VM_THREAD_STEPS: Cell<usize> = const { Cell::new(0) };
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PatternKind {
     Literal,
@@ -129,6 +142,7 @@ impl SearchPattern {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct RegexpPattern {
     expression: Expression,
+    program: Program,
     capture_count: usize,
     case_sensitive: bool,
 }
@@ -183,18 +197,6 @@ impl From<RegexpMatch> for PatternMatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MatchState {
-    end_slot: usize,
-    captures: Vec<Option<(usize, usize)>>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct RepeatBounds {
-    minimum: usize,
-    maximum: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 struct CharacterClass {
     negated: bool,
     items: Vec<ClassItem>,
@@ -235,6 +237,46 @@ struct CharSlot {
     character: char,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Program {
+    instructions: Vec<Instruction>,
+    start: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Instruction {
+    Accept,
+    Split { first: usize, second: usize },
+    CaptureStart { capture: usize, next: usize },
+    CaptureEnd { capture: usize, next: usize },
+    AnchorStart { next: usize },
+    AnchorEnd { next: usize },
+    WordStart { next: usize },
+    WordEnd { next: usize },
+    WordBoundary { next: usize },
+    NotWordBoundary { next: usize },
+    Any { next: usize },
+    Literal { character: char, next: usize },
+    WordCharacter { next: usize },
+    NotWordCharacter { next: usize },
+    Class { class: CharacterClass, next: usize },
+}
+
+#[derive(Debug, Clone)]
+struct Thread {
+    pc: usize,
+    start_slot: usize,
+    capture_starts: Vec<Option<usize>>,
+    captures: Vec<Option<(usize, usize)>>,
+}
+
+#[derive(Debug, Clone)]
+struct SlotMatch {
+    start_slot: usize,
+    end_slot: usize,
+    captures: Vec<Option<(usize, usize)>>,
+}
+
 impl RegexpPattern {
     #[cfg(test)]
     fn compile(input: &str) -> Result<Self, PatternError> {
@@ -242,10 +284,15 @@ impl RegexpPattern {
     }
 
     fn compile_with_case(input: &str, case_sensitive: bool) -> Result<Self, PatternError> {
+        if input.chars().count() > MAX_PATTERN_CHARS {
+            return Err(PatternError::new("regexp pattern exceeds character limit"));
+        }
         let mut parser = Parser::new(input);
         let expression = parser.parse()?;
+        let program = Compiler::compile(&expression)?;
         Ok(Self {
             expression,
+            program,
             capture_count: parser.capture_count,
             case_sensitive,
         })
@@ -259,34 +306,20 @@ impl RegexpPattern {
 
     fn find_forward_match(&self, line: &str, minimum_byte: usize) -> Option<PatternMatch> {
         let slots = char_slots(line);
-        for start_slot in start_slots_from_byte(&slots, line.len(), minimum_byte) {
-            if let Some(state) = self.match_state_from(&slots, start_slot) {
-                return Some(
-                    self.build_match(line.len(), &slots, start_slot, state)
-                        .into(),
-                );
-            }
-        }
-        None
+        let start_slot = start_slots_from_byte(&slots, line.len(), minimum_byte).next()?;
+        self.run_forward(&slots, start_slot)
+            .map(|slot_match| self.build_match(line.len(), &slots, slot_match).into())
     }
 
     fn find_backward(&self, line: &str, maximum_byte: usize) -> Option<(usize, usize)> {
         let slots = char_slots(line);
-        let mut found = None;
-        for start_slot in 0..=slots.len() {
-            let start_byte = slot_byte(&slots, line.len(), start_slot);
-            if start_byte > maximum_byte {
-                break;
-            }
-            if let Some(state) = self.match_state_from(&slots, start_slot) {
-                let end_byte = slot_byte(&slots, line.len(), state.end_slot);
-                if start_byte < maximum_byte || (start_byte == line.len() && end_byte == start_byte)
-                {
-                    found = Some((start_byte, end_byte));
-                }
-            }
-        }
-        found
+        self.run_backward(&slots, line.len(), maximum_byte)
+            .map(|slot_match| {
+                (
+                    slot_byte(&slots, line.len(), slot_match.start_slot),
+                    slot_byte(&slots, line.len(), slot_match.end_slot),
+                )
+            })
     }
 
     fn match_ranges(&self, line: &str) -> Vec<(usize, usize)> {
@@ -294,49 +327,251 @@ impl RegexpPattern {
         let mut ranges = Vec::new();
         let mut start_slot = 0;
         while start_slot <= slots.len() {
-            if let Some(state) = self.match_state_from(&slots, start_slot)
-                && state.end_slot > start_slot
-            {
+            let Some(slot_match) = self.run_forward(&slots, start_slot) else {
+                break;
+            };
+            if slot_match.end_slot > slot_match.start_slot {
                 ranges.push((
-                    slot_byte(&slots, line.len(), start_slot),
-                    slot_byte(&slots, line.len(), state.end_slot),
+                    slot_byte(&slots, line.len(), slot_match.start_slot),
+                    slot_byte(&slots, line.len(), slot_match.end_slot),
                 ));
-                start_slot = state.end_slot;
+                start_slot = slot_match.end_slot;
+            } else if slot_match.start_slot < slots.len() {
+                start_slot = slot_match.start_slot + 1;
             } else {
-                start_slot += 1;
+                break;
             }
         }
         ranges
     }
 
-    fn match_state_from(&self, slots: &[CharSlot], start_slot: usize) -> Option<MatchState> {
-        let captures = vec![None; self.capture_count];
-        self.expression
-            .match_states(
-                slots,
-                self.case_sensitive,
-                MatchState {
-                    end_slot: start_slot,
-                    captures,
-                },
-            )
-            .into_iter()
-            .next()
+    fn run_forward(&self, slots: &[CharSlot], minimum_slot: usize) -> Option<SlotMatch> {
+        let mut seeds = Vec::new();
+        let mut fallback = None;
+        let mut epsilon_stack = Vec::new();
+        for slot_index in minimum_slot..=slots.len() {
+            let mut current = Vec::new();
+            let mut seen = vec![false; self.program.instructions.len()];
+            for thread in seeds.drain(..) {
+                self.add_thread(
+                    slots,
+                    slot_index,
+                    thread,
+                    &mut current,
+                    &mut seen,
+                    &mut epsilon_stack,
+                );
+            }
+            if fallback.is_none() {
+                self.add_thread(
+                    slots,
+                    slot_index,
+                    self.start_thread(slot_index),
+                    &mut current,
+                    &mut seen,
+                    &mut epsilon_stack,
+                );
+            }
+
+            let mut next = Vec::new();
+            for mut thread in current {
+                if matches!(self.program.instructions[thread.pc], Instruction::Accept) {
+                    fallback = Some(SlotMatch {
+                        start_slot: thread.start_slot,
+                        end_slot: slot_index,
+                        captures: thread.captures,
+                    });
+                    break;
+                }
+                if let Some(next_pc) = self.consuming_next(thread.pc, slots.get(slot_index)) {
+                    thread.pc = next_pc;
+                    next.push(thread);
+                }
+            }
+            if next.is_empty()
+                && let Some(slot_match) = fallback
+            {
+                return Some(slot_match);
+            }
+            seeds = next;
+        }
+        fallback
+    }
+
+    fn run_backward(
+        &self,
+        slots: &[CharSlot],
+        line_len: usize,
+        maximum_byte: usize,
+    ) -> Option<SlotMatch> {
+        let mut seeds = Vec::new();
+        let mut fallback = None;
+        let mut epsilon_stack = Vec::new();
+        for slot_index in 0..=slots.len() {
+            let mut current = Vec::new();
+            let mut seen = vec![false; self.program.instructions.len()];
+            let start_byte = slot_byte(slots, line_len, slot_index);
+            if start_byte < maximum_byte || (start_byte == line_len && start_byte <= maximum_byte) {
+                self.add_thread(
+                    slots,
+                    slot_index,
+                    self.start_thread(slot_index),
+                    &mut current,
+                    &mut seen,
+                    &mut epsilon_stack,
+                );
+            }
+            for thread in seeds.drain(..) {
+                self.add_thread(
+                    slots,
+                    slot_index,
+                    thread,
+                    &mut current,
+                    &mut seen,
+                    &mut epsilon_stack,
+                );
+            }
+
+            let mut next = Vec::new();
+            for mut thread in current {
+                if matches!(self.program.instructions[thread.pc], Instruction::Accept) {
+                    fallback = Some(SlotMatch {
+                        start_slot: thread.start_slot,
+                        end_slot: slot_index,
+                        captures: thread.captures,
+                    });
+                    break;
+                }
+                if let Some(next_pc) = self.consuming_next(thread.pc, slots.get(slot_index)) {
+                    thread.pc = next_pc;
+                    next.push(thread);
+                }
+            }
+            seeds = next;
+        }
+        fallback
+    }
+
+    fn start_thread(&self, start_slot: usize) -> Thread {
+        Thread {
+            pc: self.program.start,
+            start_slot,
+            capture_starts: vec![None; self.capture_count],
+            captures: vec![None; self.capture_count],
+        }
+    }
+
+    fn add_thread(
+        &self,
+        slots: &[CharSlot],
+        slot_index: usize,
+        thread: Thread,
+        output: &mut Vec<Thread>,
+        seen: &mut [bool],
+        stack: &mut Vec<Thread>,
+    ) {
+        stack.push(thread);
+        while let Some(mut thread) = stack.pop() {
+            // Ordered expansion reaches the highest-priority path first. Since
+            // captures cannot affect future matching, later paths may be dropped.
+            if seen[thread.pc] {
+                continue;
+            }
+            seen[thread.pc] = true;
+            count_vm_thread_step();
+            match &self.program.instructions[thread.pc] {
+                Instruction::Split { first, second } => {
+                    let mut lower_priority = thread.clone();
+                    lower_priority.pc = *second;
+                    stack.push(lower_priority);
+                    thread.pc = *first;
+                    stack.push(thread);
+                }
+                Instruction::CaptureStart { capture, next } => {
+                    thread.capture_starts[*capture] = Some(slot_index);
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::CaptureEnd { capture, next } => {
+                    let start = thread.capture_starts[*capture].unwrap_or(slot_index);
+                    thread.captures[*capture] = Some((start, slot_index));
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::AnchorStart { next } if slot_index == 0 => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::AnchorEnd { next } if slot_index == slots.len() => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::WordStart { next } if is_word_start(slots, slot_index) => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::WordEnd { next } if is_word_end(slots, slot_index) => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::WordBoundary { next } if is_word_boundary(slots, slot_index) => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::NotWordBoundary { next } if !is_word_boundary(slots, slot_index) => {
+                    thread.pc = *next;
+                    stack.push(thread);
+                }
+                Instruction::Accept
+                | Instruction::Any { .. }
+                | Instruction::Literal { .. }
+                | Instruction::WordCharacter { .. }
+                | Instruction::NotWordCharacter { .. }
+                | Instruction::Class { .. } => output.push(thread),
+                Instruction::AnchorStart { .. }
+                | Instruction::AnchorEnd { .. }
+                | Instruction::WordStart { .. }
+                | Instruction::WordEnd { .. }
+                | Instruction::WordBoundary { .. }
+                | Instruction::NotWordBoundary { .. } => {}
+            }
+        }
+    }
+
+    fn consuming_next(&self, pc: usize, slot: Option<&CharSlot>) -> Option<usize> {
+        let slot = slot?;
+        match &self.program.instructions[pc] {
+            Instruction::Any { next } => Some(*next),
+            Instruction::Literal { character, next }
+                if chars_match(slot.character, *character, self.case_sensitive) =>
+            {
+                Some(*next)
+            }
+            Instruction::WordCharacter { next } if is_word_character(slot.character) => Some(*next),
+            Instruction::NotWordCharacter { next } if !is_word_character(slot.character) => {
+                Some(*next)
+            }
+            Instruction::Class { class, next }
+                if class.matches(slot.character, self.case_sensitive) =>
+            {
+                Some(*next)
+            }
+            _ => None,
+        }
     }
 
     fn build_match(
         &self,
         line_len: usize,
         slots: &[CharSlot],
-        start_slot: usize,
-        state: MatchState,
+        slot_match: SlotMatch,
     ) -> RegexpMatch {
         RegexpMatch {
             range: (
-                slot_byte(slots, line_len, start_slot),
-                slot_byte(slots, line_len, state.end_slot),
+                slot_byte(slots, line_len, slot_match.start_slot),
+                slot_byte(slots, line_len, slot_match.end_slot),
             ),
-            captures: state
+            captures: slot_match
                 .captures
                 .into_iter()
                 .map(|range| {
@@ -356,122 +591,201 @@ impl RegexpPattern {
     }
 }
 
+struct Compiler {
+    instructions: Vec<Instruction>,
+}
+
+impl Compiler {
+    fn compile(expression: &Expression) -> Result<Program, PatternError> {
+        let mut compiler = Self {
+            instructions: Vec::new(),
+        };
+        let accept = compiler.emit(Instruction::Accept)?;
+        let start = compiler.compile_expression(expression, accept)?;
+        Ok(Program {
+            instructions: compiler.instructions,
+            start,
+        })
+    }
+
+    fn compile_expression(
+        &mut self,
+        expression: &Expression,
+        next: usize,
+    ) -> Result<usize, PatternError> {
+        let mut alternatives = expression.alternatives.iter().rev();
+        let last = alternatives
+            .next()
+            .expect("parser should produce at least one alternative");
+        let mut start = self.compile_sequence(last, next)?;
+        for alternative in alternatives {
+            let first = self.compile_sequence(alternative, next)?;
+            start = self.emit(Instruction::Split {
+                first,
+                second: start,
+            })?;
+        }
+        Ok(start)
+    }
+
+    fn compile_sequence(
+        &mut self,
+        sequence: &Sequence,
+        mut next: usize,
+    ) -> Result<usize, PatternError> {
+        for piece in sequence.pieces.iter().rev() {
+            next = self.compile_piece(piece, next)?;
+        }
+        Ok(next)
+    }
+
+    fn compile_piece(&mut self, piece: &Piece, next: usize) -> Result<usize, PatternError> {
+        match piece {
+            Piece::AnchorStart => self.emit(Instruction::AnchorStart { next }),
+            Piece::AnchorEnd => self.emit(Instruction::AnchorEnd { next }),
+            Piece::WordStart => self.emit(Instruction::WordStart { next }),
+            Piece::WordEnd => self.emit(Instruction::WordEnd { next }),
+            Piece::WordBoundary => self.emit(Instruction::WordBoundary { next }),
+            Piece::NotWordBoundary => self.emit(Instruction::NotWordBoundary { next }),
+            Piece::Consume { atom, quantifier } => self.compile_quantified(atom, *quantifier, next),
+        }
+    }
+
+    fn compile_quantified(
+        &mut self,
+        atom: &Atom,
+        quantifier: Quantifier,
+        next: usize,
+    ) -> Result<usize, PatternError> {
+        if atom.can_match_empty()
+            && matches!(
+                quantifier,
+                Quantifier::ZeroOrMore
+                    | Quantifier::OneOrMore
+                    | Quantifier::Counted { maximum: None, .. }
+            )
+        {
+            // Ordered thread deduplication cannot represent repeated zero-width
+            // capture updates without reintroducing unbounded state growth.
+            return Err(PatternError::new(
+                "unbounded repetition cannot contain an empty-matching atom",
+            ));
+        }
+        match quantifier {
+            Quantifier::One => self.compile_atom(atom, next),
+            Quantifier::ZeroOrOne => {
+                let atom_start = self.compile_atom(atom, next)?;
+                self.emit(Instruction::Split {
+                    first: atom_start,
+                    second: next,
+                })
+            }
+            Quantifier::ZeroOrMore => self.compile_star(atom, next),
+            Quantifier::OneOrMore => {
+                let repeat = self.reserve_split()?;
+                let atom_start = self.compile_atom(atom, repeat)?;
+                self.instructions[repeat] = Instruction::Split {
+                    first: atom_start,
+                    second: next,
+                };
+                Ok(atom_start)
+            }
+            Quantifier::Counted { minimum, maximum } => {
+                self.compile_counted(atom, minimum, maximum, next)
+            }
+        }
+    }
+
+    fn compile_counted(
+        &mut self,
+        atom: &Atom,
+        minimum: usize,
+        maximum: Option<usize>,
+        next: usize,
+    ) -> Result<usize, PatternError> {
+        let mut start = if maximum.is_none() {
+            self.compile_star(atom, next)?
+        } else {
+            next
+        };
+        if let Some(maximum) = maximum {
+            for _ in minimum..maximum {
+                let atom_start = self.compile_atom(atom, start)?;
+                start = self.emit(Instruction::Split {
+                    first: atom_start,
+                    second: start,
+                })?;
+            }
+        }
+        for _ in 0..minimum {
+            start = self.compile_atom(atom, start)?;
+        }
+        Ok(start)
+    }
+
+    fn compile_star(&mut self, atom: &Atom, next: usize) -> Result<usize, PatternError> {
+        let split = self.reserve_split()?;
+        let atom_start = self.compile_atom(atom, split)?;
+        self.instructions[split] = Instruction::Split {
+            first: atom_start,
+            second: next,
+        };
+        Ok(split)
+    }
+
+    fn compile_atom(&mut self, atom: &Atom, next: usize) -> Result<usize, PatternError> {
+        match atom {
+            Atom::Any => self.emit(Instruction::Any { next }),
+            Atom::Literal(character) => self.emit(Instruction::Literal {
+                character: *character,
+                next,
+            }),
+            Atom::WordCharacter => self.emit(Instruction::WordCharacter { next }),
+            Atom::NotWordCharacter => self.emit(Instruction::NotWordCharacter { next }),
+            Atom::Class(class) => self.emit(Instruction::Class {
+                class: class.clone(),
+                next,
+            }),
+            Atom::Group { index, expression } => {
+                let capture = index - 1;
+                let end = self.emit(Instruction::CaptureEnd { capture, next })?;
+                let expression_start = self.compile_expression(expression, end)?;
+                self.emit(Instruction::CaptureStart {
+                    capture,
+                    next: expression_start,
+                })
+            }
+        }
+    }
+
+    fn reserve_split(&mut self) -> Result<usize, PatternError> {
+        self.emit(Instruction::Split {
+            first: 0,
+            second: 0,
+        })
+    }
+
+    fn emit(&mut self, instruction: Instruction) -> Result<usize, PatternError> {
+        if self.instructions.len() == MAX_PROGRAM_INSTRUCTIONS {
+            return Err(PatternError::new(
+                "regexp program exceeds instruction limit",
+            ));
+        }
+        let pc = self.instructions.len();
+        self.instructions.push(instruction);
+        Ok(pc)
+    }
+}
+
 impl Expression {
     fn can_match_empty(&self) -> bool {
         self.alternatives.iter().any(Sequence::can_match_empty)
-    }
-
-    fn match_states(
-        &self,
-        slots: &[CharSlot],
-        case_sensitive: bool,
-        state: MatchState,
-    ) -> Vec<MatchState> {
-        self.alternatives
-            .iter()
-            .flat_map(|alternative| alternative.match_states(slots, case_sensitive, state.clone()))
-            .collect()
     }
 }
 
 impl Sequence {
     fn can_match_empty(&self) -> bool {
         self.pieces.iter().all(Piece::can_match_empty)
-    }
-
-    fn match_states(
-        &self,
-        slots: &[CharSlot],
-        case_sensitive: bool,
-        state: MatchState,
-    ) -> Vec<MatchState> {
-        self.match_piece_states(slots, case_sensitive, 0, state)
-    }
-
-    fn match_piece_states(
-        &self,
-        slots: &[CharSlot],
-        case_sensitive: bool,
-        piece_index: usize,
-        state: MatchState,
-    ) -> Vec<MatchState> {
-        let Some(piece) = self.pieces.get(piece_index) else {
-            return vec![state];
-        };
-        match piece {
-            Piece::AnchorStart => {
-                if state.end_slot == 0 {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::AnchorEnd => {
-                if state.end_slot == slots.len() {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::WordStart => {
-                if is_word_start(slots, state.end_slot) {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::WordEnd => {
-                if is_word_end(slots, state.end_slot) {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::WordBoundary => {
-                if is_word_boundary(slots, state.end_slot) {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::NotWordBoundary => {
-                if !is_word_boundary(slots, state.end_slot) {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                } else {
-                    Vec::new()
-                }
-            }
-            Piece::Consume { atom, quantifier } => self
-                .repeat_matches(slots, case_sensitive, state, atom, *quantifier)
-                .into_iter()
-                .flat_map(|state| {
-                    self.match_piece_states(slots, case_sensitive, piece_index + 1, state)
-                })
-                .collect(),
-        }
-    }
-
-    fn repeat_matches(
-        &self,
-        slots: &[CharSlot],
-        case_sensitive: bool,
-        state: MatchState,
-        atom: &Atom,
-        quantifier: Quantifier,
-    ) -> Vec<MatchState> {
-        let (minimum, maximum) = match quantifier {
-            Quantifier::One => (1, Some(1)),
-            Quantifier::ZeroOrMore => (0, None),
-            Quantifier::OneOrMore => (1, None),
-            Quantifier::ZeroOrOne => (0, Some(1)),
-            Quantifier::Counted { minimum, maximum } => (minimum, maximum),
-        };
-        let maximum =
-            maximum.unwrap_or_else(|| slots.len().saturating_sub(state.end_slot).max(minimum));
-        let mut results = Vec::new();
-        let bounds = RepeatBounds { minimum, maximum };
-        collect_repetition_matches(slots, case_sensitive, state, atom, 0, bounds, &mut results);
-        results
     }
 }
 
@@ -500,49 +814,6 @@ impl Atom {
             | Self::WordCharacter
             | Self::NotWordCharacter
             | Self::Class(_) => false,
-        }
-    }
-
-    fn matches(&self, character: char, case_sensitive: bool) -> bool {
-        match self {
-            Self::Any => true,
-            Self::Literal(literal) => chars_match(character, *literal, case_sensitive),
-            Self::WordCharacter => is_word_character(character),
-            Self::NotWordCharacter => !is_word_character(character),
-            Self::Class(class) => class.matches(character, case_sensitive),
-            Self::Group { .. } => false,
-        }
-    }
-
-    fn match_states(
-        &self,
-        slots: &[CharSlot],
-        case_sensitive: bool,
-        state: MatchState,
-    ) -> Vec<MatchState> {
-        match self {
-            Self::Any
-            | Self::Literal(_)
-            | Self::WordCharacter
-            | Self::NotWordCharacter
-            | Self::Class(_) => slots
-                .get(state.end_slot)
-                .filter(|slot| self.matches(slot.character, case_sensitive))
-                .map(|_| {
-                    vec![MatchState {
-                        end_slot: state.end_slot + 1,
-                        captures: state.captures,
-                    }]
-                })
-                .unwrap_or_default(),
-            Self::Group { index, expression } => expression
-                .match_states(slots, case_sensitive, state.clone())
-                .into_iter()
-                .map(|mut group_state| {
-                    group_state.captures[*index - 1] = Some((state.end_slot, group_state.end_slot));
-                    group_state
-                })
-                .collect(),
         }
     }
 }
@@ -600,6 +871,7 @@ struct Parser<'a> {
     chars: Vec<char>,
     index: usize,
     capture_count: usize,
+    group_nesting: usize,
     _input: &'a str,
 }
 
@@ -609,12 +881,17 @@ impl<'a> Parser<'a> {
             chars: input.chars().collect(),
             index: 0,
             capture_count: 0,
+            group_nesting: 0,
             _input: input,
         }
     }
 
     fn parse(&mut self) -> Result<Expression, PatternError> {
-        self.parse_expression(false)
+        let expression = self.parse_expression(false)?;
+        if self.capture_count > MAX_CAPTURES {
+            return Err(PatternError::new("regexp exceeds capture limit"));
+        }
+        Ok(expression)
     }
 
     fn parse_expression(&mut self, in_group: bool) -> Result<Expression, PatternError> {
@@ -647,9 +924,17 @@ impl<'a> Parser<'a> {
                         .ok_or_else(|| PatternError::new("trailing escape"))?;
                     match literal {
                         '(' => {
+                            self.group_nesting += 1;
+                            if self.group_nesting > MAX_GROUP_NESTING {
+                                return Err(PatternError::new(
+                                    "regexp exceeds group nesting limit",
+                                ));
+                            }
                             self.capture_count += 1;
                             let index = self.capture_count;
-                            let expression = self.parse_expression(true)?;
+                            let expression = self.parse_expression(true);
+                            self.group_nesting -= 1;
+                            let expression = expression?;
                             if self.peek_escaped() != Some(')') {
                                 return Err(PatternError::new("unterminated group"));
                             }
@@ -835,49 +1120,6 @@ impl<'a> Parser<'a> {
     }
 }
 
-fn collect_repetition_matches(
-    slots: &[CharSlot],
-    case_sensitive: bool,
-    state: MatchState,
-    atom: &Atom,
-    count: usize,
-    bounds: RepeatBounds,
-    results: &mut Vec<MatchState>,
-) {
-    if count < bounds.maximum {
-        for next_state in atom.match_states(slots, case_sensitive, state.clone()) {
-            if next_state.end_slot == state.end_slot {
-                if count + 1 < bounds.maximum {
-                    collect_repetition_matches(
-                        slots,
-                        case_sensitive,
-                        next_state,
-                        atom,
-                        count + 1,
-                        bounds,
-                        results,
-                    );
-                } else if count + 1 >= bounds.minimum {
-                    results.push(next_state);
-                }
-                continue;
-            }
-            collect_repetition_matches(
-                slots,
-                case_sensitive,
-                next_state,
-                atom,
-                count + 1,
-                bounds,
-                results,
-            );
-        }
-    }
-    if count >= bounds.minimum {
-        results.push(state);
-    }
-}
-
 fn regexp_is_smart_case_sensitive(pattern: &str) -> bool {
     let mut escaped = false;
     for character in pattern.chars() {
@@ -894,6 +1136,21 @@ fn regexp_is_smart_case_sensitive(pattern: &str) -> bool {
         }
     }
     false
+}
+
+#[cfg(test)]
+fn count_vm_thread_step() {
+    VM_THREAD_STEPS.set(VM_THREAD_STEPS.get() + 1);
+}
+
+#[cfg(not(test))]
+fn count_vm_thread_step() {}
+
+#[cfg(test)]
+fn measured_vm_thread_steps<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+    VM_THREAD_STEPS.set(0);
+    let result = operation();
+    (result, VM_THREAD_STEPS.get())
 }
 
 fn find_literal_forward_match(
@@ -1075,7 +1332,10 @@ fn start_slots_from_byte(
 
 #[cfg(test)]
 mod tests {
-    use super::{Atom, PatternKind, Piece, Quantifier, RegexpPattern, SearchPattern};
+    use super::{
+        Atom, MAX_CAPTURES, MAX_GROUP_NESTING, MAX_PATTERN_CHARS, PatternKind, Piece, Quantifier,
+        RegexpPattern, SearchPattern, char_slots, measured_vm_thread_steps,
+    };
 
     fn regexp(pattern: &str) -> SearchPattern {
         SearchPattern::compile(PatternKind::Regexp, pattern).expect("regexp should compile")
@@ -1872,5 +2132,114 @@ mod tests {
                 "{pattern} should be invalid"
             );
         }
+    }
+
+    #[test]
+    fn regexp_rejects_patterns_over_character_limit() {
+        let pattern = "a".repeat(MAX_PATTERN_CHARS + 1);
+
+        let error = RegexpPattern::compile(&pattern).expect_err("oversized pattern should fail");
+
+        assert!(error.message.contains("character limit"));
+    }
+
+    #[test]
+    fn regexp_rejects_too_many_captures() {
+        let pattern = r"\(\)".repeat(MAX_CAPTURES + 1);
+
+        let error = RegexpPattern::compile(&pattern).expect_err("excess captures should fail");
+
+        assert!(error.message.contains("capture limit"));
+    }
+
+    #[test]
+    fn regexp_rejects_excessive_group_nesting() {
+        let pattern = format!(
+            "{}{}",
+            r"\(".repeat(MAX_GROUP_NESTING + 1),
+            r"\)".repeat(MAX_GROUP_NESTING + 1)
+        );
+
+        let error = RegexpPattern::compile(&pattern).expect_err("deep nesting should fail");
+
+        assert!(error.message.contains("group nesting limit"));
+    }
+
+    #[test]
+    fn regexp_rejects_programs_over_instruction_limit() {
+        assert!(RegexpPattern::compile(r"a\{4095\}").is_ok());
+
+        let error =
+            RegexpPattern::compile(r"a\{1000000000\}").expect_err("oversized program should fail");
+
+        assert!(error.message.contains("instruction limit"));
+    }
+
+    #[test]
+    fn regexp_vm_handles_long_optional_chain() {
+        let optional_count = 300;
+        let pattern_text = format!("{}b", "a?".repeat(optional_count));
+        let line = "a".repeat(optional_count);
+        let pattern = RegexpPattern::compile(&pattern_text).expect("regexp should compile");
+        let (result, steps) = measured_vm_thread_steps(|| pattern.find_forward(&line, 0));
+
+        assert_eq!(result, None);
+        assert_vm_work_is_linear(&pattern, &line, steps);
+    }
+
+    #[test]
+    fn regexp_vm_preserves_ordered_acceptance_priority() {
+        assert_eq!(regexp(r"a\|aa").find_forward_in_line("aa", 0), Some((0, 1)));
+        assert_eq!(regexp("a*").find_forward_in_line("aaa", 0), Some((0, 3)));
+    }
+
+    #[test]
+    fn regexp_vm_handles_ambiguous_repeated_alternative() {
+        let line = "a".repeat(5_000);
+        let pattern = RegexpPattern::compile(r"\(a\|aa\)*b").expect("regexp should compile");
+        let (result, steps) = measured_vm_thread_steps(|| pattern.find_forward(&line, 0));
+
+        assert_eq!(result, None);
+        assert_vm_work_is_linear(&pattern, &line, steps);
+    }
+
+    #[test]
+    fn regexp_vm_handles_repeated_greedy_atoms() {
+        let pattern_text = format!("{}b", "a*".repeat(200));
+        let line = "a".repeat(5_000);
+        let pattern = RegexpPattern::compile(&pattern_text).expect("regexp should compile");
+        let (result, steps) = measured_vm_thread_steps(|| pattern.find_forward(&line, 0));
+
+        assert_eq!(result, None);
+        assert_vm_work_is_linear(&pattern, &line, steps);
+    }
+
+    #[test]
+    fn regexp_rejects_unbounded_nullable_repetition() {
+        for pattern in [r"\(\|a\)*", r"\(a*\)+", r"\(\)\{1,\}"] {
+            let error = RegexpPattern::compile(pattern)
+                .expect_err("unbounded nullable repetition should fail");
+
+            assert!(error.message.contains("empty-matching atom"), "{pattern}");
+        }
+    }
+
+    #[test]
+    fn regexp_vm_handles_pathological_backward_search() {
+        let line = "a".repeat(5_000);
+        let pattern = RegexpPattern::compile(r"\(a\|aa\)*b").expect("regexp should compile");
+        let (result, steps) = measured_vm_thread_steps(|| pattern.find_backward(&line, 4_000));
+
+        assert_eq!(result, None);
+        assert_vm_work_is_linear(&pattern, &line, steps);
+    }
+
+    fn assert_vm_work_is_linear(pattern: &RegexpPattern, line: &str, steps: usize) {
+        let slot_count = char_slots(line).len() + 1;
+        let maximum_steps = pattern.program.instructions.len() * slot_count;
+        assert!(
+            steps <= maximum_steps,
+            "VM used {steps} thread steps; expected no more than {maximum_steps}"
+        );
     }
 }

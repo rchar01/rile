@@ -15,6 +15,10 @@ Interface features:
 
 Security fixes:
 
+* Regexp search, replacement, and highlighting now use a bounded iterative
+  matcher instead of recursive backtracking. Pathological failing patterns can
+  no longer trigger exponential matching or matcher stack overflow.
+
 * Auto-save files on Unix now use permissions no broader than the visited file
   or an existing recovery file, preventing permissive process umasks from
   exposing private buffer contents.

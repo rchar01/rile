@@ -521,6 +521,12 @@ bracket classes `[[:alpha:]]`, `[[:digit:]]`, `[[:alnum:]]`, `[[:space:]]`,
 literally. Rile does not implement regexp backreferences, syntax-class escapes,
 or multiline regexp matching; current unrecognized regexp escapes match the
 escaped character literally unless they are explicitly invalid syntax. Regexp
+compilation is bounded to 1,024 pattern characters, 32 captures, 64 nested
+groups, and 4,096 VM instructions. Unbounded `*`, `+`, and `\{m,\}` repetition
+is rejected when its atom can match empty text, avoiding ambiguous zero-width
+cycles in the limited engine. The parser compiles accepted patterns to an
+ordered Thompson program, and iterative Pike-style matching bounds work by the
+compiled program size and line length instead of recursively backtracking. Regexp
 replacement commands expand `\&` to the whole match, `\1` through `\9` to numbered
 captures, and `\\` to a literal backslash. Unmatched or missing captures expand to
 empty text, unsupported replacement backslash escapes are preserved literally,

@@ -1,5 +1,34 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Bound built-in regexp matching work.
+
+	* src/search_pattern.rs (Compiler, Program, Instruction, Thread,
+	SlotMatch): New types for compiling and running an ordered Thompson VM.
+	(RegexpPattern::compile_with_case): Enforce pattern, capture, nesting, and
+	compiled instruction limits.
+	(RegexpPattern::run_forward, RegexpPattern::run_backward,
+	RegexpPattern::add_thread, RegexpPattern::consuming_next): New iterative
+	matching implementation.
+	(Expression::match_states, Sequence::match_states,
+	Sequence::match_piece_states, Sequence::repeat_matches,
+	Atom::match_states, collect_repetition_matches): Remove recursive
+	backtracking implementation.
+	(measured_vm_thread_steps): New test helper.
+	(tests): Cover compile limits, ordered matching, bounded hostile patterns,
+	and rejected unbounded nullable repetition.
+	* tests/pty_search.rs
+	(regexp_incremental_search_bounds_optional_chain_work): New test.
+	* README.md: Document regexp limits.
+	* docs/architecture.md: Document the bounded regexp VM.
+	* docs/development.md: Document regexp limits and matching behavior.
+	* docs/testing.md: Document deterministic regexp complexity coverage.
+	* docs/emacs-function-reference.md: Document regexp limits.
+	* docs/regexp-engine-comparison.md: Record measured built-in VM size and
+	backend decision.
+	* NEWS: Announce the regexp availability fix.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Document regexp engine trade-offs and review thresholds.
 
 	* docs/regexp-engine-comparison.md: New file comparing a safe built-in VM

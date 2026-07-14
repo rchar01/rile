@@ -177,6 +177,9 @@ Basic editor keys:
   the same smart-case rule as literal search; uppercase regexp characters escaped
   with `\` do not make the whole search case-sensitive. Word constructs use
   Rile's Unicode-aware word definition: alphanumeric characters plus underscore.
+  The bounded built-in engine accepts at most 1,024 pattern characters, 32
+  captures, 64 nested groups, and 4,096 compiled instructions. It rejects an
+  unbounded quantifier applied to an atom that can match empty text.
 - `M-p` and `M-n` move through accepted search history while an
   incremental-search prompt is active. Accept a search with Enter to record it.
   Literal search and regexp search keep separate histories; forward and backward

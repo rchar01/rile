@@ -114,6 +114,27 @@ fn regexp_incremental_search_matches_and_repeats() -> Result<()> {
 }
 
 #[test]
+fn regexp_incremental_search_bounds_optional_chain_work() -> Result<()> {
+    let optional_count = 24;
+    let line = "a".repeat(optional_count);
+    let file = fixtures::named_temp_file(&format!("{line}\n"))?;
+    let mut rile = RilePty::spawn(file.path(), 12, 100)?;
+    let pattern = format!("{}b", "a?".repeat(optional_count));
+
+    rile.wait_for_screen_contains(&line)?;
+    rile.send("C-M-s", keys::ctrl_meta('s'))?;
+    rile.send("pathological regexp", pattern.as_bytes())?;
+    rile.wait_for_screen_contains(&format!("Failing regexp I-search: {pattern}"))?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.assert_status_contains("Ln 001 Col 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn regexp_incremental_search_uses_smart_case() -> Result<()> {
     let file = fixtures::named_temp_file("Status\nstatus\n123 ABC\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

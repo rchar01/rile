@@ -148,7 +148,12 @@ orderless matching.
 Incremental search and query replace are coordinated by `Editor` because they
 span prompts, cursor movement, highlights, wrapping/failure state, and undo.
 Buffer traversal is kept in `src/editor/search.rs`; literal and line-local
-regexp pattern matching lives in `src/search_pattern.rs`.
+regexp pattern matching lives in `src/search_pattern.rs`. The regexp parser
+compiles its AST into a size-limited ordered Thompson program. An iterative
+Pike-style VM keeps one highest-priority thread per instruction and input slot,
+preserving leftmost-first greedy matching and captures without recursive
+backtracking. Forward and backward scans inject candidate starts into the same
+bounded thread lists instead of restarting the matcher at every character.
 
 Registers support point, text, rectangle, and number values. Rectangles support
 mark mode, kill/copy/yank, delete, clear, open, string replacement, and line

@@ -78,23 +78,33 @@ The lockfile already contains `regex` through development dependencies, but the
 crate is not linked into the release executable. Its presence in `Cargo.lock`
 therefore does not reduce the runtime binary cost of adopting it.
 
-No exact Rile comparison build has been made yet. Published upstream
-measurements from the [`regex` size-reduction
-work](https://github.com/rust-lang/regex/pull/613) provide only planning ranges:
+The built-in VM was measured against its direct recursive-matcher baseline with
+Rust 1.96.1 and `cargo build --release --locked`:
+
+| Build | Executable | Text | Data | BSS |
+| --- | ---: | ---: | ---: | ---: |
+| Recursive baseline at `c749bb6` | 1,567,568 bytes | 1,271,821 | 31,008 | 1,739 |
+| Bounded built-in VM | 1,568,344 bytes | 1,272,429 | 31,272 | 915 |
+| Difference | +776 bytes | +608 | +264 | -824 |
+
+The 776-byte executable increase is well below the 0.1 MiB decision target.
+No Rile build using `regex` has been made. Published upstream measurements from
+the [`regex` size-reduction work](https://github.com/rust-lang/regex/pull/613)
+therefore remain planning ranges for that alternative:
 
 | Candidate | Planning Change From Current Binary | Planning Final Size |
 | --- | ---: | ---: |
-| Safe built-in VM replacing the current matcher | Decision target: no more than 0.1 MiB | Target: no more than about 1.5 MiB |
+| Safe built-in VM replacing the current matcher | Measured: +776 bytes | Measured: 1,568,344 bytes |
 | `regex` with only `std` | Historical upstream range: about 0.3-0.6 MiB | Estimate: about 1.7-2.0 MiB |
 | `regex` with selected Unicode and performance features | Derived estimate: about 0.5-0.9 MiB | Estimate: about 1.9-2.3 MiB |
 | `regex` with all default features | Historical upper estimate: up to about 1.3 MiB | Estimate: about 2.7 MiB |
 
-Only the v0.9.0 baseline is a Rile measurement. The built-in number is a decision
-target, and every `regex` number is a planning estimate derived from older
-upstream measurements. Final size depends on the Rust version, target, linker,
-feature set, release profile, and dead-code elimination. A tailored Rile build
-likely needs Unicode case folding and word support, so the `std`-only figure is
-a lower bound rather than the expected configuration.
+The built-in measurements are exact for the stated toolchain and profile. Every
+`regex` number is a planning estimate derived from older upstream measurements.
+Final size depends on the Rust version, target, linker, feature set, release
+profile, and dead-code elimination. A tailored Rile build likely needs Unicode
+case folding and word support, so the `std`-only figure is a lower bound rather
+than the expected configuration.
 
 ## Review Thresholds
 
@@ -146,8 +156,10 @@ repetitions of nullable groups.
 
 ## Decision Rule
 
-Choose the safe built-in VM only when measurement shows a meaningful size
-advantage and its implementation remains bounded, testable, and maintainable.
-Otherwise use `regex`, accept the measured binary growth, remove the
+The bounded built-in VM is retained because deterministic tests demonstrate
+linear state processing for hostile patterns, accepted patterns preserve the
+existing conformance and capture behavior, and the measured executable increase
+is only 776 bytes. Revisit this decision if a review threshold above is crossed;
+then use `regex`, accept its measured binary growth, remove the
 no-external-engine architecture guard, and keep Rile's user-visible behavior in
 a focused compatibility layer.

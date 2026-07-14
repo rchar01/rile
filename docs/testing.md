@@ -42,6 +42,13 @@ For example, `tests/source_architecture.rs` guards that Rile's built-in regexp
 engine type stays private to `src/search_pattern.rs` and flags common external
 regex crate dependencies for intentional review.
 
+Regexp unit tests also count test-only VM thread steps for hostile optional,
+ambiguous-alternative, and repeated-atom patterns. They assert work stays within
+the compiled instruction count times the line's character slots, avoiding
+flaky wall-clock thresholds. A representative PTY regression sends a failing
+optional-chain regexp through incremental search and confirms redraw and later
+input remain responsive.
+
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile`
 binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal
 output with `vt100`, and assert screen contents, cursor position, status text,
