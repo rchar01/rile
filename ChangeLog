@@ -1,5 +1,12 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Cover terminal-control escaping in save-some-buffers prompts.
+
+	* tests/pty_save.rs
+	(save_some_buffers_prompt_escapes_terminal_controls): New test.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Keep auto-revert file errors inside the editor session.
 
 	* src/editor.rs (AutoRevertFailure): New type.

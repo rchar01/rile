@@ -133,6 +133,33 @@ fn save_some_buffers_prompts_for_each_modified_file_buffer() -> Result<()> {
 }
 
 #[test]
+fn save_some_buffers_prompt_escapes_terminal_controls() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let path = directory
+        .path()
+        .join("name_\u{1b}]0;SAVE_SOME_PWN\u{7}.txt");
+    std::fs::write(&path, "original\n")?;
+    let mut rile = RilePty::spawn(&path, 12, 160)?;
+
+    rile.wait_for_screen_contains("original")?;
+    rile.send("edit file", b"modified ")?;
+    rile.wait_for_screen_contains("modified original")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("s", b"s")?;
+
+    rile.wait_for_screen_contains("Save file name_\\u{1b}]0;SAVE_SOME_PWN\\u{7}.txt? (yes or no)")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;SAVE_SOME_PWN\x07")?;
+
+    rile.send("no", b"no")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("No buffers saved")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;SAVE_SOME_PWN\x07")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn save_some_buffers_cancel_leaves_buffers_unsaved() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let first = directory.path().join("first-cancel.txt");
