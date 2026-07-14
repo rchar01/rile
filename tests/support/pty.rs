@@ -10,7 +10,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use expectrl::{Eof, Expect, Session, process::unix::PtyStream, process::unix::UnixProcess};
+use expectrl::{Expect, Session, process::unix::PtyStream, process::unix::UnixProcess};
 use tempfile::TempDir;
 
 use super::{fixtures, keys, screen};
@@ -20,6 +20,7 @@ type PtySession = Session<UnixProcess, PtyStream>;
 pub struct RilePty {
     session: PtySession,
     parser: vt100::Parser,
+    raw_output: Vec<u8>,
     _home: TempDir,
     file: PathBuf,
     rows: u16,
@@ -81,6 +82,7 @@ impl RilePty {
         Ok(Self {
             session,
             parser: vt100::Parser::new(rows, columns, 0),
+            raw_output: Vec::new(),
             _home: home,
             file: file.to_path_buf(),
             rows,
@@ -106,7 +108,10 @@ impl RilePty {
         while Instant::now() < deadline {
             match self.session.try_read(&mut buffer) {
                 Ok(0) => return Ok(()),
-                Ok(bytes_read) => self.parser.process(&buffer[..bytes_read]),
+                Ok(bytes_read) => {
+                    self.raw_output.extend_from_slice(&buffer[..bytes_read]);
+                    self.parser.process(&buffer[..bytes_read]);
+                }
                 Err(error) if error.kind() == ErrorKind::WouldBlock => {
                     thread::sleep(Duration::from_millis(10));
                 }
@@ -167,6 +172,24 @@ impl RilePty {
 
     pub fn cursor_position(&self) -> (u16, u16) {
         self.parser.screen().cursor_position()
+    }
+
+    pub fn raw_output(&self) -> &[u8] {
+        &self.raw_output
+    }
+
+    pub fn assert_raw_output_excludes(&self, unexpected: &[u8]) -> Result<()> {
+        if self
+            .raw_output
+            .windows(unexpected.len())
+            .any(|window| window == unexpected)
+        {
+            bail!(
+                "raw terminal output contained an untrusted control sequence after {}",
+                self.last_action
+            );
+        }
+        Ok(())
     }
 
     pub fn assert_cursor(&self, expected_row: u16, expected_column: u16) -> Result<()> {
@@ -230,6 +253,7 @@ impl RilePty {
             match self.session.try_read(&mut buffer) {
                 Ok(0) => return Ok(false),
                 Ok(bytes_read) => {
+                    self.raw_output.extend_from_slice(&buffer[..bytes_read]);
                     self.parser.process(&buffer[..bytes_read]);
                     if self.snapshot_text().contains(prompt) {
                         return Ok(true);
@@ -250,11 +274,25 @@ impl RilePty {
     }
 
     pub fn expect_exit(&mut self) -> Result<()> {
-        self.session
-            .expect(Eof)
-            .context("rile did not exit cleanly")?;
-        self.closed = true;
-        Ok(())
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut buffer = [0; 4096];
+        while Instant::now() < deadline {
+            match self.session.try_read(&mut buffer) {
+                Ok(0) => {
+                    self.closed = true;
+                    return Ok(());
+                }
+                Ok(bytes_read) => {
+                    self.raw_output.extend_from_slice(&buffer[..bytes_read]);
+                    self.parser.process(&buffer[..bytes_read]);
+                }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => return Err(error).context("failed to read PTY while awaiting exit"),
+            }
+        }
+        bail!("rile did not exit cleanly\n{}", self.screen_dump())
     }
 
     pub fn screen_rows(&self) -> Vec<String> {

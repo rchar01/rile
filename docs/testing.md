@@ -42,7 +42,12 @@ For example, `tests/source_architecture.rs` guards that Rile's built-in regexp
 engine type stays private to `src/search_pattern.rs` and flags common external
 regex crate dependencies for intentional review.
 
-PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile` binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal output with `vt100`, and assert screen contents, cursor position, status text, scrolling, splits, and save behavior.
+PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile`
+binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal
+output with `vt100`, and assert screen contents, cursor position, status text,
+scrolling, splits, and save behavior. The harness also retains raw output for
+narrow security assertions that untrusted terminal control sequences were not
+emitted.
 
 Parsed-screen snapshots live under `tests/snapshots/`. They are generated from normalized VT100 screen state, not raw ANSI bytes. Snapshots include terminal size, cursor position, visible rows, and a caret marker.
 
@@ -81,7 +86,11 @@ Keep PTY tests focused on terminal integration and user-visible rendering. Do no
 
 PTY cursor assertions use zero-based terminal coordinates from `vt100::Screen::cursor_position()`, not one-based user-facing mode-line coordinates. For single-width fixture text at viewport origin, logical buffer line and display column map directly to terminal row and column. If a viewport has scrolled or a split pane starts below or to the right of the terminal origin, add the viewport row or column offset before comparing with the parsed terminal cursor.
 
-Failure output should stay readable without raw ANSI inspection. The harness should include the scenario action, expected and actual cursor positions when relevant, normalized visible rows, and a caret marker.
+Failure output should stay readable without general raw ANSI inspection. Prefer
+parsed-screen assertions; inspect retained raw bytes only when the emitted
+control sequence itself is the behavior under test. The harness should include
+the scenario action, expected and actual cursor positions when relevant,
+normalized visible rows, and a caret marker.
 
 ## Fixtures
 

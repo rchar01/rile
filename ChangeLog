@@ -1,5 +1,42 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Escape controls at the terminal display boundary.
+
+	* src/text.rs (control_character_escape): New helper.
+	(tests): Cover visible ASCII control escapes.
+	* src/editor.rs (escape_buffer_list_field): Reuse the shared helper.
+	* src/terminal/mod.rs (escape_terminal_controls): New function.
+	(AnsiTerminal::write_safe_text): Reject raw controls in display text.
+	(AnsiTerminal::write_control_sequence): Add a trusted ANSI path.
+	(byte_from_display_column_with_tabs, display_character_width,
+	visible_display_range, expand_display_text,
+	write_expanded_line_with_spans): New helpers.
+	(write_fixed_width_text, write_fixed_width_text_with_face,
+	write_fixed_width_text_with_spans, text_clipped_to_display_width,
+	clipped_text, write_text_with_face, write_display_text,
+	display_width_with_tabs): Escape controls and account for visible widths.
+	(completion_candidate_column_width, format_completion_row): Use display
+	width for terminal-safe completion layout.
+	(tests): Cover safe text rejection, control escaping, clipping, and hostile
+	file frames.
+	* src/main.rs (main): Escape controls in terminal diagnostics.
+	* tests/support/pty.rs (RilePty): Retain raw terminal output and assert that
+	untrusted sequences are absent.
+	* tests/pty_open.rs
+	(escapes_terminal_controls_from_file_name_and_contents): New test.
+	* tests/pty_completion.rs
+	(find_file_prompt_and_completion_escape_terminal_controls): New test.
+	* tests/pty_shell_command.rs
+	(shell_output_escapes_terminal_control_sequences): New test.
+	* tests/cli_security.rs: New startup diagnostic regression test.
+	* README.md: Document terminal-visible control escaping.
+	* NEWS: Generalize the control-escaping release note.
+	* docs/architecture.md: Document the trusted ANSI boundary.
+	* docs/development.md: Update control-rendering behavior.
+	* docs/testing.md: Document targeted raw PTY assertions.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Escape control characters in buffer lists.
 
 	* src/editor.rs (Editor::buffer_list_contents): Escape buffer names and

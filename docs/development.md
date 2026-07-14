@@ -451,9 +451,10 @@ mode rather than always-on base editing.
 Post-Milestone 14 editing polish adds `C-q` / `quoted-insert`. It waits for the
 next key with a `C-q-` minibuffer message, then inserts printable UTF-8 text,
 Tab, or Enter literally. NUL and other control, Meta, or special keys are
-rejected with explicit errors because Rile's renderer writes buffer text directly
-to the terminal and should not store arbitrary C0 control bytes yet. Read-only
-buffers block quoted insert before entering the pending quoted state.
+rejected with explicit errors. Buffer text and other terminal-visible strings
+that already contain C0 or C1 controls render them as visible escapes instead of
+terminal control sequences. Read-only buffers block quoted insert before
+entering the pending quoted state.
 
 Post-Milestone 14 editing polish also adds `M-^` / `join-line`. It joins the
 current line to the previous line, trims trailing whitespace before the newline
@@ -559,13 +560,21 @@ current-session auto-save files by default while preserving pre-existing
 recovery files, and opening a file with a newer auto-save file emits a warning
 so the auto-save file can be opened manually for recovery.
 
-Visual terminal testing has started with `--visual-test` and `--test-size WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY tests assert parsed `vt100` screen state instead of raw escape bytes.
+Visual terminal testing has started with `--visual-test` and `--test-size
+WIDTHxHEIGHT`. Visual-test mode uses default config instead of user config and
+renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY
+tests normally assert parsed `vt100` screen state; targeted security tests also
+inspect retained raw output for untrusted control sequences.
 
 ## Line Ending Policy
 
 The in-memory buffer model uses `\n` as the only line separator. `Buffer::from_text` splits on `\n`, `Buffer::serialize` joins lines with `\n`, and `Buffer::final_newline` records whether the serialized text ends with a final newline.
 
-The current file policy preserves carriage return bytes as ordinary text. CRLF files therefore round-trip as CRLF when saved without editing those line endings, while newly inserted line breaks use `\n`. A later polishing milestone can add explicit line-ending detection and conversion controls if needed.
+The current file policy preserves carriage return bytes as ordinary text. CRLF
+files therefore round-trip as CRLF when saved without editing those line
+endings, while newly inserted line breaks use `\n`. Preserved carriage returns
+display as visible `\r` escapes. A later polishing milestone can add explicit
+line-ending detection and conversion controls if needed.
 
 ## Save Safety
 

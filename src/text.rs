@@ -7,6 +7,16 @@ pub(crate) fn is_word_character(character: char) -> bool {
     character == '_' || character.is_alphanumeric()
 }
 
+pub(crate) fn control_character_escape(character: char) -> Option<String> {
+    match character {
+        '\n' => Some("\\n".to_owned()),
+        '\r' => Some("\\r".to_owned()),
+        '\t' => Some("\\t".to_owned()),
+        character if character.is_control() => Some(format!("\\u{{{:x}}}", character as u32)),
+        _ => None,
+    }
+}
+
 pub(crate) fn move_word_forward_byte(text: &str, byte: usize) -> usize {
     assert!(text.is_char_boundary(byte));
     let mut seen_word = false;
@@ -69,7 +79,23 @@ fn previous_grapheme_boundary(text: &str, byte: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{move_word_backward_byte, move_word_forward_byte};
+    use super::{control_character_escape, move_word_backward_byte, move_word_forward_byte};
+
+    #[test]
+    fn formats_control_characters_as_visible_ascii_escapes() {
+        assert_eq!(control_character_escape('\n').as_deref(), Some("\\n"));
+        assert_eq!(control_character_escape('\r').as_deref(), Some("\\r"));
+        assert_eq!(control_character_escape('\t').as_deref(), Some("\\t"));
+        assert_eq!(
+            control_character_escape('\u{1b}').as_deref(),
+            Some("\\u{1b}")
+        );
+        assert_eq!(
+            control_character_escape('\u{9b}').as_deref(),
+            Some("\\u{9b}")
+        );
+        assert_eq!(control_character_escape('a'), None);
+    }
 
     #[test]
     fn moves_forward_by_word_boundaries() {

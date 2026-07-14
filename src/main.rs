@@ -24,6 +24,7 @@ fn main() -> ExitCode {
                 match rile::terminal::run_basic_editor(runtime_options) {
                     Ok(()) => ExitCode::SUCCESS,
                     Err(error) => {
+                        let error = rile::terminal::escape_terminal_controls(&error.to_string());
                         eprintln!("rile: {error}");
                         ExitCode::FAILURE
                     }
@@ -31,6 +32,7 @@ fn main() -> ExitCode {
             }
         },
         Err(error) => {
+            let error = rile::terminal::escape_terminal_controls(&error.to_string());
             eprintln!("rile: {error}");
             ExitCode::FAILURE
         }

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::io::{self, IsTerminal, Read, Write};
+use std::ops::Range;
 use std::os::fd::AsRawFd;
 use std::path::Path;
 
@@ -13,6 +14,7 @@ use crate::file::Document;
 use crate::input::KeyReader;
 use crate::minibuffer::PromptKind;
 use crate::render::{Face, Span, clip_spans, merge_spans};
+use crate::text::control_character_escape;
 use crate::window::{Viewport, WindowLayout, WindowSeparator};
 use crate::{Result, RileError};
 use unicode_width::UnicodeWidthChar;
@@ -28,6 +30,18 @@ pub struct RuntimeOptions<'a> {
     pub file: Option<&'a Path>,
     pub visual_test: bool,
     pub test_size: Option<TerminalSize>,
+}
+
+pub fn escape_terminal_controls(text: &str) -> String {
+    let mut escaped = String::new();
+    for character in text.chars() {
+        if let Some(replacement) = control_character_escape(character) {
+            escaped.push_str(&replacement);
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -214,8 +228,18 @@ impl<W: Write> AnsiTerminal<W> {
         Ok(())
     }
 
-    pub fn write_text(&mut self, text: &str) -> Result<()> {
+    fn write_safe_text(&mut self, text: &str) -> Result<()> {
+        if text.chars().any(char::is_control) {
+            return Err(RileError::InvalidInput(
+                "terminal display text contains a control character".to_owned(),
+            ));
+        }
         self.writer.write_all(text.as_bytes())?;
+        Ok(())
+    }
+
+    fn write_control_sequence(&mut self, sequence: &str) -> Result<()> {
+        self.writer.write_all(sequence.as_bytes())?;
         Ok(())
     }
 
@@ -642,10 +666,14 @@ fn text_from_display_column(text: &str, start_column: usize) -> String {
 }
 
 fn byte_from_display_column(text: &str, start_column: usize) -> usize {
+    byte_from_display_column_with_tabs(text, start_column, 4)
+}
+
+fn byte_from_display_column_with_tabs(text: &str, start_column: usize, tab_width: usize) -> usize {
     let mut column = 0;
     let mut start_byte = text.len();
     for (byte, character) in text.char_indices() {
-        let next_column = column + character.width().unwrap_or(0);
+        let next_column = column + display_character_width(character, tab_width, column);
         if next_column > start_column {
             start_byte = byte;
             break;
@@ -666,9 +694,7 @@ fn move_cursor_to_minibuffer<W: Write>(
 }
 
 fn text_display_width(text: &str) -> usize {
-    text.chars()
-        .map(|character| character.width().unwrap_or(0))
-        .sum()
+    display_width_with_tabs(text, 4)
 }
 
 fn completion_candidate_column_width(
@@ -680,7 +706,7 @@ fn completion_candidate_column_width(
     }
     let visible_max = items
         .iter()
-        .map(|item| item.candidate.display_label().chars().count())
+        .map(|item| text_display_width(&item.candidate.display_label()))
         .max()
         .unwrap_or(1)
         .max(1);
@@ -704,10 +730,10 @@ fn format_completion_row(
     let description_gap = 8;
     let candidate_limit = candidate_width.min(columns.saturating_sub(description_gap + 1));
     let candidate = clipped_text(candidate, candidate_limit);
-    let padding = candidate_width.saturating_sub(candidate.chars().count()) + description_gap;
+    let padding = candidate_width.saturating_sub(text_display_width(&candidate)) + description_gap;
     let mut line = candidate;
     line.push_str(&" ".repeat(padding));
-    if line.chars().count() < columns {
+    if text_display_width(&line) < columns {
         line.push_str(annotation);
     }
     clipped_text(&line, columns)
@@ -967,15 +993,17 @@ fn write_wrapped_help_line<W: Write>(
     let Some(line) = buffer.line(visual_line.line_index) else {
         return write_fixed_width_text(terminal, "", options.width);
     };
+    let (line, spans) = expand_display_text(line, spans, options.tab_width);
     let content_width = wrapped_help_content_width(options.width, visual_line.continued);
-    let range = buffer.visible_range(
-        visual_line.line_index,
+    let range = visible_display_range(
+        &line,
         visual_line.start_column,
         content_width,
-    )?;
-    let relative_spans = clip_spans(spans, range.clone());
+        options.tab_width,
+    );
+    let relative_spans = clip_spans(&spans, range.clone());
     let segment = &line[range];
-    let mut used_width = write_line_with_spans(
+    let mut used_width = write_expanded_line_with_spans(
         terminal,
         segment,
         &relative_spans,
@@ -985,9 +1013,9 @@ fn write_wrapped_help_line<W: Write>(
     if visual_line.continued && options.width > 1 {
         let continuation_column = options.width.saturating_sub(1);
         if used_width < continuation_column {
-            terminal.write_text(&" ".repeat(continuation_column - used_width))?;
+            terminal.write_safe_text(&" ".repeat(continuation_column - used_width))?;
         }
-        terminal.write_text("\\")?;
+        terminal.write_safe_text("\\")?;
         used_width = options.width;
     }
     if used_width < options.width {
@@ -1002,7 +1030,7 @@ fn write_wrapped_help_line<W: Write>(
                 options.theme,
             )?;
         } else {
-            terminal.write_text(&padding)?;
+            terminal.write_safe_text(&padding)?;
         }
     }
     Ok(())
@@ -1120,25 +1148,31 @@ struct LineRenderOptions {
 
 fn write_buffer_line<W: Write>(
     terminal: &mut AnsiTerminal<W>,
-    buffer: &Buffer,
+    _buffer: &Buffer,
     viewport: &Viewport,
-    line_index: usize,
+    _line_index: usize,
     line: &str,
     spans: &[Span],
     options: LineRenderOptions,
 ) -> Result<()> {
-    let range = buffer.visible_range(line_index, viewport.first_visible_column, options.width)?;
+    let (line, spans) = expand_display_text(line, spans, options.tab_width);
+    let range = visible_display_range(
+        &line,
+        viewport.first_visible_column,
+        options.width,
+        options.tab_width,
+    );
     let segment = &line[range.clone()];
-    let line_width = display_width_with_tabs(line, options.tab_width);
+    let line_width = display_width_with_tabs(&line, options.tab_width);
     let left_hidden = viewport.first_visible_column > 0;
     let right_hidden = line_width > viewport.first_visible_column.saturating_add(options.width);
-    let relative_spans = clip_spans(spans, range);
+    let relative_spans = clip_spans(&spans, range);
     let (segment, relative_spans) = if left_hidden || right_hidden {
         mark_hidden_line_edges(segment, &relative_spans, left_hidden, right_hidden)
     } else {
         (segment.to_owned(), relative_spans)
     };
-    let used_width = write_line_with_spans(
+    let used_width = write_expanded_line_with_spans(
         terminal,
         &segment,
         &relative_spans,
@@ -1157,7 +1191,7 @@ fn write_buffer_line<W: Write>(
                 options.theme,
             )?;
         } else {
-            terminal.write_text(&padding)?;
+            terminal.write_safe_text(&padding)?;
         }
     }
     Ok(())
@@ -1209,11 +1243,11 @@ fn write_fixed_width_text<W: Write>(
     text: &str,
     width: usize,
 ) -> Result<()> {
-    let clipped: String = text.chars().take(width).collect();
-    terminal.write_text(&clipped)?;
-    let used = clipped.chars().count();
+    let (text, _) = expand_display_text(text, &[], 4);
+    let clipped = text_clipped_to_display_width(&text, width, 4);
+    let used = write_display_text(terminal, &clipped, 4, 0)?;
     if used < width {
-        terminal.write_text(&" ".repeat(width - used))?;
+        terminal.write_safe_text(&" ".repeat(width - used))?;
     }
     Ok(())
 }
@@ -1225,11 +1259,11 @@ fn write_fixed_width_text_with_face<W: Write>(
     face: Face,
     theme: ThemeName,
 ) -> Result<()> {
-    let clipped: String = text.chars().take(width).collect();
-    let used = clipped.chars().count();
-    write_text_with_face(terminal, &clipped, face, theme)?;
+    let (text, _) = expand_display_text(text, &[], 4);
+    let clipped = text_clipped_to_display_width(&text, width, 4);
+    let used = write_text_with_face_expanded(terminal, &clipped, face, 4, 0, theme)?;
     if used < width {
-        terminal.write_text(&" ".repeat(width - used))?;
+        terminal.write_safe_text(&" ".repeat(width - used))?;
     }
     Ok(())
 }
@@ -1241,20 +1275,21 @@ fn write_fixed_width_text_with_spans<W: Write>(
     width: usize,
     theme: ThemeName,
 ) -> Result<()> {
-    let clipped = text_clipped_to_display_width(text, width);
-    let clipped_spans = clip_spans(spans, 0..clipped.len());
-    let used = write_line_with_spans(terminal, &clipped, &clipped_spans, 4, theme)?;
+    let (text, spans) = expand_display_text(text, spans, 4);
+    let clipped = text_clipped_to_display_width(&text, width, 4);
+    let clipped_spans = clip_spans(&spans, 0..clipped.len());
+    let used = write_expanded_line_with_spans(terminal, &clipped, &clipped_spans, 4, theme)?;
     if used < width {
-        terminal.write_text(&" ".repeat(width - used))?;
+        terminal.write_safe_text(&" ".repeat(width - used))?;
     }
     Ok(())
 }
 
-fn text_clipped_to_display_width(text: &str, width: usize) -> String {
+fn text_clipped_to_display_width(text: &str, width: usize, tab_width: usize) -> String {
     let mut clipped = String::new();
     let mut used = 0;
     for character in text.chars() {
-        let character_width = character.width().unwrap_or(0);
+        let character_width = display_character_width(character, tab_width, used);
         if used + character_width > width {
             break;
         }
@@ -1268,14 +1303,13 @@ fn clipped_text(text: &str, width: usize) -> String {
     if width == 0 {
         return String::new();
     }
-    let mut characters = text.chars().collect::<Vec<_>>();
-    if characters.len() <= width {
+    if text_display_width(text) <= width {
         return text.to_owned();
     }
-    characters.truncate(width);
-    let last = characters.len() - 1;
-    characters[last] = '$';
-    characters.into_iter().collect()
+    let end = byte_from_display_column(text, width - 1);
+    let prefix = &text[..end];
+    let padding = width - 1 - text_display_width(prefix);
+    format!("{prefix}{}$", " ".repeat(padding))
 }
 
 fn write_text_with_face<W: Write>(
@@ -1284,14 +1318,7 @@ fn write_text_with_face<W: Write>(
     face: Face,
     theme: ThemeName,
 ) -> Result<()> {
-    if let Some(start_code) = face_start_code(face, theme) {
-        terminal.write_text(start_code)?;
-        terminal.write_text(text)?;
-        terminal.write_text("\x1b[0m")?;
-    } else {
-        terminal.write_text(text)?;
-    }
-    Ok(())
+    write_text_with_face_expanded(terminal, text, face, 4, 0, theme).map(|_| ())
 }
 
 fn move_cursor_to_current_window<W: Write>(
@@ -1410,7 +1437,19 @@ fn cursor_absolute_display_column(
     Ok(display_width_with_tabs(&line[..cursor.byte], tab_width))
 }
 
+#[cfg(test)]
 fn write_line_with_spans<W: Write>(
+    terminal: &mut AnsiTerminal<W>,
+    line: &str,
+    spans: &[Span],
+    tab_width: usize,
+    theme: ThemeName,
+) -> Result<usize> {
+    let (line, spans) = expand_display_text(line, spans, tab_width);
+    write_expanded_line_with_spans(terminal, &line, &spans, tab_width, theme)
+}
+
+fn write_expanded_line_with_spans<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     line: &str,
     spans: &[Span],
@@ -1444,6 +1483,40 @@ fn write_line_with_spans<W: Write>(
     write_display_text(terminal, &line[cursor..], tab_width, column)
 }
 
+fn expand_display_text(text: &str, spans: &[Span], tab_width: usize) -> (String, Vec<Span>) {
+    let mut expanded = String::new();
+    let mut byte_map = vec![(0, 0)];
+    let mut column = 0;
+    for (source_start, character) in text.char_indices() {
+        let source_end = source_start + character.len_utf8();
+        let target_start = expanded.len();
+        if character == '\t' {
+            let spaces = tab_spaces(tab_width, column);
+            expanded.push_str(&" ".repeat(spaces));
+            column += spaces;
+        } else if let Some(replacement) = control_character_escape(character) {
+            expanded.push_str(&replacement);
+            column += replacement.len();
+        } else {
+            expanded.push(character);
+            column += character.width().unwrap_or(0);
+        }
+        let target_end = expanded.len();
+        byte_map.push((source_start, target_start));
+        byte_map.push((source_end, target_end));
+    }
+
+    let spans = spans
+        .iter()
+        .filter_map(|span| {
+            let start = mapped_byte(&byte_map, span.start_byte)?;
+            let end = mapped_byte(&byte_map, span.end_byte)?;
+            (start < end).then(|| Span::new(start, end, span.face))
+        })
+        .collect();
+    (expanded, spans)
+}
+
 fn write_text_with_face_expanded<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     text: &str,
@@ -1453,9 +1526,9 @@ fn write_text_with_face_expanded<W: Write>(
     theme: ThemeName,
 ) -> Result<usize> {
     if let Some(start_code) = face_start_code(face, theme) {
-        terminal.write_text(start_code)?;
+        terminal.write_control_sequence(start_code)?;
         let column = write_display_text(terminal, text, tab_width, column)?;
-        terminal.write_text("\x1b[0m")?;
+        terminal.write_control_sequence("\x1b[0m")?;
         Ok(column)
     } else {
         write_display_text(terminal, text, tab_width, column)
@@ -1471,10 +1544,13 @@ fn write_display_text<W: Write>(
     for character in text.chars() {
         if character == '\t' {
             let spaces = tab_spaces(tab_width, column);
-            terminal.write_text(&" ".repeat(spaces))?;
+            terminal.write_safe_text(&" ".repeat(spaces))?;
             column += spaces;
+        } else if let Some(replacement) = control_character_escape(character) {
+            terminal.write_safe_text(&replacement)?;
+            column += replacement.len();
         } else {
-            terminal.write_text(&character.to_string())?;
+            terminal.write_safe_text(&character.to_string())?;
             column += character.width().unwrap_or(0);
         }
     }
@@ -1483,12 +1559,30 @@ fn write_display_text<W: Write>(
 
 fn display_width_with_tabs(text: &str, tab_width: usize) -> usize {
     text.chars().fold(0, |column, character| {
-        if character == '\t' {
-            column + tab_spaces(tab_width, column)
-        } else {
-            column + character.width().unwrap_or(0)
-        }
+        column + display_character_width(character, tab_width, column)
     })
+}
+
+fn display_character_width(character: char, tab_width: usize, column: usize) -> usize {
+    if character == '\t' {
+        tab_spaces(tab_width, column)
+    } else if let Some(replacement) = control_character_escape(character) {
+        replacement.len()
+    } else {
+        character.width().unwrap_or(0)
+    }
+}
+
+fn visible_display_range(
+    text: &str,
+    start_column: usize,
+    width: usize,
+    tab_width: usize,
+) -> Range<usize> {
+    let start = byte_from_display_column_with_tabs(text, start_column, tab_width);
+    let end =
+        byte_from_display_column_with_tabs(text, start_column.saturating_add(width), tab_width);
+    start..end
 }
 
 fn tab_spaces(tab_width: usize, column: usize) -> usize {
@@ -1629,13 +1723,16 @@ impl<W: Write> Drop for ScreenGuard<W> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::{
         AnsiTerminal, FrameOptions, LineRenderOptions, TerminalSize, clipped_text,
-        draw_editor_frame, draw_editor_frame_with_options, format_completion_row,
-        minibuffer_visible_line, mode_line_position, text_from_display_column,
-        wrapped_help_cursor_position, wrapped_help_visual_lines, write_buffer_line,
-        write_fixed_width_text_with_face, write_fixed_width_text_with_spans,
-        write_line_number_gutter, write_line_with_spans,
+        display_width_with_tabs, draw_editor_frame, draw_editor_frame_with_options,
+        escape_terminal_controls, expand_display_text, format_completion_row,
+        minibuffer_visible_line, mode_line_position, text_clipped_to_display_width,
+        text_from_display_column, visible_display_range, wrapped_help_cursor_position,
+        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
+        write_fixed_width_text_with_spans, write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
@@ -1652,12 +1749,60 @@ mod tests {
         terminal.hide_cursor().expect("hide cursor should write");
         terminal.move_cursor(2, 3).expect("move should write");
         terminal.clear_line().expect("clear line should write");
-        terminal.write_text("status").expect("text should write");
+        terminal
+            .write_safe_text("status")
+            .expect("text should write");
         terminal.show_cursor().expect("show cursor should write");
 
         assert_eq!(
             terminal.into_inner(),
             b"\x1b[?25l\x1b[2;3H\x1b[2Kstatus\x1b[?25h".to_vec()
+        );
+    }
+
+    #[test]
+    fn rejects_controls_from_the_safe_terminal_text_sink() {
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        let error = terminal
+            .write_safe_text("unsafe\u{1b}]0;title\u{7}")
+            .expect_err("control characters should be rejected");
+
+        assert!(error.to_string().contains("terminal display text"));
+        assert!(terminal.into_inner().is_empty());
+    }
+
+    #[test]
+    fn renders_control_characters_as_visible_escapes_with_faces() {
+        let text = "a\u{1b}]0;title\u{7}\r\u{9b}z";
+        let spans = [Span::new(1, 2, Face::Region)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_line_with_spans(&mut terminal, text, &spans, 4, ThemeName::Default)
+            .expect("render should succeed");
+
+        assert_eq!(
+            String::from_utf8(terminal.into_inner()).expect("output should be UTF-8"),
+            "a\x1b[44m\\u{1b}\x1b[0m]0;title\\u{7}\\r\\u{9b}z"
+        );
+        assert_eq!(display_width_with_tabs("a\u{1b}\tb", 4), 9);
+    }
+
+    #[test]
+    fn clipping_keeps_expanded_controls_and_tabs_on_source_boundaries() {
+        let (control, _) = expand_display_text("a\u{1b}b", &[], 4);
+        let (tab, _) = expand_display_text("a\tb", &[], 4);
+
+        assert_eq!(text_clipped_to_display_width(&control, 7, 4), "a\\u{1b}");
+        assert_eq!(&control[visible_display_range(&control, 2, 5, 4)], "u{1b}");
+        assert_eq!(&tab[visible_display_range(&tab, 2, 2, 4)], "  ");
+    }
+
+    #[test]
+    fn escapes_controls_for_terminal_diagnostics() {
+        assert_eq!(
+            escape_terminal_controls("bad\u{1b}]0;title\u{7}\npath\tname"),
+            "bad\\u{1b}]0;title\\u{7}\\npath\\tname"
         );
     }
 
@@ -1803,6 +1948,8 @@ mod tests {
         assert_eq!(clipped_text("abcdef", 4), "abc$");
         assert_eq!(clipped_text("abcdef", 1), "$");
         assert_eq!(clipped_text("abc", 4), "abc");
+        assert_eq!(clipped_text("界x", 2), " $");
+        assert_eq!(clipped_text("a界x", 3), "a $");
     }
 
     #[test]
@@ -2740,6 +2887,35 @@ mod tests {
         assert!(frame.contains("Rile VISUAL window 0 ACTIVE *scratch*"));
         assert!(frame.contains("Ln 001 Col 000"));
         assert!(frame.contains("modified:true"));
+    }
+
+    #[test]
+    fn rendered_frame_escapes_controls_from_file_names_and_contents() {
+        let directory = tempfile::tempdir().expect("test directory should exist");
+        let path = directory.path().join("name_\u{1b}]0;FILE_PWN\u{7}.txt");
+        fs::write(&path, "body_\u{1b}]0;BODY_PWN\u{7}\r\n")
+            .expect("malicious fixture should write");
+        let document = Document::open(&path).expect("malicious fixture should open");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 6,
+            columns: 160,
+        };
+
+        let bytes = rendered_frame_bytes_with_options(
+            &mut editor,
+            size,
+            FrameOptions {
+                visual_test: true,
+                ..FrameOptions::default()
+            },
+        );
+        let frame = String::from_utf8(bytes.clone()).expect("frame should be UTF-8");
+
+        assert!(!contains_bytes(&bytes, b"\x1b]0;FILE_PWN\x07"));
+        assert!(!contains_bytes(&bytes, b"\x1b]0;BODY_PWN\x07"));
+        assert!(frame.contains("body_\\u{1b}]0;BODY_PWN\\u{7}\\r"));
+        assert!(frame.contains("name_\\u{1b}]0;FILE_PWN\\u{7}.txt"));
     }
 
     fn rendered_cursor_position(editor: &mut Editor, size: TerminalSize) -> Option<(usize, usize)> {

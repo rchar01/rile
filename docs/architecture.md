@@ -121,6 +121,12 @@ Rendering is terminal-oriented. `src/terminal/mod.rs` prepares the visible rows,
 draws buffer text, gutters, mode lines, minibuffer prompts, completion candidates,
 and special-buffer contents, then places the terminal cursor.
 
+Dynamic display text crosses a control-escaping boundary before ANSI output.
+Tabs retain tab-stop expansion, while other C0 and C1 control characters render
+as visible ASCII escapes. Only renderer-owned cursor, clearing, and face
+sequences use the raw ANSI path. Display-width, clipping, span, and cursor
+calculations account for the expanded control representation.
+
 Decorations are expressed as face spans. `src/render/` merges overlapping spans by
 priority and clips them to the visible byte range. This lets syntax, region,
 search, query-replace, mode-line, minibuffer, warning, and error styling share

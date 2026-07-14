@@ -43,7 +43,12 @@ Current binary behavior:
 cargo run -- [file]
 ```
 
-Editing mode requires an interactive terminal. `--help` and `--version` work without one. When no file is provided, Rile opens a clean `*Rile*` welcome buffer. When a file path is provided, Rile opens it as UTF-8 before entering raw mode, rejects NUL-containing binary files, and shows file/dirty state, position, and major mode in the mode line.
+Editing mode requires an interactive terminal. `--help` and `--version` work
+without one. When no file is provided, Rile opens a clean `*Rile*` welcome
+buffer. When a file path is provided, Rile opens it as UTF-8 before entering raw
+mode, rejects NUL-containing binary files, and shows file/dirty state, position,
+and major mode in the mode line. Control characters in terminal-visible text
+render as visible escapes instead of terminal control sequences.
 
 Developer visual testing flags are available for deterministic terminal review: `--visual-test` uses deterministic defaults and a verbose visual-test mode line, while `--test-size WIDTHxHEIGHT` overrides terminal size during rendering.
 

@@ -29,7 +29,7 @@ use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::search_pattern::{PatternKind, SearchPattern};
 use crate::shell::{ShellCommandOutput, run_shell_command};
 use crate::syntax::{CommentSyntax, Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
-use crate::text::is_word_character;
+use crate::text::{control_character_escape, is_word_character};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSeparator, WindowSet};
 use crate::{Result, RileError};
 
@@ -9410,14 +9410,10 @@ fn format_shell_mutation_message(action: &str, stdout_bytes: usize, stderr_bytes
 fn escape_buffer_list_field(text: &str) -> String {
     let mut escaped = String::new();
     for character in text.chars() {
-        match character {
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            character if character.is_control() => {
-                escaped.push_str(&format!("\\u{{{:x}}}", character as u32));
-            }
-            character => escaped.push(character),
+        if let Some(replacement) = control_character_escape(character) {
+            escaped.push_str(&replacement);
+        } else {
+            escaped.push(character);
         }
     }
     escaped

@@ -30,6 +30,22 @@ fn opens_visual_fixture_in_pty() -> Result<()> {
 }
 
 #[test]
+fn escapes_terminal_controls_from_file_name_and_contents() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let file = directory.path().join("name_\u{1b}]0;FILE_PWN\u{7}.txt");
+    std::fs::write(&file, "body_\u{1b}]0;BODY_PWN\u{7}\r\n")?;
+    let mut rile = RilePty::spawn(&file, 8, 160)?;
+
+    rile.wait_for_screen_contains("body_\\u{1b}]0;BODY_PWN\\u{7}\\r")?;
+    rile.assert_status_contains("name_\\u{1b}]0;FILE_PWN\\u{7}.txt")?;
+
+    rile.quit()?;
+    rile.assert_raw_output_excludes(b"\x1b]0;FILE_PWN\x07")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;BODY_PWN\x07")?;
+    Ok(())
+}
+
+#[test]
 fn opens_file_read_only_and_blocks_editing() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let start = directory.path().join("start.txt");

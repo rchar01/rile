@@ -521,6 +521,30 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
 }
 
 #[test]
+fn find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let working = directory.path().join("dir_\u{1b}]0;PROMPT_PWN\u{7}");
+    fs::create_dir(&working)?;
+    let start = working.join("start.txt");
+    let hostile = working.join("evil_\u{1b}]0;COMPLETION_PWN\u{7}.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&hostile, "hostile name\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 200)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+
+    rile.wait_for_screen_contains("\\u{1b}]0;PROMPT_PWN\\u{7}")?;
+    rile.assert_screen_contains("evil_\\u{1b}]0;COMPLETION_PWN\\u{7}.txt")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;PROMPT_PWN\x07")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;COMPLETION_PWN\x07")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn vertical_find_file_long_base_path_keeps_prompt_tail_visible() -> Result<()> {
     let directory = tempfile::tempdir()?;
     let deep = directory

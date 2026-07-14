@@ -9,8 +9,9 @@ Interface features:
 
 * Side-by-side split windows now reserve and draw a visible separator column so
   adjacent buffer text and mode lines no longer run together.
-* Buffer list rows now display control characters in buffer names and file
-  paths as visible escapes instead of sending them to the terminal.
+* Terminal rendering now displays control characters from buffer text, file
+  names, paths, prompts, completions, messages, and command output as visible
+  escapes instead of sending them to the terminal.
 
 Editing features:
 
