@@ -6462,13 +6462,12 @@ impl Editor {
             let mode = MajorMode::for_path(document.path()).name();
             let file = document
                 .path()
-                .map(|path| path.display().to_string())
+                .map(|path| escape_buffer_list_field(&path.display().to_string()))
                 .unwrap_or_default();
+            let name = escape_buffer_list_field(entry.name());
             text.push_str(&format!(
                 "{current}{read_only}{modified} {:<32} {:>4} {:<12} {file}\n",
-                entry.name(),
-                size,
-                mode,
+                name, size, mode,
             ));
             rows.push(Some(entry.id()));
         }
@@ -9408,6 +9407,22 @@ fn format_shell_mutation_message(action: &str, stdout_bytes: usize, stderr_bytes
     }
 }
 
+fn escape_buffer_list_field(text: &str) -> String {
+    let mut escaped = String::new();
+    for character in text.chars() {
+        match character {
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character if character.is_control() => {
+                escaped.push_str(&format!("\\u{{{:x}}}", character as u32));
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -12201,6 +12216,60 @@ mod tests {
             .handle_key(KeyEvent::Ctrl('b'))
             .expect("buffers should refresh");
         assert_eq!(editor.window_count(), 2);
+    }
+
+    #[test]
+    fn buffer_list_escapes_terminal_controls_in_names_and_paths() {
+        let directory = TestDir::new();
+        let malicious = directory.path().join("evil_\u{1b}]0;RILE_PWN\u{7}.txt");
+        fs::write(&malicious, "owned\n").expect("malicious fixture should write");
+        let document = Document::open(&malicious).expect("malicious fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+
+        let list_buffer = editor
+            .buffers
+            .find_by_name("*Buffer List*")
+            .expect("buffer list should exist");
+        let text = editor
+            .document_for_buffer(list_buffer)
+            .expect("buffer list document should exist")
+            .buffer()
+            .serialize();
+
+        assert!(!text.contains('\u{1b}'));
+        assert!(!text.contains('\u{7}'));
+        assert!(text.contains("evil_\\u{1b}]0;RILE_PWN\\u{7}.txt"));
+    }
+
+    #[test]
+    fn buffer_list_escapes_line_breaks_and_tabs_in_names_and_paths() {
+        let directory = TestDir::new();
+        let unusual = directory.path().join("row\ninject\tname.txt");
+        fs::write(&unusual, "owned\n").expect("unusual fixture should write");
+        let document = Document::open(&unusual).expect("unusual fixture should open");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("list-buffers")
+            .expect("buffers should list");
+
+        let list_buffer = editor
+            .buffers
+            .find_by_name("*Buffer List*")
+            .expect("buffer list should exist");
+        let text = editor
+            .document_for_buffer(list_buffer)
+            .expect("buffer list document should exist")
+            .buffer()
+            .serialize();
+
+        assert!(!text.contains("row\ninject"));
+        assert!(!text.contains('\t'));
+        assert!(text.contains("row\\ninject\\tname.txt"));
     }
 
     #[test]

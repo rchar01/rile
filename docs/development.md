@@ -398,7 +398,9 @@ Post-Milestone 14 buffer polish adds `C-x C-b` / `list-buffers`. It refreshes a
 read-only `*Buffer List*` special buffer with `CRM Buffer Size Mode File`
 columns and displays it in another window while leaving the original buffer
 selected. Repeating `C-x C-b` reuses the existing list window. If the buffer list
-window is explicitly selected, `q` closes that window.
+window is explicitly selected, `q` closes that window. Buffer names and file
+paths render control characters as visible escapes so filesystem metadata is
+not written to the terminal as control sequences.
 
 Post-Milestone 14 file polish also adds `C-x i` / `insert-file`, prompting
 with `Insert file: ` and using the shared file-completion and relative-path
