@@ -39,6 +39,61 @@ fn open_file_by_path(rile: &mut RilePty, path: &std::path::Path, visible_text: &
     rile.wait_for_screen_contains(visible_text)
 }
 
+fn exercise_find_file_control_escaping(completion_style: &str) -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let working = directory.path().join("dir_\u{1b}]0;PROMPT_PWN\u{7}");
+    fs::create_dir(&working)?;
+    let start = working.join("start.txt");
+    let hostile = working.join("evil_\u{1b}]0;COMPLETION_PWN\u{7}.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&hostile, "hostile name\n")?;
+
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(
+        config_dir.join("config.toml"),
+        format!("completion_style = \"{completion_style}\"\n"),
+    )?;
+    let mut rile = RilePty::spawn_with_loaded_config(&start, 14, 200, home)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+
+    rile.wait_for_screen_contains("\\u{1b}]0;PROMPT_PWN\\u{7}")?;
+    rile.assert_screen_contains("evil_\\u{1b}]0;COMPLETION_PWN\\u{7}.txt")?;
+    match completion_style {
+        "vertical" => assert_prompt_counter(&rile, 1, "Find file:")?,
+        "completions-buffer" => {
+            rile.assert_screen_contains("Possible Completions for Find file:")?
+        }
+        "ido" => {
+            let prompt_row = rile
+                .screen_rows()
+                .into_iter()
+                .find(|row| row.contains("Find file:"))
+                .unwrap_or_default();
+            assert!(
+                prompt_row.contains("evil_\\u{1b}]0;COMPLETION_PWN\\u{7}.txt"),
+                "ido candidate should render in the minibuffer\n{}",
+                rile.screen_dump()
+            );
+        }
+        _ => unreachable!("test uses a supported completion style"),
+    }
+    rile.assert_raw_output_excludes(b"\x1b]0;PROMPT_PWN\x07")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;COMPLETION_PWN\x07")?;
+
+    rile.send("Tab", keys::TAB)?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("hostile name")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;PROMPT_PWN\x07")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;COMPLETION_PWN\x07")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
 #[test]
 fn vertical_mx_completion_filters_and_accepts_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
@@ -522,26 +577,17 @@ fn vertical_find_file_completion_tab_inserts_selected_file() -> Result<()> {
 
 #[test]
 fn find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> {
-    let directory = tempfile::tempdir()?;
-    let working = directory.path().join("dir_\u{1b}]0;PROMPT_PWN\u{7}");
-    fs::create_dir(&working)?;
-    let start = working.join("start.txt");
-    let hostile = working.join("evil_\u{1b}]0;COMPLETION_PWN\u{7}.txt");
-    fs::write(&start, "start\n")?;
-    fs::write(&hostile, "hostile name\n")?;
-    let mut rile = RilePty::spawn(&start, 14, 200)?;
+    exercise_find_file_control_escaping("vertical")
+}
 
-    rile.wait_for_screen_contains("start")?;
-    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+#[test]
+fn ido_find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> {
+    exercise_find_file_control_escaping("ido")
+}
 
-    rile.wait_for_screen_contains("\\u{1b}]0;PROMPT_PWN\\u{7}")?;
-    rile.assert_screen_contains("evil_\\u{1b}]0;COMPLETION_PWN\\u{7}.txt")?;
-    rile.assert_raw_output_excludes(b"\x1b]0;PROMPT_PWN\x07")?;
-    rile.assert_raw_output_excludes(b"\x1b]0;COMPLETION_PWN\x07")?;
-
-    rile.send("C-g", keys::control('g'))?;
-    rile.quit()?;
-    Ok(())
+#[test]
+fn completions_buffer_find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> {
+    exercise_find_file_control_escaping("completions-buffer")
 }
 
 #[test]

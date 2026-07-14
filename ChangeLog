@@ -1,5 +1,17 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Extend file completion terminal-control regressions.
+
+	* tests/pty_completion.rs (exercise_find_file_control_escaping): New
+	helper that verifies escaped display, raw-output exclusion, and selection.
+	(find_file_prompt_and_completion_escape_terminal_controls): Use it for
+	vertical completion.
+	(ido_find_file_prompt_and_completion_escape_terminal_controls,
+	completions_buffer_find_file_prompt_and_completion_escape_terminal_controls):
+	New tests.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Escape controls at the terminal display boundary.
 
 	* src/text.rs (control_character_escape): New helper.
