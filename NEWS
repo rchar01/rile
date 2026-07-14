@@ -15,6 +15,10 @@ Interface features:
 
 Security fixes:
 
+* Auto-revert metadata, read, and decode failures are now reported without
+  ending the editor session and potentially losing unsaved changes in other
+  buffers.
+
 * Regexp search, replacement, and highlighting now use a bounded iterative
   matcher instead of recursive backtracking. Pathological failing patterns can
   no longer trigger exponential matching or matcher stack overflow.

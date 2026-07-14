@@ -251,3 +251,23 @@ fn auto_revert_mode_does_not_reload_dirty_buffer() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn auto_revert_mode_reports_binary_reload_error_and_stays_running() -> Result<()> {
+    let file = fixtures::named_temp_file("before\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("before")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("auto-revert-mode", b"auto-revert-mode")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.assert_screen_contains("Auto-revert for")?;
+    std::fs::write(file.path(), b"bad\0contents")?;
+
+    rile.wait_for_screen_contains("Auto-revert failed for")?;
+    rile.send("edit after auto-revert error", b"x")?;
+    rile.assert_screen_contains("xbefore")?;
+
+    rile.quit()?;
+    Ok(())
+}

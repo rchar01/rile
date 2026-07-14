@@ -1,5 +1,25 @@
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
+	Keep auto-revert file errors inside the editor session.
+
+	* src/editor.rs (AutoRevertFailure): New type.
+	(Editor::poll_auto_revert): Report per-buffer metadata and reload failures
+	while continuing other watched buffers. Delay retries and suppress repeated
+	diagnostics for unchanged failures.
+	(Editor::toggle_auto_revert_mode,
+	Editor::command_global_auto_revert_mode,
+	Editor::finish_kill_buffer_with_message): Reset stale failure state.
+	(auto_revert_reports_reload_error_and_continues_other_buffers,
+	auto_revert_toggles_and_buffer_kill_clear_failure_state): New tests.
+	* tests/pty_open.rs
+	(auto_revert_mode_reports_binary_reload_error_and_stays_running): New test.
+	* README.md: Document non-fatal auto-revert failures.
+	* docs/development.md: Document per-buffer auto-revert error isolation.
+	* docs/testing.md: Document editor and PTY regression coverage.
+	* NEWS: Announce the auto-revert availability fix.
+
+2026-07-14  Robert Charusta  <rch-public@posteo.net>
+
 	Bound built-in regexp matching work.
 
 	* src/search_pattern.rs (Compiler, Program, Instruction, Thread,

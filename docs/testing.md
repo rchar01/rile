@@ -49,6 +49,12 @@ flaky wall-clock thresholds. A representative PTY regression sends a failing
 optional-chain regexp through incremental search and confirms redraw and later
 input remain responsive.
 
+Auto-revert editor tests combine a failed binary-file reload, a successful
+reload, and an unrelated dirty buffer in one poll to verify per-buffer error
+isolation and duplicate-error suppression. PTY coverage changes a watched file
+to binary contents and confirms the minibuffer reports the failure while the
+real editor remains interactive.
+
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile`
 binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal
 output with `vt100`, and assert screen contents, cursor position, status text,

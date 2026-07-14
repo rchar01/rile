@@ -55,6 +55,8 @@ use search::{
 };
 use search_history::SearchHistoryStore;
 
+const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
     Continue,
@@ -86,6 +88,7 @@ pub struct Editor {
     shell_output_return: Option<Viewport>,
     buffer_list_rows: Vec<Option<BufferId>>,
     auto_revert_buffers: HashSet<BufferId>,
+    auto_revert_failures: HashMap<BufferId, AutoRevertFailure>,
     global_auto_revert: bool,
     describe_key: Option<DescribeKeyState>,
     completion: Option<CompletionSession>,
@@ -624,6 +627,12 @@ struct PendingUserHighlight {
     default_face: &'static HighlightFaceSpec,
 }
 
+#[derive(Debug, Clone)]
+struct AutoRevertFailure {
+    message: String,
+    retry_after: Instant,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum UserHighlightKind {
     Match,
@@ -666,6 +675,7 @@ impl Editor {
             shell_output_return: None,
             buffer_list_rows: Vec::new(),
             auto_revert_buffers: HashSet::new(),
+            auto_revert_failures: HashMap::new(),
             global_auto_revert: false,
             describe_key: None,
             completion: None,
@@ -1113,44 +1123,93 @@ impl Editor {
         }
         let enabled_buffers = self.auto_revert_buffers.clone();
         let mut reverted = Vec::new();
+        let mut first_failure = None;
+        let mut failure_count = 0;
+        let now = Instant::now();
         for entry in self.buffers.entries_mut() {
             let id = entry.id();
             if !self.global_auto_revert && !enabled_buffers.contains(&id) {
                 continue;
             }
+            let name = entry.name().to_owned();
             let document = entry.document_mut();
             if document.kind() != DocumentKind::Normal
                 || document.path().is_none()
                 || document.is_dirty()
-                || !document.file_changed_on_disk()?
             {
                 continue;
             }
-            document.reload_from_disk()?;
-            reverted.push(id);
-        }
-
-        if reverted.is_empty() {
-            return Ok(auto_saved);
-        }
-        self.undo_stack
-            .retain(|entry| !reverted.contains(&entry.buffer));
-        for buffer in &reverted {
-            self.discard_active_undo_sequence_for_buffer(*buffer);
-            self.remember_clean_undo_depth(*buffer);
-        }
-        for buffer in &reverted {
-            if *buffer == self.current_buffer {
-                self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
-                self.sync_current_window();
-            } else if let Some(document) = self.buffers.document(*buffer)
-                && let Some(viewport) = self.buffer_viewports.get_mut(buffer)
+            if self
+                .auto_revert_failures
+                .get(&id)
+                .is_some_and(|failure| failure.retry_after > now)
             {
-                viewport.cursor = clamp_position_to_buffer(document.buffer(), viewport.cursor);
+                continue;
+            }
+            let reload_result: Result<bool> = (|| {
+                if !document.file_changed_on_disk()? {
+                    return Ok(false);
+                }
+                document.reload_from_disk()?;
+                Ok(true)
+            })();
+            match reload_result {
+                Ok(false) => {
+                    self.auto_revert_failures.remove(&id);
+                }
+                Ok(true) => {
+                    self.auto_revert_failures.remove(&id);
+                    reverted.push(id);
+                }
+                Err(error) => {
+                    let message = format!("Auto-revert failed for {name}: {error}");
+                    let should_report = self
+                        .auto_revert_failures
+                        .get(&id)
+                        .is_none_or(|failure| failure.message != message);
+                    self.auto_revert_failures.insert(
+                        id,
+                        AutoRevertFailure {
+                            message: message.clone(),
+                            retry_after: now + AUTO_REVERT_RETRY_DELAY,
+                        },
+                    );
+                    if should_report {
+                        failure_count += 1;
+                        first_failure.get_or_insert(message);
+                    }
+                }
             }
         }
-        self.refresh_visible_buffer_list();
-        if reverted.len() == 1 {
+
+        if reverted.is_empty() && first_failure.is_none() {
+            return Ok(auto_saved);
+        }
+        if !reverted.is_empty() {
+            self.undo_stack
+                .retain(|entry| !reverted.contains(&entry.buffer));
+            for buffer in &reverted {
+                self.discard_active_undo_sequence_for_buffer(*buffer);
+                self.remember_clean_undo_depth(*buffer);
+            }
+            for buffer in &reverted {
+                if *buffer == self.current_buffer {
+                    self.cursor = clamp_position_to_buffer(self.document().buffer(), self.cursor);
+                    self.sync_current_window();
+                } else if let Some(document) = self.buffers.document(*buffer)
+                    && let Some(viewport) = self.buffer_viewports.get_mut(buffer)
+                {
+                    viewport.cursor = clamp_position_to_buffer(document.buffer(), viewport.cursor);
+                }
+            }
+            self.refresh_visible_buffer_list();
+        }
+        if let Some(mut message) = first_failure {
+            if failure_count > 1 {
+                message.push_str(&format!(" ({failure_count} failures total)"));
+            }
+            self.minibuffer.set_error(message);
+        } else if reverted.len() == 1 {
             let name = self
                 .buffers
                 .name(reverted[0])
@@ -2224,6 +2283,7 @@ impl Editor {
         _context: CommandContext,
     ) -> Result<CommandOutcome> {
         self.global_auto_revert = !self.global_auto_revert;
+        self.auto_revert_failures.clear();
         let state = if self.global_auto_revert { "on" } else { "off" };
         self.minibuffer
             .set_message(format!("Global auto-revert is {state}"));
@@ -5909,6 +5969,7 @@ impl Editor {
                 .set_error("auto-revert-mode requires a file-backed normal buffer");
             return;
         }
+        self.auto_revert_failures.remove(&self.current_buffer);
         let enabled = if self.auto_revert_buffers.contains(&self.current_buffer) {
             self.auto_revert_buffers.remove(&self.current_buffer);
             false
@@ -6764,6 +6825,8 @@ impl Editor {
             Ok(next_current) => {
                 self.buffer_viewports.remove(&target);
                 self.clean_undo_depths.remove(&target);
+                self.auto_revert_buffers.remove(&target);
+                self.auto_revert_failures.remove(&target);
                 self.undo_stack.retain(|entry| entry.buffer != target);
                 self.discard_active_undo_sequence_for_buffer(target);
                 let clean_depth = self.undo_depth_for_buffer(next_current);
@@ -9431,9 +9494,9 @@ mod tests {
         format_describe_mode_help, format_describe_variable_help,
     };
     use super::{
-        AboutRileInfo, ActiveModes, BufferDescription, Editor, EditorOutcome, EditorPatternMatch,
-        KillEntry, SearchDirection, file_prompt_base_input, format_rectangle_number,
-        highlight_phrase_regexp,
+        AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
+        Editor, EditorOutcome, EditorPatternMatch, KillEntry, SearchDirection,
+        file_prompt_base_input, format_rectangle_number, highlight_phrase_regexp,
     };
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandRegistry};
@@ -18840,6 +18903,141 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("undo should return to auto-reverted clean text");
         assert_eq!(editor.document().buffer().serialize(), "after\nchanged\n");
         assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
+    fn auto_revert_reports_reload_error_and_continues_other_buffers() {
+        let directory = TestDir::new();
+        let watched = directory.path().join("watched.txt");
+        let reloadable = directory.path().join("reloadable.txt");
+        let other = directory.path().join("other.txt");
+        fs::write(&watched, "before\n").expect("watched fixture should be written");
+        fs::write(&reloadable, "reload before\n").expect("reload fixture should be written");
+        fs::write(&other, "other\n").expect("other fixture should be written");
+        let mut editor = Editor::new(Document::open(&watched).expect("watched file should open"));
+        let watched_buffer = editor.current_buffer_id();
+        editor
+            .execute_command_by_name("global-auto-revert-mode")
+            .expect("global auto-revert should enable");
+        editor
+            .open_file_path(reloadable.to_str().expect("path should be utf-8"), false)
+            .expect("reloadable file should open");
+        let reloadable_buffer = editor.current_buffer_id();
+        editor
+            .open_file_path(other.to_str().expect("path should be utf-8"), false)
+            .expect("other file should open");
+        editor
+            .handle_key(KeyEvent::Text("dirty ".to_owned()))
+            .expect("other buffer should become dirty");
+
+        fs::write(&watched, b"bad\0contents").expect("binary fixture should be written");
+        fs::write(&reloadable, "reload after\n").expect("reload fixture should change");
+        assert!(
+            editor
+                .poll_auto_revert()
+                .expect("reload error should be reported")
+        );
+
+        let watched_document = editor
+            .document_for_buffer(watched_buffer)
+            .expect("watched buffer should remain open");
+        assert_eq!(watched_document.buffer().serialize(), "before\n");
+        assert!(!watched_document.is_dirty());
+        assert_eq!(
+            editor
+                .document_for_buffer(reloadable_buffer)
+                .expect("reloadable buffer should remain open")
+                .buffer()
+                .serialize(),
+            "reload after\n"
+        );
+        assert_eq!(editor.document().buffer().serialize(), "dirty other\n");
+        assert!(editor.document().is_dirty());
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(
+                    |message| message.contains("Auto-revert failed for watched.txt")
+                        && message.contains("appears to be a binary file")
+                )
+        );
+
+        editor.minibuffer.set_message("Later message");
+        assert!(
+            !editor
+                .poll_auto_revert()
+                .expect("unchanged failure should remain non-fatal")
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Later message")
+        );
+
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("unrelated undo history should remain usable");
+        assert_eq!(editor.document().buffer().serialize(), "other\n");
+        assert!(!editor.document().is_dirty());
+
+        fs::write(&watched, "after\nrepaired\n").expect("watched file should be repaired");
+        editor
+            .auto_revert_failures
+            .get_mut(&watched_buffer)
+            .expect("failed buffer should have retry state")
+            .retry_after = std::time::Instant::now();
+        assert!(
+            editor
+                .poll_auto_revert()
+                .expect("repaired file should reload")
+        );
+        assert_eq!(
+            editor
+                .document_for_buffer(watched_buffer)
+                .expect("watched buffer should remain open")
+                .buffer()
+                .serialize(),
+            "after\nrepaired\n"
+        );
+    }
+
+    #[test]
+    fn auto_revert_toggles_and_buffer_kill_clear_failure_state() {
+        let directory = TestDir::new();
+        let path = directory.path().join("watched.txt");
+        fs::write(&path, "before\n").expect("watched fixture should be written");
+        let mut editor = Editor::new(Document::open(&path).expect("watched file should open"));
+        let watched_buffer = editor.current_buffer_id();
+        let failure = || AutoRevertFailure {
+            message: "reload failed".to_owned(),
+            retry_after: std::time::Instant::now() + AUTO_REVERT_RETRY_DELAY,
+        };
+
+        editor
+            .auto_revert_failures
+            .insert(watched_buffer, failure());
+        editor
+            .execute_command_by_name("auto-revert-mode")
+            .expect("auto-revert should enable");
+        assert!(!editor.auto_revert_failures.contains_key(&watched_buffer));
+
+        editor
+            .auto_revert_failures
+            .insert(watched_buffer, failure());
+        editor
+            .execute_command_by_name("global-auto-revert-mode")
+            .expect("global auto-revert should enable");
+        assert!(editor.auto_revert_failures.is_empty());
+
+        editor
+            .auto_revert_failures
+            .insert(watched_buffer, failure());
+        editor
+            .finish_kill_buffer(watched_buffer, false)
+            .expect("watched buffer should be killed");
+        assert!(!editor.auto_revert_buffers.contains(&watched_buffer));
+        assert!(!editor.auto_revert_failures.contains_key(&watched_buffer));
     }
 
     #[test]

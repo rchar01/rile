@@ -425,9 +425,12 @@ read-only, and unnamed buffers.
 Post-Milestone 14 file-state polish also adds `auto-revert-mode` and
 `global-auto-revert-mode` as unbound `M-x` commands. Auto-revert uses idle input
 timeouts to poll file size and modification timestamp changes, reloads only
-clean file-backed normal buffers, and never discards dirty edits. Reloaded
-buffers drop stale undo records for that buffer and clamp saved point positions
-to the new text.
+clean file-backed normal buffers, and never replaces dirty buffer contents.
+Metadata and reload failures retain the last valid buffer contents, report a
+minibuffer error, and do not stop other watched buffers or the editor session.
+Failed buffers retry after a short delay without repeatedly replacing newer
+minibuffer messages with the same error. Reloaded buffers drop stale undo records
+for that buffer and clamp saved point positions to the new text.
 
 Post-Milestone 14 key-alias polish adds parser support for common F3/F4 escape
 sequences and standard Ctrl-modified arrow/Home/End CSI sequences. F3 maps to
