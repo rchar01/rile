@@ -102,6 +102,11 @@ Milestone 8 adds multiple buffers:
 
 - `buffers::BufferManager` owns stable `BufferId` values and buffer entries;
 - each buffer entry records a user-facing name and a file-backed `Document`;
+- generated special buffers are identified by `DocumentKind`, not by their
+  user-facing names, so normal files named `*Messages*`, `*Help*`, or another
+  special name remain ordinary editable documents;
+- buffer names remain unique even when a file name matches a generated numeric
+  suffix, and terminal mode lines render those manager-owned unique names;
 - `find-file` reuses an existing buffer for the same path instead of opening duplicates;
 - `C-x b` and `switch-to-buffer` prompt for an existing buffer name;
 - `C-x k` and `kill-buffer` prompt for a buffer name, with empty input killing the current buffer;
@@ -109,7 +114,8 @@ Milestone 8 adds multiple buffers:
   removes them;
 - switching buffers preserves each buffer's point; killing the current buffer
   selects the next buffer;
-- tests cover buffer reuse, switching, killing, and dirty-buffer confirmation.
+- tests cover buffer reuse, switching, killing, dirty-buffer confirmation, and
+  special-buffer name collisions.
 
 Milestone 9 adds windows and splits:
 

@@ -76,6 +76,11 @@ tests cover every matching mode and exact directory fallback. PTY coverage
 confirms a candidate-overflow directory remains responsive and visibly marks
 its results as partial in vertical, ido, and completions-buffer styles.
 
+Buffer-manager tests verify generated special buffers use document-kind identity
+and cannot replace normal files with colliding names. Terminal and PTY regressions
+open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the
+file, and confirm unsaved edits can still be written to its original path.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

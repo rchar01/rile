@@ -1,5 +1,33 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Protect normal files from special-buffer name collisions.
+
+	* src/buffers.rs (BufferManager::find_by_kind): New method.
+	(BufferManager::open_help, BufferManager::open_completions,
+	BufferManager::open_messages, BufferManager::open_buffer_list,
+	BufferManager::open_shell_output): Use kind-aware special-buffer upsert.
+	(BufferManager::open_special): New method.
+	(BufferManager::unique_name): Skip occupied generated suffixes.
+	(special_buffers_do_not_replace_normal_name_collisions,
+	generated_buffer_names_skip_existing_suffixes): Test both opening orders,
+	kill-and-reopen lifecycles, and occupied generated suffixes.
+	(assert_special_name_collision, assert_unique_names): New test helpers.
+	* src/editor.rs (Editor::buffer_name_for): New method.
+	(Editor::refresh_messages_buffer,
+	Editor::refresh_visible_buffer_list): Find generated buffers by document kind.
+	(messages_buffer_does_not_replace_normal_name_collision): New test.
+	* src/terminal/mod.rs (visual_test_mode_line, format_mode_line): Render the
+	manager-owned unique buffer name.
+	(redraw_preserves_dirty_normal_file_named_messages): New test.
+	* tests/pty_movement.rs
+	(messages_named_file_survives_redraw_and_special_buffer_open): New test.
+	* NEWS: Announce special-buffer collision protection.
+	* docs/development.md: Document kind-based special-buffer identity and
+	unique names.
+	* docs/testing.md: Document special-buffer collision regressions.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Bound file completion directory work and retained candidates.
 
 	* src/completion.rs (MAX_FILE_COMPLETION_SCAN_ENTRIES,

@@ -3,6 +3,8 @@
 
 mod support;
 
+use std::fs;
+
 use anyhow::Result;
 
 use support::{fixtures, keys, pty::RilePty};
@@ -515,6 +517,29 @@ fn view_echo_area_messages_shows_message_history_and_restores() -> Result<()> {
     rile.assert_status_contains("ACTIVE")?;
 
     rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn messages_named_file_survives_redraw_and_special_buffer_open() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("*Messages*");
+    fs::write(&path, "normal contents\n")?;
+    let mut rile = RilePty::spawn(&path, 14, 100)?;
+
+    rile.wait_for_screen_contains("normal contents")?;
+    rile.send("C-h", keys::control('h'))?;
+    rile.send("e", b"e")?;
+    rile.assert_screen_contains("*Messages*<1>")?;
+    rile.send("q", b"q")?;
+    rile.assert_screen_contains("normal contents")?;
+
+    rile.send("insert in normal file", b"edited ")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("C-s", keys::control('s'))?;
+    rile.quit()?;
+
+    assert_eq!(fs::read_to_string(&path)?, "edited normal contents\n");
     Ok(())
 }
 

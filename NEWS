@@ -16,6 +16,11 @@ Security fixes:
   making Rile collect and sort an unbounded number of entries. Exact typed files
   and directories remain usable when omitted from the partial candidate set.
 
+* Generated special buffers now use their document kind rather than their
+  display name for identity. Redraw and special-buffer commands can no longer
+  replace a normal file buffer named `*Messages*`, `*Help*`, or another special
+  name and discard its path or unsaved session contents.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 

@@ -1085,7 +1085,9 @@ fn visual_test_mode_line(
     } else {
         "inactive"
     };
-    let name = visual_test_document_name(document);
+    let name = editor
+        .buffer_name_for(viewport.buffer)
+        .expect("viewport buffer must exist");
     let column = cursor_absolute_display_column(document.buffer(), cursor, editor.tab_width())?;
     let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
     Ok(format!(
@@ -1096,14 +1098,6 @@ fn visual_test_mode_line(
         document.is_read_only(),
         document.is_dirty()
     ))
-}
-
-fn visual_test_document_name(document: &Document) -> String {
-    document
-        .path()
-        .and_then(Path::file_name)
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| document.display_name())
 }
 
 fn format_mode_line(
@@ -1130,16 +1124,10 @@ fn format_mode_line(
     let position = mode_line_position(document.buffer(), viewport, text_rows, editor.tab_width())?;
     Ok(format!(
         "{active}-:{modified}{read_only}{final_newline}{new_file} {}   {position}   ({major_mode})",
-        mode_line_document_name(document)
+        editor
+            .buffer_name_for(viewport.buffer)
+            .expect("viewport buffer must exist")
     ))
-}
-
-fn mode_line_document_name(document: &Document) -> String {
-    document
-        .path()
-        .and_then(Path::file_name)
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_else(|| document.display_name())
 }
 
 fn mode_line_position(
@@ -1766,7 +1754,7 @@ mod tests {
     use crate::completion::{CompletionConfig, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::editor::Editor;
-    use crate::file::Document;
+    use crate::file::{Document, DocumentKind};
     use crate::input::KeyEvent;
     use crate::render::{Face, Span};
     use crate::window::Viewport;
@@ -2744,6 +2732,34 @@ mod tests {
                 .serialize()
                 .contains("Buffer is read-only: *Messages*")
         );
+    }
+
+    #[test]
+    fn redraw_preserves_dirty_normal_file_named_messages() {
+        let directory = tempfile::tempdir().expect("temporary directory should exist");
+        let path = directory.path().join("*Messages*");
+        fs::write(&path, "normal contents").expect("fixture should write");
+        let mut document = Document::open(&path).expect("document should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "edited ")
+            .expect("document should become dirty");
+        let mut editor = Editor::new(document);
+        let size = TerminalSize {
+            rows: 8,
+            columns: 80,
+        };
+
+        rendered_frame(&mut editor, size);
+
+        assert_eq!(editor.document().kind(), DocumentKind::Normal);
+        assert_eq!(editor.document().path(), Some(path.as_path()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "edited normal contents"
+        );
+        assert!(editor.document().is_dirty());
+        assert!(!editor.document().is_read_only());
     }
 
     #[test]

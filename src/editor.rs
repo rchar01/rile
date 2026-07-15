@@ -818,6 +818,10 @@ impl Editor {
         self.buffers.document(id)
     }
 
+    pub(crate) fn buffer_name_for(&self, id: BufferId) -> Option<&str> {
+        self.buffers.name(id)
+    }
+
     pub fn cursor(&self) -> Position {
         self.cursor
     }
@@ -827,7 +831,7 @@ impl Editor {
     }
 
     pub(crate) fn refresh_messages_buffer(&mut self) {
-        let Some(messages) = self.buffers.find_by_name("*Messages*") else {
+        let Some(messages) = self.buffers.find_by_kind(DocumentKind::Messages) else {
             return;
         };
         let text = self.minibuffer.messages_text();
@@ -6589,7 +6593,7 @@ impl Editor {
     }
 
     fn refresh_visible_buffer_list(&mut self) {
-        let Some(buffer_list) = self.buffers.find_by_name("*Buffer List*") else {
+        let Some(buffer_list) = self.buffers.find_by_kind(DocumentKind::BufferList) else {
             return;
         };
         if self.windows.window_showing_buffer(buffer_list).is_none() {
@@ -9603,7 +9607,7 @@ mod tests {
         CompletionConfig, CompletionMatching, CompletionSession, CompletionStyle,
     };
     use crate::config::{Config, ThemeName};
-    use crate::file::Document;
+    use crate::file::{Document, DocumentKind};
     use crate::input::{KeyEvent, SpecialKey};
     use crate::keymap::{KeyBinding, KeyMap, KeyMapId, KeyMapStack};
     use crate::minibuffer::PromptKind;
@@ -14333,6 +14337,39 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .serialize()
                 .contains("No such command: another-missing-command")
         );
+    }
+
+    #[test]
+    fn messages_buffer_does_not_replace_normal_name_collision() {
+        let directory = TestDir::new();
+        let path = directory.path().join("*Messages*");
+        fs::write(&path, "normal contents").expect("fixture should write");
+        let mut editor = Editor::new(Document::open(&path).expect("document should open"));
+        let normal = editor.current_buffer_id();
+        editor
+            .handle_key(KeyEvent::Text("edited ".to_owned()))
+            .expect("normal file should be editable");
+
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+
+        assert_ne!(editor.current_buffer_id(), normal);
+        assert_eq!(editor.current_buffer_name(), "*Messages*<1>");
+        assert_eq!(editor.document().kind(), DocumentKind::Messages);
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore the normal file");
+        assert_eq!(editor.current_buffer_id(), normal);
+        assert_eq!(editor.current_buffer_name(), "*Messages*");
+        assert_eq!(editor.document().kind(), DocumentKind::Normal);
+        assert_eq!(editor.document().path(), Some(path.as_path()));
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "edited normal contents"
+        );
+        assert!(editor.document().is_dirty());
+        assert!(!editor.document().is_read_only());
     }
 
     #[test]
