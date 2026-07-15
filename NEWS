@@ -15,6 +15,10 @@ Interface features:
 
 Security fixes:
 
+* Paragraph filling now builds, compares, replaces, and records undo data only
+  for the affected paragraphs.  Wrapping and cursor mapping also stream words
+  without collecting per-word metadata or filling the same text twice.
+
 * Sentence movement now scans stored lines directly without copying complete
   buffers or collecting every prior boundary. Large numeric arguments also stop
   once point reaches a buffer edge.

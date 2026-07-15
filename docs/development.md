@@ -256,6 +256,9 @@ fills plain-text paragraphs by collapsing internal whitespace and wrapping words
 at the configured `fill_column` while preserving blank-line paragraph boundaries.
 It also fills each paragraph overlapped by an active region. It respects
 read-only buffers and records one undo entry for each command result. It
+builds and compares only the affected line range, replaces that range directly,
+and stores only that range in undo. Word wrapping and cursor mapping
+stream paragraph words without an eager word list or duplicate fill pass. It
 intentionally defers buffer-local fill columns, justification, fill prefixes,
 CJK/kinsoku handling, mode-specific comment filling, and programmable fill hooks.
 

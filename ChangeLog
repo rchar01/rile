@@ -1,3 +1,28 @@
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
+	Limit paragraph filling to the affected text.
+
+	* src/editor.rs (Editor::fill_paragraph): Build, compare, and replace only
+	the affected line range.
+	(Editor::replace_text_range_with_cursor): Take ownership of replacement
+	text so undo recording does not clone it.
+	(fill_plain_text_lines): Stream words and track display width without an
+	eager word vector or repeated line-width scans.
+	(filled_cursor_position, position_to_absolute_in_lines,
+	word_anchor_for_absolute, absolute_for_word_anchor, word_spans,
+	clamp_position_to_lines): Remove.
+	(filled_line_range, word_anchor_in_lines, position_for_word_anchor,
+	whitespace_word_spans): New functions that fill each paragraph once and
+	map point without joined paragraph copies or word vectors.
+	(fill_paragraph_records_only_affected_text_and_redoes,
+	fill_paragraph_noop_does_not_record_undo,
+	fill_paragraph_streams_many_words_and_preserves_utf8_boundaries,
+	fill_paragraph_maps_utf8_cursor_without_joined_word_spans): New tests.
+	(fill_paragraph_fills_active_region_paragraphs): Check undo and redo.
+	* NEWS: Announce the paragraph-fill availability fix.
+	* docs/development.md: Document paragraph-local filling and undo.
+	* docs/testing.md: Document paragraph-fill security regressions.
+
 2026-07-14  Robert Charusta  <rch-public@posteo.net>
 
 	Make sentence movement allocation-free and bounded by progress.

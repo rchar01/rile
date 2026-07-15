@@ -53,6 +53,12 @@ Sentence movement unit tests cover UTF-8 byte positions, formfeed paragraph
 separators, retained CRLF behavior, and saturated numeric arguments that must
 stop at buffer edges. PTY coverage exercises the default `M-a` and `M-e` paths.
 
+Paragraph filling unit tests verify that edits and undo records contain only the
+affected paragraph range, including multi-paragraph undo and redo, no-op fills,
+large collections of short words, retained carriage returns, and UTF-8 cursor
+mapping. PTY coverage exercises the default `M-q` path and configured fill
+columns.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

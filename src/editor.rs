@@ -4228,30 +4228,30 @@ impl Editor {
         }
 
         let cursor_before = self.cursor;
-        let mut replacement_lines = lines.to_vec();
-        let cursor_after = filled_cursor_position(lines, &runs, cursor_before, self.fill_column);
-        for (run_start, run_end) in runs.into_iter().rev() {
-            let filled =
-                fill_plain_text_lines(&replacement_lines[run_start..=run_end], self.fill_column);
-            replacement_lines.splice(run_start..=run_end, filled);
-        }
+        let (replacement_lines, cursor_after) = filled_line_range(
+            lines,
+            first_line,
+            last_line,
+            &runs,
+            cursor_before,
+            self.fill_column,
+        );
 
-        let replacement = replacement_lines.join("\n");
-        if replacement == buffer.serialize() {
+        if replacement_lines.as_slice() == &lines[first_line..=last_line] {
             self.minibuffer.clear();
             return Ok(());
         }
 
-        let cursor_after = cursor_after
-            .map(|position| clamp_position_to_lines(&replacement_lines, position))
-            .unwrap_or_else(|| {
-                if region.is_some() {
-                    clamp_position_to_lines(&replacement_lines, cursor_before)
-                } else {
-                    Position::new(first_line, 0)
-                }
-            });
-        self.replace_buffer_text(replacement, cursor_before, cursor_after)?;
+        let range = TextRange::new(
+            Position::new(first_line, 0),
+            Position::new(last_line, lines[last_line].len()),
+        );
+        self.replace_text_range_with_cursor(
+            range,
+            replacement_lines.join("\n"),
+            cursor_before,
+            cursor_after,
+        )?;
         Ok(())
     }
 
@@ -4405,7 +4405,7 @@ impl Editor {
     fn replace_text_range_with_cursor(
         &mut self,
         range: TextRange,
-        replacement: &str,
+        replacement: String,
         cursor_before: Position,
         cursor_after: Position,
     ) -> Result<()> {
@@ -4413,11 +4413,11 @@ impl Editor {
         let replacement_end = self
             .document_mut()
             .buffer_mut()
-            .insert(range.start, replacement)?;
+            .insert(range.start, &replacement)?;
         self.record_replace(
             TextRange::new(range.start, replacement_end),
             old_text,
-            replacement.to_owned(),
+            replacement,
             cursor_before,
             cursor_after,
         );
@@ -4550,7 +4550,7 @@ impl Editor {
             &format!("{}{}{}", &text[..start], replacement, &text[end..]),
             cursor_after_absolute,
         );
-        self.replace_text_range_with_cursor(range, &replacement, self.cursor, cursor_after)?;
+        self.replace_text_range_with_cursor(range, replacement, self.cursor, cursor_after)?;
         Ok(())
     }
 
@@ -8352,73 +8352,95 @@ fn paragraph_runs_in_line_bounds(
 }
 
 fn fill_plain_text_lines(lines: &[String], fill_column: usize) -> Vec<String> {
-    let words = lines
-        .iter()
-        .flat_map(|line| line.split_whitespace())
-        .collect::<Vec<_>>();
-    if words.is_empty() {
-        return vec![String::new()];
-    }
-
     let mut filled = Vec::new();
     let mut current = String::new();
-    for word in words {
+    let mut current_width = 0usize;
+    for word in lines.iter().flat_map(|line| line.split_whitespace()) {
+        let word_width = UnicodeWidthStr::width(word);
         let next_len = if current.is_empty() {
-            UnicodeWidthStr::width(word)
+            word_width
         } else {
-            UnicodeWidthStr::width(current.as_str()) + 1 + UnicodeWidthStr::width(word)
+            current_width.saturating_add(1).saturating_add(word_width)
         };
         if next_len > fill_column && !current.is_empty() {
             filled.push(std::mem::take(&mut current));
+            current_width = 0;
         }
         if !current.is_empty() {
             current.push(' ');
+            current_width += 1;
         }
         current.push_str(word);
+        current_width = current_width.saturating_add(word_width);
     }
     if !current.is_empty() {
         filled.push(current);
     }
+    if filled.is_empty() {
+        filled.push(String::new());
+    }
     filled
 }
 
-fn filled_cursor_position(
+fn filled_line_range(
     lines: &[String],
+    first_line: usize,
+    last_line: usize,
     runs: &[(usize, usize)],
     cursor: Position,
     fill_column: usize,
-) -> Option<Position> {
-    let mut line_delta = 0isize;
+) -> (Vec<String>, Position) {
+    let mut replacement = Vec::new();
+    let mut source_line = first_line;
+    let mut cursor_after = None;
+
     for &(run_start, run_end) in runs {
-        if cursor.line < run_start {
+        while source_line < run_start {
+            replacement.push(lines[source_line].clone());
+            source_line += 1;
+        }
+
+        let output_start = first_line + replacement.len();
+        if cursor_after.is_none() && cursor.line < run_start {
             if lines
                 .get(cursor.line)
                 .is_some_and(|line| is_paragraph_separator_line(line))
             {
-                return Some(Position::new(run_start.checked_add_signed(line_delta)?, 0));
+                cursor_after = Some(Position::new(output_start, 0));
+            } else {
+                cursor_after = Some(cursor);
             }
-            return Some(Position::new(
-                cursor.line.checked_add_signed(line_delta)?,
-                cursor.byte,
-            ));
         }
-        let original_len = run_end - run_start + 1;
+
         let filled = fill_plain_text_lines(&lines[run_start..=run_end], fill_column);
-        let output_start = run_start.checked_add_signed(line_delta)?;
-        if (run_start..=run_end).contains(&cursor.line) {
-            return cursor_in_filled_run(
+        if cursor_after.is_none() && (run_start..=run_end).contains(&cursor.line) {
+            cursor_after = cursor_in_filled_run(
                 &lines[run_start..=run_end],
                 Position::new(cursor.line - run_start, cursor.byte),
                 &filled,
                 output_start,
             );
         }
-        line_delta += filled.len() as isize - original_len as isize;
+        replacement.extend(filled);
+        source_line = run_end + 1;
     }
-    Some(Position::new(
-        cursor.line.checked_add_signed(line_delta)?,
-        cursor.byte,
-    ))
+
+    while source_line <= last_line {
+        replacement.push(lines[source_line].clone());
+        source_line += 1;
+    }
+
+    let cursor_after = cursor_after.unwrap_or_else(|| {
+        if cursor.line > last_line {
+            Position::new(
+                first_line + replacement.len() + cursor.line - last_line - 1,
+                cursor.byte,
+            )
+        } else {
+            cursor
+        }
+    });
+    (replacement, cursor_after)
 }
 
 fn cursor_in_filled_run(
@@ -8427,85 +8449,72 @@ fn cursor_in_filled_run(
     filled: &[String],
     output_start_line: usize,
 ) -> Option<Position> {
-    let original_text = original.join("\n");
-    let cursor_absolute = position_to_absolute_in_lines(original, cursor)?;
-    let anchor = word_anchor_for_absolute(&original_text, cursor_absolute);
-    let filled_text = filled.join("\n");
-    let filled_absolute = absolute_for_word_anchor(&filled_text, anchor);
-    let relative = absolute_to_position(&filled_text, filled_absolute);
+    let anchor = word_anchor_in_lines(original, cursor)?;
+    let relative = position_for_word_anchor(filled, anchor);
     Some(Position::new(
         output_start_line + relative.line,
         relative.byte,
     ))
 }
 
-fn position_to_absolute_in_lines(lines: &[String], position: Position) -> Option<usize> {
+fn word_anchor_in_lines(lines: &[String], position: Position) -> Option<(usize, usize)> {
     let line = lines.get(position.line)?;
     if position.byte > line.len() || !line.is_char_boundary(position.byte) {
         return None;
     }
-    let prefix = lines
-        .iter()
-        .take(position.line)
-        .map(|line| line.len() + 1)
-        .sum::<usize>();
-    Some(prefix + position.byte)
-}
 
-fn word_anchor_for_absolute(text: &str, absolute: usize) -> (usize, usize) {
-    let words = word_spans(text);
-    for (index, word) in words.iter().enumerate() {
-        if absolute < word.start {
-            return (index, 0);
-        }
-        if absolute <= word.end {
-            return (index, absolute - word.start);
-        }
-    }
-    (words.len(), 0)
-}
-
-fn absolute_for_word_anchor(text: &str, anchor: (usize, usize)) -> usize {
-    let words = word_spans(text);
-    let (index, offset) = anchor;
-    if index >= words.len() {
-        return text.len();
-    }
-    let word = words[index];
-    (word.start + offset).min(word.end)
-}
-
-fn word_spans(text: &str) -> Vec<WordSpan> {
-    let mut words = Vec::new();
-    let mut start = None;
-    for (byte, character) in text.char_indices() {
-        if character.is_whitespace() {
-            if let Some(word_start) = start.take() {
-                words.push(WordSpan {
-                    start: word_start,
-                    end: byte,
-                });
+    let mut index = 0;
+    for (line_index, line) in lines.iter().enumerate() {
+        for word in whitespace_word_spans(line) {
+            if position.line < line_index
+                || (position.line == line_index && position.byte < word.start)
+            {
+                return Some((index, 0));
             }
-        } else if start.is_none() {
-            start = Some(byte);
+            if position.line == line_index && position.byte <= word.end {
+                return Some((index, position.byte - word.start));
+            }
+            index += 1;
         }
     }
-    if let Some(word_start) = start {
-        words.push(WordSpan {
-            start: word_start,
-            end: text.len(),
-        });
-    }
-    words
+    Some((index, 0))
 }
 
-fn clamp_position_to_lines(lines: &[String], position: Position) -> Position {
-    let line = position.line.min(lines.len().saturating_sub(1));
-    let byte = lines
-        .get(line)
-        .map(|line_text| position.byte.min(line_text.len()))
-        .unwrap_or(0);
-    Position::new(line, byte)
+fn position_for_word_anchor(lines: &[String], anchor: (usize, usize)) -> Position {
+    let (target, offset) = anchor;
+    let mut index = 0;
+    for (line_index, line) in lines.iter().enumerate() {
+        for word in whitespace_word_spans(line) {
+            if index == target {
+                return Position::new(line_index, (word.start + offset).min(word.end));
+            }
+            index += 1;
+        }
+    }
+    let line = lines.len().saturating_sub(1);
+    Position::new(line, lines.get(line).map_or(0, String::len))
+}
+
+fn whitespace_word_spans(text: &str) -> impl Iterator<Item = WordSpan> + '_ {
+    let mut characters = text.char_indices().peekable();
+    std::iter::from_fn(move || {
+        let start = loop {
+            let (byte, character) = characters.next()?;
+            if !character.is_whitespace() {
+                break byte;
+            }
+        };
+        let end = loop {
+            let Some(&(byte, character)) = characters.peek() else {
+                break text.len();
+            };
+            if character.is_whitespace() {
+                break byte;
+            }
+            characters.next();
+        };
+        Some(WordSpan { start, end })
+    })
 }
 
 fn region_line_bounds(range: TextRange) -> Option<(usize, usize)> {
@@ -9515,6 +9524,8 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
+    use unicode_width::UnicodeWidthStr;
+
     use super::help::{
         HELP_FILL_WIDTH, append_wrapped_prose, format_about_rile_help,
         format_describe_bindings_help, format_describe_buffer_help, format_describe_key_help,
@@ -9525,6 +9536,7 @@ mod tests {
         Editor, EditorOutcome, EditorPatternMatch, KillEntry, SearchDirection,
         file_prompt_base_input, format_rectangle_number, highlight_phrase_regexp,
     };
+    use crate::buffer::undo::UndoRecord;
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandContext, CommandRegistry, Invocation};
     use crate::completion::{
@@ -10428,6 +10440,168 @@ mod tests {
     }
 
     #[test]
+    fn fill_paragraph_records_only_affected_text_and_redoes() {
+        let text = "prefix untouched\n\nalpha   beta gamma delta epsilon\n\nsuffix untouched\n";
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), text)
+            .expect("fixture should insert");
+        let config = Config {
+            fill_column: 20,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(document, config);
+        let cursor_before = Position::new(2, "alpha   beta gamma delta".len());
+        editor.cursor = cursor_before;
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill only the current paragraph");
+
+        let filled = "prefix untouched\n\nalpha beta gamma\ndelta epsilon\n\nsuffix untouched\n";
+        assert_eq!(editor.document().buffer().serialize(), filled);
+        assert_eq!(editor.cursor(), Position::new(3, "delta".len()));
+        let record = &editor
+            .undo_stack
+            .last()
+            .expect("fill should record one undo entry")
+            .record;
+        assert_eq!(
+            record,
+            &UndoRecord::Replace {
+                range: TextRange::new(Position::new(2, 0), Position::new(3, "delta epsilon".len()),),
+                old_text: "alpha   beta gamma delta epsilon".to_owned(),
+                new_text: "alpha beta gamma\ndelta epsilon".to_owned(),
+                cursor_before,
+                cursor_after: Position::new(3, "delta".len()),
+            }
+        );
+
+        editor
+            .undo()
+            .expect("undo should restore original paragraph");
+        assert_eq!(editor.document().buffer().serialize(), text);
+        assert_eq!(editor.cursor(), cursor_before);
+        editor
+            .undo_redo()
+            .expect("redo should restore filled paragraph");
+        assert_eq!(editor.document().buffer().serialize(), filled);
+        assert_eq!(editor.cursor(), Position::new(3, "delta".len()));
+    }
+
+    #[test]
+    fn fill_paragraph_noop_does_not_record_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "prefix\n\nalpha beta\n\nsuffix")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(2, "alpha".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("already-filled paragraph should be a no-op");
+
+        assert!(editor.undo_stack.is_empty());
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "prefix\n\nalpha beta\n\nsuffix"
+        );
+        assert_eq!(editor.cursor(), Position::new(2, "alpha".len()));
+    }
+
+    #[test]
+    fn fill_paragraph_streams_many_words_and_preserves_utf8_boundaries() {
+        let paragraph = std::iter::repeat_n("a", 4096)
+            .collect::<Vec<_>>()
+            .join("   ");
+        let text = format!("before\r\n\x0c\n{paragraph}\n\x0c\nafter\r\n");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &text)
+            .expect("fixture should insert");
+        let config = Config {
+            fill_column: 20,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(document, config);
+        editor.cursor = Position::new(2, 1);
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should fill many short words");
+
+        let filled = editor.document().buffer().serialize();
+        assert!(filled.starts_with("before\r\n\x0c\n"));
+        assert!(filled.ends_with("\n\x0c\nafter\r\n"));
+        assert!(
+            filled
+                .lines()
+                .skip(2)
+                .take_while(|line| *line != "\x0c")
+                .all(|line| UnicodeWidthStr::width(line) <= 20)
+        );
+        assert_eq!(
+            filled
+                .lines()
+                .skip(2)
+                .take_while(|line| *line != "\x0c")
+                .flat_map(str::split_whitespace)
+                .count(),
+            4096
+        );
+
+        let record = &editor
+            .undo_stack
+            .last()
+            .expect("fill should record an undo entry")
+            .record;
+        let UndoRecord::Replace {
+            old_text, new_text, ..
+        } = record
+        else {
+            panic!("fill should record a replacement");
+        };
+        assert_eq!(old_text, &paragraph);
+        assert!(!new_text.contains("before"));
+        assert!(!new_text.contains("after"));
+    }
+
+    #[test]
+    fn fill_paragraph_maps_utf8_cursor_without_joined_word_spans() {
+        let text = "before\n\ncafé   東京 alpha beta gamma\n\nafter\n";
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), text)
+            .expect("fixture should insert");
+        let config = Config {
+            fill_column: 20,
+            ..Config::default()
+        };
+        let mut editor = Editor::with_config(document, config);
+        editor.cursor = Position::new(2, "café   東".len());
+
+        editor
+            .handle_key(KeyEvent::Meta('q'))
+            .expect("M-q should preserve a UTF-8 word anchor");
+
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "before\n\ncafé 東京 alpha beta\ngamma\n\nafter\n"
+        );
+        assert_eq!(editor.cursor(), Position::new(2, "café 東".len()));
+        editor
+            .document()
+            .buffer()
+            .validate_position(editor.cursor())
+            .expect("mapped cursor should remain on a UTF-8 boundary");
+    }
+
+    #[test]
     fn fill_paragraph_uses_configured_fill_column() {
         let mut document = Document::scratch();
         document
@@ -10477,6 +10651,21 @@ mod tests {
             "one two\n\nthree four\n\nfive   six"
         );
         assert_eq!(editor.active_region_range(), None);
+
+        editor
+            .undo()
+            .expect("undo should restore all region paragraphs");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one   two\n\nthree   four\n\nfive   six"
+        );
+        editor
+            .undo_redo()
+            .expect("redo should refill all region paragraphs");
+        assert_eq!(
+            editor.document().buffer().serialize(),
+            "one two\n\nthree four\n\nfive   six"
+        );
     }
 
     #[test]
