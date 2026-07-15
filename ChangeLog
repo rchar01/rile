@@ -1,5 +1,21 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Bound incomplete numeric CSI input.
+
+	* src/input.rs (MAX_CSI_SEQUENCE_LEN): New constant.
+	(parse_csi_sequence): Limit pending input and parser scans, then fall back to
+	Escape when an incomplete sequence reaches the limit.
+	(FailingRead): New test helper.
+	(bounds_unterminated_numeric_csi_sequences,
+	key_reader_stops_buffering_overlong_numeric_csi): New tests.
+	* tests/pty_insert.rs
+	(overlong_numeric_csi_input_falls_back_without_a_terminator): New test.
+	* NEWS: Announce bounded numeric CSI input decoding.
+	* docs/development.md: Document the pending CSI limit and fallback.
+	* docs/testing.md: Document parser and PTY security regressions.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Prepare the 0.9.1 release.
 
 	* Cargo.toml: Set version to 0.9.1.

@@ -64,6 +64,11 @@ positive and negative arguments, and range-local edit and undo data on a long
 line. Buffer tests preserve newline-free insertion and final-newline behavior.
 PTY coverage exercises real `C-t` dispatch and combining-grapheme undo and redo.
 
+Input parser unit tests bound incomplete numeric CSI parameter streams and use a
+reader that fails if decoding requests bytes beyond the limit. PTY coverage
+sends an overlong numeric CSI prefix without a terminator and confirms the
+editor falls back, processes the retained text, and remains responsive.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

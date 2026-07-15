@@ -452,6 +452,12 @@ macro recording or replays the last macro. Ctrl-Left/Right map to word movement,
 Ctrl-Up/Down map to paragraph movement, and Ctrl-Home/End map to buffer
 beginning/end.
 
+Pending CSI input is limited to 32 bytes. Complete supported CSI-u, modified
+navigation, function-key, and tilde sequences take precedence within that
+limit; an incomplete sequence at the limit falls back to a standalone Escape
+without discarding the remaining bytes. This bounds both input buffering and
+repeated parser scans for unterminated numeric parameters.
+
 Post-Milestone 14 terminal polish adds `suspend-frame` on `C-z`. The terminal
 session leaves the alternate screen, restores cooked mode, raises `SIGTSTP`, and
 re-enters raw mode plus the alternate screen after the process resumes. This is

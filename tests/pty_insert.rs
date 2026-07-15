@@ -421,6 +421,21 @@ fn function_keys_start_end_and_replay_keyboard_macro() -> Result<()> {
 }
 
 #[test]
+fn overlong_numeric_csi_input_falls_back_without_a_terminator() -> Result<()> {
+    let file = fixtures::named_temp_file("")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+    let input = format!("\x1b[1{}", "0".repeat(64));
+
+    rile.wait_for_screen_contains("Rile VISUAL")?;
+    rile.send("overlong numeric CSI", input.as_bytes())?;
+    rile.wait_for_screen_contains("[100000000000")?;
+    rile.assert_status_contains("modified:true")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn rectangle_mark_copy_and_regular_yank_paste_columns() -> Result<()> {
     let file = fixtures::named_temp_file("abcdef\n123456\nuvwxyz\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

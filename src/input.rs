@@ -5,6 +5,8 @@ use std::io::Read;
 
 use crate::{Result, RileError};
 
+const MAX_CSI_SEQUENCE_LEN: usize = 32;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum KeyEvent {
     Ctrl(char),
@@ -180,6 +182,8 @@ fn parse_csi_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
     if bytes.len() < 3 {
         return Ok(None);
     }
+    let overlong = bytes.len() >= MAX_CSI_SEQUENCE_LEN;
+    let bytes = &bytes[..bytes.len().min(MAX_CSI_SEQUENCE_LEN)];
     if let Some(parsed) = parse_csi_u_sequence(bytes) {
         return Ok(Some(parsed));
     }
@@ -205,6 +209,7 @@ fn parse_csi_sequence(bytes: &[u8]) -> Result<Option<ParsedKey>> {
         _ => Some((KeyEvent::Special(SpecialKey::Escape), 1)),
     };
 
+    let event = event.or_else(|| overlong.then_some((KeyEvent::Special(SpecialKey::Escape), 1)));
     Ok(event.map(|(event, consumed)| ParsedKey { event, consumed }))
 }
 
@@ -393,8 +398,20 @@ fn utf8_char_width(byte: u8) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::{self, Cursor, Read};
+
     use super::parse_key_sequence_with_erase_byte;
-    use super::{KeyEvent, ParsedKey, SpecialKey, parse_key_sequence};
+    use super::{
+        KeyEvent, KeyReader, MAX_CSI_SEQUENCE_LEN, ParsedKey, SpecialKey, parse_key_sequence,
+    };
+
+    struct FailingRead;
+
+    impl Read for FailingRead {
+        fn read(&mut self, _buffer: &mut [u8]) -> io::Result<usize> {
+            Err(io::Error::other("reader consumed the overlong CSI input"))
+        }
+    }
 
     fn parse(bytes: &[u8]) -> ParsedKey {
         parse_key_sequence(bytes)
@@ -559,6 +576,40 @@ mod tests {
             parse(b"\x1b[3~").event,
             KeyEvent::Special(SpecialKey::Delete)
         );
+    }
+
+    #[test]
+    fn bounds_unterminated_numeric_csi_sequences() {
+        let mut digits = b"\x1b[1".to_vec();
+        digits.resize(MAX_CSI_SEQUENCE_LEN - 1, b'0');
+        assert_eq!(parse_key_sequence(&digits).expect("valid prefix"), None);
+
+        digits.push(b'0');
+        let fallback = parse(&digits);
+        assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
+        assert_eq!(fallback.consumed, 1);
+
+        let mut parameters = b"\x1b[1".to_vec();
+        while parameters.len() < MAX_CSI_SEQUENCE_LEN {
+            parameters.extend_from_slice(b";0");
+        }
+        let fallback = parse(&parameters);
+        assert_eq!(fallback.event, KeyEvent::Special(SpecialKey::Escape));
+        assert_eq!(fallback.consumed, 1);
+    }
+
+    #[test]
+    fn key_reader_stops_buffering_overlong_numeric_csi() {
+        let mut input = b"\x1b[1".to_vec();
+        input.resize(MAX_CSI_SEQUENCE_LEN * 2, b'0');
+        let source = Cursor::new(input).chain(FailingRead);
+        let mut reader = KeyReader::new(source);
+
+        assert_eq!(
+            reader.read_key().expect("overlong CSI should fall back"),
+            KeyEvent::Special(SpecialKey::Escape)
+        );
+        assert_eq!(reader.buffer.len(), MAX_CSI_SEQUENCE_LEN - 1);
     }
 
     #[test]

@@ -3,6 +3,15 @@ Rile NEWS -- user-visible changes.
 Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 
+* Noteworthy changes since release 0.9.1 (unreleased)
+
+Security fixes:
+
+* Terminal input decoding now bounds incomplete numeric CSI sequences. A
+  terminal or PTY peer can no longer make Rile retain and repeatedly rescan an
+  unbounded digit or parameter stream without sending a sequence terminator.
+
+
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 
 Interface features:
