@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::cmp::Ordering;
+use std::collections::BinaryHeap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -11,6 +13,9 @@ use crate::matching::{
     smart_case_eq_with_mode, smart_case_starts_with, smart_case_starts_with_with_mode,
 };
 use crate::option::OptionRegistry;
+
+const MAX_FILE_COMPLETION_SCAN_ENTRIES: usize = 4_096;
+const MAX_FILE_COMPLETION_CANDIDATES: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompletionStyle {
@@ -137,6 +142,8 @@ pub struct CompletionSession {
     matches: Vec<usize>,
     selected: usize,
     selection_explicit: bool,
+    file_scan_limited: bool,
+    file_candidates_truncated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,6 +175,8 @@ impl CompletionSession {
             matches: Vec::new(),
             selected: 0,
             selection_explicit: false,
+            file_scan_limited: false,
+            file_candidates_truncated: false,
         };
         session.update("");
         session
@@ -187,6 +196,8 @@ impl CompletionSession {
             matches: Vec::new(),
             selected: 0,
             selection_explicit: false,
+            file_scan_limited: false,
+            file_candidates_truncated: false,
         };
         session.update("");
         session
@@ -209,12 +220,14 @@ impl CompletionSession {
             matches: Vec::new(),
             selected: 0,
             selection_explicit: false,
+            file_scan_limited: false,
+            file_candidates_truncated: false,
         };
         session.update("");
         session
     }
 
-    pub fn files(base_dir: impl Into<PathBuf>, config: CompletionConfig) -> Self {
+    pub fn files(base_dir: impl Into<PathBuf>, input: &str, config: CompletionConfig) -> Self {
         let mut session = Self {
             source: CompletionSource::Files,
             title: "Find file".to_owned(),
@@ -224,8 +237,10 @@ impl CompletionSession {
             matches: Vec::new(),
             selected: 0,
             selection_explicit: false,
+            file_scan_limited: false,
+            file_candidates_truncated: false,
         };
-        session.update("");
+        session.update(input);
         session
     }
 
@@ -251,6 +266,8 @@ impl CompletionSession {
             matches: Vec::new(),
             selected: 0,
             selection_explicit: false,
+            file_scan_limited: false,
+            file_candidates_truncated: false,
         };
         session.update("");
         session
@@ -336,6 +353,10 @@ impl CompletionSession {
 
     pub fn selection_explicit(&self) -> bool {
         self.selection_explicit
+    }
+
+    pub fn is_partial(&self) -> bool {
+        self.file_scan_limited || self.file_candidates_truncated
     }
 
     pub fn select_value(&mut self, value: &str) {
@@ -434,55 +455,124 @@ impl CompletionSession {
     fn refresh_file_candidates(&mut self, input: &str) {
         let Some(base_dir) = self.base_dir.as_deref() else {
             self.candidates.clear();
+            self.file_scan_limited = false;
+            self.file_candidates_truncated = false;
             return;
         };
         let parts = file_completion_parts(base_dir, input);
         let Ok(entries) = fs::read_dir(&parts.search_dir) else {
             self.candidates.clear();
+            self.file_scan_limited = false;
+            self.file_candidates_truncated = false;
             return;
         };
 
-        let entries = entries
-            .filter_map(Result::ok)
-            .filter_map(|entry| {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let Ok(file_type) = entry.file_type() else {
-                    return None;
-                };
-                Some((name, file_type))
-            })
-            .collect::<Vec<_>>();
         let use_file_category_matching = self.config.matching == CompletionMatching::Orderless;
-
-        let mut scored_candidates = entries
-            .into_iter()
-            .filter_map(|(name, file_type)| {
-                let score = if use_file_category_matching {
-                    file_match_score(&name, &parts.name_prefix)
-                } else {
-                    item_match_score(self.config.matching, &name, &parts.name_prefix)
-                };
-                let score = score?;
-                let value = format!("{}{}", parts.display_prefix, name);
-                let candidate = if file_type.is_dir() {
-                    CompletionCandidate::directory(format!("{value}/"))
-                } else {
-                    CompletionCandidate::file(value)
-                };
-                Some((candidate, score))
-            })
-            .collect::<Vec<_>>();
-        scored_candidates.sort_by(|(left, left_score), (right, right_score)| {
-            left_score
-                .cmp(right_score)
-                .then_with(|| right.is_directory().cmp(&left.is_directory()))
-                .then_with(|| left.value.cmp(&right.value))
+        let mut entries = entries;
+        let collected = collect_bounded_file_candidates(&mut entries, |entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            let score = if use_file_category_matching {
+                file_match_score(&name, &parts.name_prefix)
+            } else {
+                item_match_score(self.config.matching, &name, &parts.name_prefix)
+            }?;
+            let file_type = entry.file_type().ok()?;
+            let value = format!("{}{}", parts.display_prefix, name);
+            let candidate = if file_type.is_dir() {
+                CompletionCandidate::directory(format!("{value}/"))
+            } else {
+                CompletionCandidate::file(value)
+            };
+            Some(ScoredFileCandidate { candidate, score })
         });
-        self.candidates = scored_candidates
+        self.candidates = collected
+            .candidates
             .into_iter()
-            .map(|(candidate, _)| candidate)
+            .map(|candidate| candidate.candidate)
             .collect();
+        self.file_scan_limited = collected.scan_limited;
+        self.file_candidates_truncated = collected.candidates_truncated;
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ScoredFileCandidate {
+    candidate: CompletionCandidate,
+    score: MatchScore,
+}
+
+impl Ord for ScoredFileCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        compare_scored_file_candidates(self, other)
+    }
+}
+
+impl PartialOrd for ScoredFileCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+struct FileCandidateCollection {
+    candidates: Vec<ScoredFileCandidate>,
+    scan_limited: bool,
+    candidates_truncated: bool,
+}
+
+fn collect_bounded_file_candidates<T, E>(
+    entries: &mut impl Iterator<Item = std::result::Result<T, E>>,
+    mut score_entry: impl FnMut(T) -> Option<ScoredFileCandidate>,
+) -> FileCandidateCollection {
+    let mut candidates = BinaryHeap::with_capacity(MAX_FILE_COMPLETION_CANDIDATES);
+    let mut exhausted = false;
+    let mut candidates_truncated = false;
+
+    for _ in 0..MAX_FILE_COMPLETION_SCAN_ENTRIES {
+        let Some(entry) = entries.next() else {
+            exhausted = true;
+            break;
+        };
+        let Ok(entry) = entry else {
+            continue;
+        };
+        let Some(candidate) = score_entry(entry) else {
+            continue;
+        };
+        if candidates.len() < MAX_FILE_COMPLETION_CANDIDATES {
+            candidates.push(candidate);
+            continue;
+        }
+        candidates_truncated = true;
+        if candidates.peek().is_some_and(|worst| candidate < *worst) {
+            candidates.pop();
+            candidates.push(candidate);
+        }
+    }
+
+    let scan_limited = !exhausted;
+    let mut candidates = candidates.into_vec();
+    candidates.sort_by(compare_scored_file_candidates);
+    FileCandidateCollection {
+        candidates,
+        scan_limited,
+        candidates_truncated,
+    }
+}
+
+fn compare_scored_file_candidates(
+    left: &ScoredFileCandidate,
+    right: &ScoredFileCandidate,
+) -> Ordering {
+    left.score
+        .cmp(&right.score)
+        .then_with(|| {
+            right
+                .candidate
+                .is_directory()
+                .cmp(&left.candidate.is_directory())
+        })
+        .then_with(|| left.candidate.value.cmp(&right.candidate.value))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -873,7 +963,11 @@ mod tests {
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{CompletionCandidate, CompletionConfig, CompletionMatching, CompletionSession};
+    use super::{
+        CompletionCandidate, CompletionConfig, CompletionMatching, CompletionSession,
+        MAX_FILE_COMPLETION_CANDIDATES, MAX_FILE_COMPLETION_SCAN_ENTRIES, MatchQuality, MatchScore,
+        ScoredFileCandidate, collect_bounded_file_candidates,
+    };
     use crate::command::CommandRegistry;
     use crate::keymap::KeyMap;
     use crate::option::OptionRegistry;
@@ -904,6 +998,148 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    struct CountingEntries {
+        len: usize,
+        requested: usize,
+        errors: bool,
+    }
+
+    impl CountingEntries {
+        fn values(len: usize) -> Self {
+            Self {
+                len,
+                requested: 0,
+                errors: false,
+            }
+        }
+
+        fn errors(len: usize) -> Self {
+            Self {
+                len,
+                requested: 0,
+                errors: true,
+            }
+        }
+    }
+
+    impl Iterator for CountingEntries {
+        type Item = Result<usize, ()>;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.requested >= self.len {
+                return None;
+            }
+            let value = self.requested;
+            self.requested += 1;
+            Some(if self.errors { Err(()) } else { Ok(value) })
+        }
+    }
+
+    fn scored_file(value: String, directory: bool, quality: MatchQuality) -> ScoredFileCandidate {
+        let candidate = if directory {
+            CompletionCandidate::directory(value)
+        } else {
+            CompletionCandidate::file(value)
+        };
+        ScoredFileCandidate {
+            candidate,
+            score: MatchScore {
+                quality,
+                component_count: 1,
+            },
+        }
+    }
+
+    #[test]
+    fn bounded_file_collection_counts_raw_entries_and_errors() {
+        let mut entries = CountingEntries::values(MAX_FILE_COMPLETION_SCAN_ENTRIES + 10);
+        let collected = collect_bounded_file_candidates(&mut entries, |_| None);
+        assert!(collected.scan_limited);
+        assert_eq!(entries.requested, MAX_FILE_COMPLETION_SCAN_ENTRIES);
+
+        let mut errors = CountingEntries::errors(MAX_FILE_COMPLETION_SCAN_ENTRIES + 1);
+        let collected = collect_bounded_file_candidates(&mut errors, |_| {
+            panic!("error entries must not reach the scorer")
+        });
+        assert!(collected.scan_limited);
+        assert!(collected.candidates.is_empty());
+        assert_eq!(errors.requested, MAX_FILE_COMPLETION_SCAN_ENTRIES);
+
+        let mut exact = CountingEntries::values(MAX_FILE_COMPLETION_SCAN_ENTRIES);
+        let collected = collect_bounded_file_candidates(&mut exact, |_| None);
+        assert!(collected.scan_limited);
+
+        let mut below_limit = CountingEntries::values(MAX_FILE_COMPLETION_SCAN_ENTRIES - 1);
+        let collected = collect_bounded_file_candidates(&mut below_limit, |_| None);
+        assert!(!collected.scan_limited);
+    }
+
+    #[test]
+    fn bounded_file_collection_retains_best_ranked_candidates() {
+        let total = MAX_FILE_COMPLETION_CANDIDATES + 10;
+        let mut entries = CountingEntries::values(total);
+        let collected = collect_bounded_file_candidates(&mut entries, |index| {
+            Some(scored_file(
+                format!("file-{:04}", total - index),
+                false,
+                MatchQuality::Prefix,
+            ))
+        });
+
+        assert!(!collected.scan_limited);
+        assert!(collected.candidates_truncated);
+        assert_eq!(collected.candidates.len(), MAX_FILE_COMPLETION_CANDIDATES);
+        assert_eq!(collected.candidates[0].candidate.value, "file-0001");
+        assert_eq!(
+            collected
+                .candidates
+                .last()
+                .map(|item| item.candidate.value.as_str()),
+            Some("file-0256")
+        );
+    }
+
+    #[test]
+    fn bounded_file_collection_preserves_score_directory_and_name_order() {
+        let mut entries = CountingEntries::values(4);
+        let collected = collect_bounded_file_candidates(&mut entries, |index| {
+            Some(match index {
+                0 => scored_file("z-prefix".to_owned(), false, MatchQuality::Prefix),
+                1 => scored_file("z-directory/".to_owned(), true, MatchQuality::Exact),
+                2 => scored_file("a-file".to_owned(), false, MatchQuality::Exact),
+                _ => scored_file("z-file".to_owned(), false, MatchQuality::Exact),
+            })
+        });
+        let values = collected
+            .candidates
+            .iter()
+            .map(|item| item.candidate.value.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(values, vec!["z-directory/", "a-file", "z-file", "z-prefix"]);
+        assert!(!collected.candidates_truncated);
+    }
+
+    #[test]
+    fn bounded_file_collection_evicts_for_better_score_and_directory() {
+        let total = MAX_FILE_COMPLETION_CANDIDATES + 2;
+        let mut entries = CountingEntries::values(total);
+        let collected = collect_bounded_file_candidates(&mut entries, |index| {
+            Some(if index < MAX_FILE_COMPLETION_CANDIDATES {
+                scored_file(format!("prefix-{index:04}"), false, MatchQuality::Prefix)
+            } else if index == MAX_FILE_COMPLETION_CANDIDATES {
+                scored_file("late-file".to_owned(), false, MatchQuality::Exact)
+            } else {
+                scored_file("late-directory/".to_owned(), true, MatchQuality::Exact)
+            })
+        });
+
+        assert_eq!(collected.candidates[0].candidate.value, "late-directory/");
+        assert_eq!(collected.candidates[1].candidate.value, "late-file");
+        assert!(collected.candidates_truncated);
+        assert_eq!(collected.candidates.len(), MAX_FILE_COMPLETION_CANDIDATES);
     }
 
     #[test]
@@ -1524,7 +1760,8 @@ mod tests {
         fs::write(directory.path().join("alphabet.txt"), "alphabet").expect("fixture should write");
         fs::create_dir(directory.path().join("alpha-dir")).expect("directory should create");
         fs::write(directory.path().join("beta.txt"), "beta").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session =
+            CompletionSession::files(directory.path(), "", CompletionConfig::default());
 
         session.update("alpha");
 
@@ -1544,11 +1781,43 @@ mod tests {
     }
 
     #[test]
+    fn file_completion_bounds_candidates_for_every_matching_mode() {
+        let directory = TestDir::new();
+        for index in 0..=MAX_FILE_COMPLETION_CANDIDATES {
+            fs::write(directory.path().join(format!("match-{index:04}.txt")), "")
+                .expect("fixture should write");
+        }
+
+        for matching in [
+            CompletionMatching::Orderless,
+            CompletionMatching::Prefix,
+            CompletionMatching::Substring,
+        ] {
+            let session = CompletionSession::files(
+                directory.path(),
+                "match",
+                CompletionConfig {
+                    matching,
+                    ..CompletionConfig::default()
+                },
+            );
+
+            assert!(session.is_partial());
+            assert_eq!(session.match_count(), MAX_FILE_COMPLETION_CANDIDATES);
+            assert_eq!(
+                session.selected().map(|candidate| candidate.value.as_str()),
+                Some("match-0000.txt")
+            );
+        }
+    }
+
+    #[test]
     fn default_file_completion_uses_substring_matching() {
         let directory = TestDir::new();
         fs::write(directory.path().join("NOTICE.md"), "notice").expect("fixture should write");
         fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session =
+            CompletionSession::files(directory.path(), "", CompletionConfig::default());
 
         session.update("tice");
 
@@ -1566,7 +1835,8 @@ mod tests {
         fs::write(directory.path().join("alpha-note.txt"), "alpha").expect("fixture should write");
         fs::write(directory.path().join("alphabet.txt"), "alphabet").expect("fixture should write");
         fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session =
+            CompletionSession::files(directory.path(), "", CompletionConfig::default());
 
         session.update("a-n");
 
@@ -1605,7 +1875,8 @@ mod tests {
         let directory = TestDir::new();
         fs::write(directory.path().join("README.md"), "readme").expect("fixture should write");
         fs::write(directory.path().join("manual.md"), "manual").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session =
+            CompletionSession::files(directory.path(), "", CompletionConfig::default());
 
         session.update("md re");
 
@@ -1621,7 +1892,8 @@ mod tests {
         fs::write(directory.path().join("README.md"), "upper").expect("fixture should write");
         fs::write(directory.path().join("ReadMe.txt"), "mixed").expect("fixture should write");
         fs::write(directory.path().join("readme.org"), "lower").expect("fixture should write");
-        let mut session = CompletionSession::files(directory.path(), CompletionConfig::default());
+        let mut session =
+            CompletionSession::files(directory.path(), "", CompletionConfig::default());
 
         session.update("read");
         let values = session

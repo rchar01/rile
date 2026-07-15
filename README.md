@@ -327,7 +327,10 @@ the active base path is visible before typing. Long file prompts scroll
 horizontally to keep the cursor-side tail visible. Directory candidates descend
 on Enter when selected from exact directory text, an explicitly moved selection,
 or a typed prefix of the selected directory; substring-only directory matches
-keep the raw typed path.
+keep the raw typed path. Each refresh scans at most 4,096 directory results and
+retains the best 256 ranked candidates. Completion displays mark bounded results
+as `[partial]`; exact typed files and directories remain usable even when they
+are not retained as candidates.
 Command completion candidates show the first known key binding, such as
 `save-buffer (C-x C-s)` or `save-some-buffers (C-x s)`, when one exists.
 

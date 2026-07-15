@@ -849,7 +849,15 @@ impl Editor {
         if completion.style() == CompletionStyle::Vertical {
             let text = self.minibuffer.display_text()?;
             let selected = completion.selected_match_number().unwrap_or(0);
-            return Some(format!("{selected}/{}  {text}", completion.match_count()));
+            let partial = if completion.is_partial() {
+                " [partial]"
+            } else {
+                ""
+            };
+            return Some(format!(
+                "{selected}/{}{partial}  {text}",
+                completion.match_count()
+            ));
         }
         if completion.style() != CompletionStyle::Ido {
             return self.minibuffer.display_text();
@@ -876,12 +884,19 @@ impl Editor {
                 .map(|item| item.candidate.value.as_str())
                 .collect::<Vec<_>>()
                 .join(" | ")
+        } else if completion.is_partial() {
+            "No match in scanned entries".to_owned()
         } else {
             "No match".to_owned()
         };
+        let partial = if completion.is_partial() {
+            "  [partial]"
+        } else {
+            ""
+        };
         Some(format!(
-            "{}{}  [{}]",
-            prompt.label, prompt.input, candidates
+            "{}{}{partial}  [{}]",
+            prompt.label, prompt.input, candidates,
         ))
     }
 
@@ -1686,9 +1701,16 @@ impl Editor {
                 let Some((kind, input)) = self.minibuffer.take_prompt_input() else {
                     return Ok(EditorOutcome::Continue);
                 };
-                if let Some(directory) =
-                    directory_completion_to_enter(kind, self.completion.as_ref(), &input)
-                {
+                let exact_directory_exists = matches!(
+                    kind,
+                    PromptKind::FindFile | PromptKind::FindFileReadOnly | PromptKind::InsertFile
+                ) && self.find_file_input_is_exact_directory(&input);
+                if let Some(directory) = directory_completion_to_enter(
+                    kind,
+                    self.completion.as_ref(),
+                    &input,
+                    exact_directory_exists,
+                ) {
                     self.prompt_history.reset(kind);
                     self.minibuffer.start_prompt(kind, prompt_label(kind));
                     self.minibuffer.set_prompt_input(directory);
@@ -6191,23 +6213,31 @@ impl Editor {
 
     fn start_find_file(&mut self) -> Result<()> {
         let base_dir = self.find_file_base_dir();
+        let input = file_prompt_base_input(&base_dir);
         self.minibuffer
             .start_prompt(PromptKind::FindFile, "Find file: ");
-        self.minibuffer
-            .set_prompt_input(file_prompt_base_input(&base_dir));
-        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
-        self.update_completion_from_prompt();
+        self.minibuffer.set_prompt_input(input.clone());
+        self.completion = Some(CompletionSession::files(
+            base_dir,
+            &input,
+            self.completion_config,
+        ));
+        self.update_completion_buffer();
         Ok(())
     }
 
     fn start_find_file_read_only(&mut self) -> Result<()> {
         let base_dir = self.find_file_base_dir();
+        let input = file_prompt_base_input(&base_dir);
         self.minibuffer
             .start_prompt(PromptKind::FindFileReadOnly, "Find file read-only: ");
-        self.minibuffer
-            .set_prompt_input(file_prompt_base_input(&base_dir));
-        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
-        self.update_completion_from_prompt();
+        self.minibuffer.set_prompt_input(input.clone());
+        self.completion = Some(CompletionSession::files(
+            base_dir,
+            &input,
+            self.completion_config,
+        ));
+        self.update_completion_buffer();
         Ok(())
     }
 
@@ -6216,12 +6246,16 @@ impl Editor {
             return Ok(());
         }
         let base_dir = self.find_file_base_dir();
+        let input = file_prompt_base_input(&base_dir);
         self.minibuffer
             .start_prompt(PromptKind::InsertFile, "Insert file: ");
-        self.minibuffer
-            .set_prompt_input(file_prompt_base_input(&base_dir));
-        self.completion = Some(CompletionSession::files(base_dir, self.completion_config));
-        self.update_completion_from_prompt();
+        self.minibuffer.set_prompt_input(input.clone());
+        self.completion = Some(CompletionSession::files(
+            base_dir,
+            &input,
+            self.completion_config,
+        ));
+        self.update_completion_buffer();
         Ok(())
     }
 
@@ -6646,6 +6680,10 @@ impl Editor {
 
     fn find_file_input_is_exact_file(&self, input: &str) -> bool {
         self.resolve_find_file_path(input).is_file()
+    }
+
+    fn find_file_input_is_exact_directory(&self, input: &str) -> bool {
+        self.resolve_find_file_path(input.trim()).is_dir()
     }
 
     fn write_file(&mut self, path: &str) -> Result<EditorOutcome> {
@@ -9170,9 +9208,16 @@ fn remember_returnable_special_buffer_return(
 fn format_completion_buffer(completion: &CompletionSession) -> String {
     let title = format!("Possible Completions for {}:", completion.title());
     let mut text = format!("{title}\n\n");
+    if completion.is_partial() {
+        text.push_str("Directory completion results are partial.\n\n");
+    }
     let items = completion.view_items();
     if items.is_empty() {
-        text.push_str("No match\n");
+        if completion.is_partial() {
+            text.push_str("No match in scanned entries\n");
+        } else {
+            text.push_str("No match\n");
+        }
         return text;
     }
     for item in items {
@@ -11425,6 +11470,42 @@ mod tests {
     }
 
     #[test]
+    fn exact_directory_descends_when_absent_from_completion_candidates() {
+        let directory = TestDir::new();
+        let unrelated = TestDir::new();
+        let start = directory.path().join("start.txt");
+        fs::write(&start, "start").expect("start fixture should write");
+        fs::create_dir(directory.path().join("omitted-directory"))
+            .expect("directory fixture should create");
+
+        for kind in [
+            PromptKind::FindFile,
+            PromptKind::FindFileReadOnly,
+            PromptKind::InsertFile,
+        ] {
+            let document = Document::open(&start).expect("start fixture should open");
+            let mut editor = Editor::new(document);
+            editor.minibuffer.start_prompt(kind, "File: ");
+            editor.minibuffer.set_prompt_input("omitted-directory");
+            editor.completion = Some(CompletionSession::files(
+                unrelated.path(),
+                "missing",
+                editor.completion_config,
+            ));
+
+            editor
+                .handle_key(KeyEvent::Special(SpecialKey::Enter))
+                .expect("exact directory should descend");
+
+            assert_eq!(
+                editor.minibuffer().prompt_input(),
+                Some("omitted-directory/")
+            );
+            assert_eq!(editor.minibuffer().prompt_kind(), Some(kind));
+        }
+    }
+
+    #[test]
     fn find_file_completion_explicit_selection_overrides_exact_file() {
         let directory = TestDir::new();
         let start = directory.path().join("start.txt");
@@ -13339,7 +13420,8 @@ mod tests {
             PromptKind::InsertFile,
         ] {
             let mut editor = editor_with_small_completion_page(Document::scratch());
-            let completion = CompletionSession::files(directory.path(), editor.completion_config);
+            let completion =
+                CompletionSession::files(directory.path(), "", editor.completion_config);
             start_test_completion_prompt(&mut editor, kind, completion, "alpha");
             assert_completion_movement_keys(
                 &mut editor,

@@ -69,6 +69,13 @@ reader that fails if decoding requests bytes beyond the limit. PTY coverage
 sends an overlong numeric CSI prefix without a terminator and confirms the
 editor falls back, processes the retained text, and remains responsive.
 
+File-completion unit tests use synthetic iterators to verify raw directory
+results, including errors, stop at the scan limit and that bounded top-ranked
+retention preserves score, directory, and lexical ordering. Filesystem-backed
+tests cover every matching mode and exact directory fallback. PTY coverage
+confirms a candidate-overflow directory remains responsive and visibly marks
+its results as partial in vertical, ido, and completions-buffer styles.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

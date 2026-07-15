@@ -352,7 +352,16 @@ matching.
 File prompts override the global orderless default with Emacs-style file-category
 matching: literal prefixes, word-component partial completion, and substring
 matches. Rile's file matching also uses smart case: lowercase input matches
-case-insensitively, while uppercase input is case-sensitive.
+case-insensitively, while uppercase input is case-sensitive. File completion
+streams at most 4,096 raw directory results per synchronous refresh and retains
+the best 256 candidates with exact, prefix, word-component, substring,
+directory, and lexical ranking. Errors count against the scan limit. Results are
+marked partial when scanning reaches its limit or retention is truncated;
+membership beyond the scan limit follows the filesystem's unspecified
+enumeration order. Exact typed
+files still open directly, and exact typed directories descend independently of
+the retained candidate set. File sessions initialize from the visible prompt
+input once instead of scanning an empty input first.
 C-x b empty input switches to the default previous buffer, while C-x k empty
 input kills the default current buffer. The default `completion_style =
 "vertical"` reserves rows above the minibuffer and shows candidate annotations.

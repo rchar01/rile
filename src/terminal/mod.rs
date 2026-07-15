@@ -502,9 +502,14 @@ fn draw_completion_popup<W: Write>(
     let items = completion.view_items();
     if items.is_empty() {
         terminal.move_cursor(start_row as u16, 1)?;
+        let message = if completion.is_partial() {
+            "No match in scanned entries [partial]"
+        } else {
+            "No match"
+        };
         write_fixed_width_text_with_face(
             terminal,
-            "No match",
+            message,
             columns,
             Face::Warning,
             editor.theme(),
@@ -599,7 +604,15 @@ fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>,
         && completion.style() == CompletionStyle::Vertical
     {
         let selected = completion.selected_match_number().unwrap_or(0);
-        text.push_str(&format!("{selected}/{}  ", completion.match_count()));
+        let partial = if completion.is_partial() {
+            " [partial]"
+        } else {
+            ""
+        };
+        text.push_str(&format!(
+            "{selected}/{}{partial}  ",
+            completion.match_count()
+        ));
     }
 
     text.push_str(&prompt.label);
@@ -617,9 +630,14 @@ fn minibuffer_line_text_and_spans(editor: &Editor) -> Option<(String, Vec<Span>,
                 .map(|item| item.candidate.value.as_str())
                 .collect::<Vec<_>>()
                 .join(" | ")
+        } else if completion.is_partial() {
+            "No match in scanned entries".to_owned()
         } else {
             "No match".to_owned()
         };
+        if completion.is_partial() {
+            text.push_str("  [partial]");
+        }
         text.push_str("  [");
         text.push_str(&candidates);
         text.push(']');
@@ -654,7 +672,15 @@ fn raw_minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
         && completion.style() == CompletionStyle::Vertical
     {
         let selected = completion.selected_match_number().unwrap_or(0);
-        text.push_str(&format!("{selected}/{}  ", completion.match_count()));
+        let partial = if completion.is_partial() {
+            " [partial]"
+        } else {
+            ""
+        };
+        text.push_str(&format!(
+            "{selected}/{}{partial}  ",
+            completion.match_count()
+        ));
     }
     text.push_str(&prompt.label);
     text.push_str(input_before_cursor);

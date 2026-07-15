@@ -1,5 +1,50 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Bound file completion directory work and retained candidates.
+
+	* src/completion.rs (MAX_FILE_COMPLETION_SCAN_ENTRIES,
+	MAX_FILE_COMPLETION_CANDIDATES): New constants.
+	(CompletionSession): Track partial file scans and candidate retention.
+	(CompletionSession::files): Initialize from the actual prompt input.
+	(CompletionSession::is_partial): New method.
+	(CompletionSession::refresh_file_candidates): Stream bounded directory
+	results and retain bounded ranked candidates.
+	(ScoredFileCandidate, FileCandidateCollection,
+	collect_bounded_file_candidates, compare_scored_file_candidates): New types
+	and functions.
+	(CountingEntries, scored_file): New test helpers.
+	(bounded_file_collection_counts_raw_entries_and_errors,
+	bounded_file_collection_retains_best_ranked_candidates,
+	bounded_file_collection_preserves_score_directory_and_name_order,
+	bounded_file_collection_evicts_for_better_score_and_directory,
+	file_completion_bounds_candidates_for_every_matching_mode): New tests.
+	* src/editor/completion_policy.rs (directory_completion_to_enter): Descend
+	into an exact typed directory without requiring a retained candidate.
+	(exact_file_prompt_directory_descends_without_a_retained_candidate): New
+	test.
+	(explicit_selection_overrides_an_exact_typed_directory): New test.
+	* src/editor.rs (Editor::minibuffer_display_text,
+	format_completion_buffer): Mark partial completion results.
+	(Editor::handle_completion_prompt_key): Check exact typed directories.
+	(Editor::start_find_file, Editor::start_find_file_read_only,
+	Editor::start_insert_file): Avoid an initial duplicate directory scan.
+	(Editor::find_file_input_is_exact_directory): New method.
+	(exact_directory_descends_when_absent_from_completion_candidates): New test.
+	* src/terminal/mod.rs (draw_completion_popup,
+	minibuffer_line_text_and_spans, raw_minibuffer_cursor_column): Render partial
+	completion state and keep the cursor aligned.
+	* tests/pty_completion.rs
+	(exercise_partial_file_completion): New helper.
+	(vertical_file_completion_marks_bounded_results_as_partial,
+	ido_file_completion_marks_bounded_results_as_partial,
+	completions_buffer_marks_bounded_file_results_as_partial): New tests.
+	* NEWS: Announce bounded file completion.
+	* README.md: Document file completion limits and partial results.
+	* docs/development.md: Document bounded scanning, retention, and exact paths.
+	* docs/testing.md: Document completion resource-bound regressions.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Bound incomplete numeric CSI input.
 
 	* src/input.rs (MAX_CSI_SEQUENCE_LEN): New constant.

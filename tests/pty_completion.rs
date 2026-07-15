@@ -96,6 +96,35 @@ fn exercise_find_file_control_escaping(completion_style: &str) -> Result<()> {
     Ok(())
 }
 
+fn exercise_partial_file_completion(completion_style: &str, marker: &str) -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("zz-start.txt");
+    fs::write(&start, "start\n")?;
+    for index in 0..=256 {
+        fs::write(
+            directory.path().join(format!("candidate-{index:04}.txt")),
+            "",
+        )?;
+    }
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(
+        config_dir.join("config.toml"),
+        format!("completion_style = \"{completion_style}\"\n"),
+    )?;
+    let mut rile = RilePty::spawn_with_loaded_config(&start, 14, 240, home)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.wait_for_screen_contains(marker)?;
+    rile.assert_screen_contains("candidate-0000.txt")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.quit()?;
+    Ok(())
+}
+
 #[test]
 fn vertical_mx_completion_filters_and_accepts_command() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;
@@ -551,6 +580,24 @@ fn vertical_find_file_completion_filters_and_opens_sibling() -> Result<()> {
 
     rile.quit()?;
     Ok(())
+}
+
+#[test]
+fn vertical_file_completion_marks_bounded_results_as_partial() -> Result<()> {
+    exercise_partial_file_completion("vertical", "1/256 [partial]")
+}
+
+#[test]
+fn ido_file_completion_marks_bounded_results_as_partial() -> Result<()> {
+    exercise_partial_file_completion("ido", "[partial]")
+}
+
+#[test]
+fn completions_buffer_marks_bounded_file_results_as_partial() -> Result<()> {
+    exercise_partial_file_completion(
+        "completions-buffer",
+        "Directory completion results are partial.",
+    )
 }
 
 #[test]

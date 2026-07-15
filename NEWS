@@ -11,6 +11,11 @@ Security fixes:
   terminal or PTY peer can no longer make Rile retain and repeatedly rescan an
   unbounded digit or parameter stream without sending a sequence terminator.
 
+* File completion now bounds each synchronous directory scan and retains only
+  the best ranked candidates. Large directories show partial results instead of
+  making Rile collect and sort an unbounded number of entries. Exact typed files
+  and directories remain usable when omitted from the partial candidate set.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 
