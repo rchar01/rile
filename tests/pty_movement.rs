@@ -405,6 +405,32 @@ fn describe_buffer_opens_help_for_current_buffer() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn describe_buffer_escapes_controls_from_file_name_and_path() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let parent = directory
+        .path()
+        .join("dir\nPATH_FIELD\u{1b}]52;c;PATH_PWN\u{7}");
+    fs::create_dir(&parent)?;
+    let file = parent.join("name\nNAME_FIELD\u{1b}]52;c;NAME_PWN\u{7}.txt");
+    fs::write(&file, "body\n")?;
+    let mut rile = RilePty::spawn(&file, 20, 240)?;
+
+    rile.wait_for_screen_contains("body")?;
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("describe-buffer", b"describe-buffer")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("Name: name\\nNAME_FIELD\\u{1b}]52;c;NAME_PWN\\u{7}.txt")?;
+    rile.assert_screen_contains("dir\\nPATH_FIELD\\u{1b}]52;c;PATH_PWN\\u{7}")?;
+
+    rile.quit()?;
+    rile.assert_raw_output_excludes(b"\x1b]52;c;NAME_PWN\x07")?;
+    rile.assert_raw_output_excludes(b"\x1b]52;c;PATH_PWN\x07")?;
+    Ok(())
+}
+
 #[test]
 fn about_rile_opens_runtime_help() -> Result<()> {
     let file = fixtures::named_temp_file("line 001\nline 002\n")?;

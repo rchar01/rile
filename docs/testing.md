@@ -115,7 +115,10 @@ fragments for command, key, option, mode, buffer, and about output. Use PTY test
 for representative end-to-end help flows that depend on real terminal input,
 minibuffer prompts, local keymaps, or help-window restoration. Current PTY help
 coverage includes `C-h k`, `C-h f`, `C-h v`, `C-h m`, `C-h C-a`,
-`M-x describe-buffer`, `C-h e`, and prefix help.
+`M-x describe-buffer`, `C-h e`, and prefix help. Hostile metadata regressions
+also verify that buffer names, file paths, config paths, and working directories
+cannot inject structured help rows, and that raw PTY output excludes embedded
+terminal control sequences.
 
 ## Deterministic Terminal Mode
 

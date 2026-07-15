@@ -1,5 +1,22 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Protect structured help from filesystem control characters.
+
+	* src/editor/help.rs (format_about_rile_help,
+	format_describe_buffer_help): Escape dynamic paths and buffer names before
+	constructing help fields.
+	(escape_help_value): New function.
+	* src/editor.rs (about_rile_help_escapes_controls_in_paths,
+	describe_buffer_help_escapes_controls_in_name_and_path): New tests.
+	* tests/pty_movement.rs
+	(describe_buffer_escapes_controls_from_file_name_and_path): New test.
+	* NEWS: Announce structured-help hardening.
+	* docs/development.md: Document source-level help-value escaping.
+	* docs/self-documentation.md: Document safe dynamic metadata rendering.
+	* docs/testing.md: Document hostile metadata help regressions.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Protect normal files from special-buffer name collisions.
 
 	* src/buffers.rs (BufferManager::find_by_kind): New method.

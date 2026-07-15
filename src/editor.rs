@@ -9701,6 +9701,27 @@ mod tests {
         assert!(help.contains("Current directory: /tmp/rile"));
     }
 
+    #[test]
+    fn about_rile_help_escapes_controls_in_paths() {
+        let info = AboutRileInfo {
+            version: "test-version",
+            build_profile: "test-profile",
+            enabled_features: "test-features",
+            terminal_backend: "test-terminal",
+            config_path: Some("/tmp/config\ninjected\t\u{1b}]52;c;CONFIG\u{7}".to_owned()),
+            current_directory: Some("/tmp/work\r\u{9b}dir".to_owned()),
+        };
+
+        let help = format_about_rile_help(&info);
+
+        assert!(help.contains("Config path: /tmp/config\\ninjected\\t\\u{1b}]52;c;CONFIG\\u{7}\n"));
+        assert!(help.contains("Current directory: /tmp/work\\r\\u{9b}dir\n"));
+        assert!(!help.contains("config\ninjected"));
+        assert!(!help.contains('\u{1b}'));
+        assert!(!help.contains('\u{7}'));
+        assert!(!help.contains('\u{9b}'));
+    }
+
     impl TestDir {
         fn new() -> Self {
             let counter = TEST_DIR_COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -14782,6 +14803,42 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert!(help.contains("Point: line 2, column 4"));
         assert!(help.contains("Major mode: rust-mode"));
         assert!(help.contains("Syntax mode: rust-syntax-mode"));
+    }
+
+    #[test]
+    fn describe_buffer_help_escapes_controls_in_name_and_path() {
+        let registry = ModeRegistry::default();
+        let description = BufferDescription {
+            name: "report\nModified: no\t\u{1b}]52;c;NAME\u{7}.txt".to_owned(),
+            path: Some("/tmp/dir\nRead only: yes\r\u{9b}/report.txt".to_owned()),
+            kind: "normal",
+            modified: true,
+            read_only: false,
+            point_line: 1,
+            point_column: 0,
+            encoding: "UTF-8",
+            line_ending: "LF",
+            final_newline: false,
+            modes: ActiveModes {
+                major: ModeId::Fundamental,
+                syntax: ModeId::PlainTextSyntax,
+                special: None,
+                minor: Vec::new(),
+            },
+        };
+
+        let help = format_describe_buffer_help(&description, &registry);
+
+        assert!(help.contains(
+            "report\\nModified: no\\t\\u{1b}]52;c;NAME\\u{7}.txt is the current buffer."
+        ));
+        assert!(help.contains("Name: report\\nModified: no\\t\\u{1b}]52;c;NAME\\u{7}.txt\n"));
+        assert!(help.contains("Path: /tmp/dir\\nRead only: yes\\r\\u{9b}/report.txt\n"));
+        assert!(!help.contains("report\nModified: no"));
+        assert!(!help.contains("dir\nRead only: yes"));
+        assert!(!help.contains('\u{1b}'));
+        assert!(!help.contains('\u{7}'));
+        assert!(!help.contains('\u{9b}'));
     }
 
     #[test]

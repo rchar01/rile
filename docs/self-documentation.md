@@ -102,7 +102,8 @@ existing editor state:
 `C-h m` / `describe-mode` renders the active mode stack. `M-x describe-buffer`
 renders typed buffer state, including name, path, kind, modified state,
 read-only state, point, encoding, line-ending policy, final-newline state, and
-active modes.
+active modes. Buffer names and paths are escaped before help construction so
+filesystem control characters remain visible data rather than help structure.
 
 Special-buffer modes are exposed through `describe-mode`, not by replacing the
 normal mode-line major-mode slot. The mode line continues to show the derived
@@ -122,9 +123,10 @@ visible. The local messages keymap binds `q` to restore the previous buffer.
 `about-rile` / `C-h C-a` renders editor-level runtime metadata through the same
 help-buffer path. It reports version, build profile, feature-reporting status,
 terminal backend, default config path, current directory, and diagnostic
-guidance. Rile does not maintain a separate diagnostics registry yet; actionable
-runtime diagnostics are the echo-area status and error messages reviewable with
-`C-h e`.
+guidance. Config paths and current directories use the same source-level
+control escaping as buffer descriptions. Rile does not maintain a separate
+diagnostics registry yet; actionable runtime diagnostics are the echo-area
+status and error messages reviewable with `C-h e`.
 
 ## Test Coverage
 

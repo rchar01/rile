@@ -8,6 +8,7 @@ use crate::keymap::{
 };
 use crate::mode::{ModeId, ModeRegistry, ModeSpec};
 use crate::option::{OptionSpec, OptionValue};
+use crate::text::control_character_escape;
 
 use super::{AboutRileInfo, ActiveModes, BufferDescription};
 
@@ -228,21 +229,23 @@ pub(super) fn format_describe_variable_help(
 
 pub(super) fn format_about_rile_help(info: &AboutRileInfo) -> String {
     let mut text = String::new();
+    let config_path = info
+        .config_path
+        .as_deref()
+        .map(escape_help_value)
+        .unwrap_or_else(|| "none".to_owned());
+    let current_directory = info
+        .current_directory
+        .as_deref()
+        .map(escape_help_value)
+        .unwrap_or_else(|| "unknown".to_owned());
     append_help_heading(&mut text, "About Rile:");
     append_option_field(&mut text, "Version", info.version);
     append_option_field(&mut text, "Build profile", info.build_profile);
     append_option_field(&mut text, "Enabled features", info.enabled_features);
     append_option_field(&mut text, "Terminal backend", info.terminal_backend);
-    append_option_field(
-        &mut text,
-        "Config path",
-        info.config_path.as_deref().unwrap_or("none"),
-    );
-    append_option_field(
-        &mut text,
-        "Current directory",
-        info.current_directory.as_deref().unwrap_or("unknown"),
-    );
+    append_option_field(&mut text, "Config path", config_path);
+    append_option_field(&mut text, "Current directory", current_directory);
     text.push('\n');
     append_wrapped_prose(
         &mut text,
@@ -284,16 +287,15 @@ pub(super) fn format_describe_buffer_help(
     registry: &ModeRegistry,
 ) -> String {
     let mut text = String::new();
-    append_help_heading(
-        &mut text,
-        &format!("{} is the current buffer.", description.name),
-    );
-    append_option_field(&mut text, "Name", description.name.as_str());
-    append_option_field(
-        &mut text,
-        "Path",
-        description.path.as_deref().unwrap_or("none"),
-    );
+    let name = escape_help_value(&description.name);
+    let path = description
+        .path
+        .as_deref()
+        .map(escape_help_value)
+        .unwrap_or_else(|| "none".to_owned());
+    append_help_heading(&mut text, &format!("{name} is the current buffer."));
+    append_option_field(&mut text, "Name", name);
+    append_option_field(&mut text, "Path", path);
     append_option_field(&mut text, "Kind", description.kind);
     append_option_field(&mut text, "Modified", yes_no(description.modified));
     append_option_field(&mut text, "Read only", yes_no(description.read_only));
@@ -439,6 +441,18 @@ fn append_key_table_row(text: &mut String, key: &str, binding: &str, description
 
 fn append_option_field(text: &mut String, label: &str, value: impl std::fmt::Display) {
     text.push_str(&format!("{label}: {value}\n"));
+}
+
+fn escape_help_value(value: &str) -> String {
+    let mut escaped = String::new();
+    for character in value.chars() {
+        if let Some(replacement) = control_character_escape(character) {
+            escaped.push_str(&replacement);
+        } else {
+            escaped.push(character);
+        }
+    }
+    escaped
 }
 
 pub(super) fn append_wrapped_prose(text: &mut String, prose: &str) {

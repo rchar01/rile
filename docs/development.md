@@ -408,10 +408,13 @@ and selective region undo remain deferred.
 Post-Milestone 14 self-documentation work made commands, keymaps, options,
 modes, buffers, messages, and runtime metadata inspectable from inside Rile.
 The implemented architecture is documented in
-[Self-Documentation Architecture](self-documentation.md). Terminal input parsing
-uses the original termios erase byte, so `0x08` remains Backspace on
-`stty erase ^H` terminals and otherwise works as `C-h`; `M-Backspace` accepts
-both `Esc 0x7f` and `Esc 0x08`.
+[Self-Documentation Architecture](self-documentation.md). Dynamic buffer names,
+config paths, and working directories are escaped before constructing
+structured help, preventing embedded line breaks from creating misleading
+fields in addition to the terminal renderer's control-escaping boundary.
+Terminal input parsing uses the original termios erase byte, so `0x08` remains
+Backspace on `stty erase ^H` terminals and otherwise works as `C-h`;
+`M-Backspace` accepts both `Esc 0x7f` and `Esc 0x08`.
 
 Post-Milestone 14 file polish adds `C-x C-r` / `find-file-read-only`, reusing
 the shared file-completion source and relative-path resolution from `C-x C-f`.

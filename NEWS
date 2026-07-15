@@ -21,6 +21,10 @@ Security fixes:
   replace a normal file buffer named `*Messages*`, `*Help*`, or another special
   name and discard its path or unsaved session contents.
 
+* Buffer and runtime help now displays control characters in file names, config
+  paths, and working directories as visible escapes before constructing help
+  fields. Embedded line breaks can no longer insert misleading help rows.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 
