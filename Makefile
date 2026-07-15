@@ -10,7 +10,7 @@ PERF_IMAGE ?= rile-perf
 REFERENCE_EDITORS ?= emacs zile kg rile
 REF_EDITOR ?=
 REF_SCENARIO ?=
-RELEASE_VERSION ?= v0.9.0
+RELEASE_VERSION ?= v0.9.1
 IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/in-container
 RELEASE_IN_CONTAINER := IMAGE=$(IMAGE) ./scripts/release-in-container
 VISUAL_IN_CONTAINER := IMAGE=$(VISUAL_IMAGE) CONTAINERFILE=Containerfile.visual ./scripts/in-container

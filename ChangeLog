@@ -1,5 +1,16 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Prepare the 0.9.1 release.
+
+	* Cargo.toml: Set version to 0.9.1.
+	* Cargo.lock: Update Rile package metadata.
+	* Makefile (RELEASE_VERSION): Default release commands to v0.9.1.
+	* NEWS: Mark the 0.9.1 release and clarify split separators, terminal
+	control display, and regexp limits.
+	* docs/release-checklist.md: Update current release command examples.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Keep expanded controls aligned in narrow file prompts.
 
 	* src/terminal/mod.rs (raw_minibuffer_cursor_column): Measure the combined

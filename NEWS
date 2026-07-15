@@ -3,16 +3,18 @@ Rile NEWS -- user-visible changes.
 Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>
 SPDX-License-Identifier: GPL-3.0-or-later
 
-* Noteworthy changes since release 0.9.0 (unreleased)
+* Noteworthy changes in release 0.9.1 (2026-07-15)
 
 Interface features:
 
-* Side-by-side split windows now reserve and draw a visible separator column so
-  adjacent buffer text and mode lines no longer run together.
-* Terminal rendering now displays control characters from buffer text, file
-  names, paths, prompts, completions, messages, and command output as visible
-  escapes instead of sending them to the terminal. Narrow minibuffer prompts
-  also clip those expanded escapes without hiding the cursor-side path tail.
+* Side-by-side split windows now reserve and draw a visible separator column,
+  when layout width permits, so adjacent buffer text and mode lines no longer
+  run together.
+* Terminal rendering now expands tabs and displays other control characters
+  from buffer text, file names, paths, prompts, completions, messages, and
+  command output as visible escapes instead of sending them to the terminal.
+  Narrow minibuffer prompts also clip those expanded escapes without hiding the
+  cursor-side path tail.
 
 Security fixes:
 
@@ -38,7 +40,10 @@ Security fixes:
 
 * Regexp search, replacement, and highlighting now use a bounded iterative
   matcher instead of recursive backtracking. Pathological failing patterns can
-  no longer trigger exponential matching or matcher stack overflow.
+  no longer trigger exponential matching or matcher stack overflow. Rile now
+  rejects regexps longer than 1,024 characters, with more than 32 captures or
+  64 nested groups, requiring more than 4,096 compiled instructions, or using
+  unbounded repetition around an expression that can match empty text.
 
 * Auto-save files on Unix now use permissions no broader than the visited file
   or an existing recovery file, preventing permissive process umasks from

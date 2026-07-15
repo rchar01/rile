@@ -31,7 +31,7 @@ make release-tools-check
 make release-doctor
 make release-check
 make release-snapshot
-make release-notes RELEASE_VERSION=v0.9.0
+make release-notes RELEASE_VERSION=v0.9.1
 ```
 
 ## Release Commit And Tag
@@ -40,14 +40,14 @@ After checks pass, commit the release-prep changes and create an annotated tag:
 
 ```sh
 git commit
-git tag -a v0.9.0 -m "v0.9.0"
+git tag -a v0.9.1 -m "v0.9.1"
 ```
 
 Push both the release branch and tag before publishing.  For the official Rile
 repository, the remote is `cb` and the release branch is `main`:
 
 ```sh
-git push cb main v0.9.0
+git push cb main v0.9.1
 ```
 
 Use the configured remote and release branch for other clones.
@@ -60,7 +60,7 @@ that file read-only and passes only the container-side token path to
 `release-tools`:
 
 ```sh
-RELEASE_TOKEN_FILE=~/.config/forge/token make release-publish-tag RELEASE_VERSION=v0.9.0
+RELEASE_TOKEN_FILE=~/.config/forge/token make release-publish-tag RELEASE_VERSION=v0.9.1
 ```
 
 `RELEASE_TOKEN`, `GITEA_TOKEN`, `GITHUB_TOKEN`, and `GITLAB_TOKEN` remain
