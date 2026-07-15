@@ -1,5 +1,25 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Bound character transposition memory to the affected text.
+
+	* src/buffer/mod.rs (Buffer::insert): Insert newline-free text without
+	splitting or cloning the complete stored line.
+	(insert_text_without_newline_updates_line_and_final_newline): New test.
+	* src/editor.rs (transpose_chars_edit): Locate only the grapheme boundaries
+	needed to reach point and the target, without line-sized metadata.
+	(transpose_grapheme_range): Preallocate only the affected replacement.
+	(transpose_chars_handles_end_of_line_and_utf8): Exercise a combining
+	grapheme cluster and point inside a grapheme.
+	(transpose_chars_bounds_saturated_arguments_by_line_progress,
+	transpose_chars_keeps_long_line_edit_and_undo_local): New tests.
+	* tests/pty_insert.rs
+	(transpose_chars_preserves_combining_graphemes_through_redo): New test.
+	* NEWS: Announce the character-transposition availability fix.
+	* docs/development.md: Document bounded character transposition memory.
+	* docs/testing.md: Document character-transposition security regressions.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Limit paragraph filling to the affected text.
 
 	* src/editor.rs (Editor::fill_paragraph): Build, compare, and replace only

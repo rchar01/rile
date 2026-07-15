@@ -279,7 +279,12 @@ uses Rile's Unicode-aware word boundaries and preserves punctuation between the
 swapped words. The line subset moves the previous line past the current line or
 lines. These commands support positive and negative numeric arguments, respect
 read-only buffers, and record one undo entry per command. They intentionally
-defer zero-argument mark-based transposition.
+defer zero-argument mark-based transposition. Character transposition scans only
+the grapheme boundaries needed to reach point and the target, uses constant
+auxiliary metadata, limits replacement and undo strings to the affected range,
+and bounds saturated numeric arguments by actual line progress. Newline-free
+buffer insertion mutates the stored line directly rather than cloning unrelated
+text around the insertion point.
 
 Post-Milestone 14 case-conversion polish adds `downcase-word` on `M-l`,
 `upcase-word` on `M-u`, `capitalize-word` on `M-c`, `downcase-region` on

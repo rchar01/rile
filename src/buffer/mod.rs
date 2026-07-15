@@ -153,27 +153,28 @@ impl Buffer {
             return Ok(at);
         }
 
+        if !text.contains('\n') {
+            self.lines[at.line].insert_str(at.byte, text);
+            self.dirty = true;
+            self.recompute_final_newline();
+            return Ok(Position::new(at.line, at.byte + text.len()));
+        }
+
         let inserted_lines: Vec<&str> = text.split('\n').collect();
         let line = self.lines[at.line].clone();
         let prefix = &line[..at.byte];
         let suffix = &line[at.byte..];
 
-        let end = if inserted_lines.len() == 1 {
-            self.lines[at.line].insert_str(at.byte, text);
-            Position::new(at.line, at.byte + text.len())
-        } else {
-            let mut replacement = Vec::with_capacity(inserted_lines.len());
-            replacement.push(format!("{}{}", prefix, inserted_lines[0]));
-            for part in &inserted_lines[1..inserted_lines.len() - 1] {
-                replacement.push((*part).to_owned());
-            }
-            let last = inserted_lines[inserted_lines.len() - 1];
-            replacement.push(format!("{last}{suffix}"));
+        let mut replacement = Vec::with_capacity(inserted_lines.len());
+        replacement.push(format!("{}{}", prefix, inserted_lines[0]));
+        for part in &inserted_lines[1..inserted_lines.len() - 1] {
+            replacement.push((*part).to_owned());
+        }
+        let last = inserted_lines[inserted_lines.len() - 1];
+        replacement.push(format!("{last}{suffix}"));
 
-            let end = Position::new(at.line + inserted_lines.len() - 1, last.len());
-            self.lines.splice(at.line..=at.line, replacement);
-            end
-        };
+        let end = Position::new(at.line + inserted_lines.len() - 1, last.len());
+        self.lines.splice(at.line..=at.line, replacement);
 
         self.dirty = true;
         self.recompute_final_newline();
@@ -533,6 +534,25 @@ mod tests {
         assert_eq!(end, Position::new(1, 1));
         assert_eq!(buffer.serialize(), "ax\nyb");
         assert!(buffer.is_dirty());
+        assert!(!buffer.final_newline());
+    }
+
+    #[test]
+    fn insert_text_without_newline_updates_line_and_final_newline() {
+        let mut buffer = Buffer::from_text("aé\n");
+        let end = buffer
+            .insert(Position::new(0, 1), "界")
+            .expect("same-line insert should succeed");
+
+        assert_eq!(end, Position::new(0, "a界".len()));
+        assert_eq!(buffer.serialize(), "a界é\n");
+        assert!(buffer.is_dirty());
+        assert!(buffer.final_newline());
+
+        buffer
+            .insert(Position::new(1, 0), "tail")
+            .expect("final-line insert should succeed");
+        assert_eq!(buffer.serialize(), "a界é\ntail");
         assert!(!buffer.final_newline());
     }
 

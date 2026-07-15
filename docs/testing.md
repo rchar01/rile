@@ -59,6 +59,11 @@ large collections of short words, retained carriage returns, and UTF-8 cursor
 mapping. PTY coverage exercises the default `M-q` path and configured fill
 columns.
 
+Character-transposition unit tests cover combining grapheme clusters, saturated
+positive and negative arguments, and range-local edit and undo data on a long
+line. Buffer tests preserve newline-free insertion and final-newline behavior.
+PTY coverage exercises real `C-t` dispatch and combining-grapheme undo and redo.
+
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
 isolation and duplicate-error suppression. PTY coverage changes a watched file

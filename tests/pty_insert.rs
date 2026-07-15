@@ -177,6 +177,32 @@ fn transpose_chars_updates_visible_buffer_and_undoes() -> Result<()> {
 }
 
 #[test]
+fn transpose_chars_preserves_combining_graphemes_through_redo() -> Result<()> {
+    let file = fixtures::named_temp_file("ae\u{301}bd\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("ae\u{301}bd")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.send("C-t", keys::control('t'))?;
+    rile.wait_for_screen_contains("abe\u{301}d")?;
+    rile.assert_cursor(0, 3)?;
+
+    rile.send("C-_", [0x1f])?;
+    rile.wait_for_screen_contains("ae\u{301}bd")?;
+    rile.assert_cursor(0, 2)?;
+
+    rile.send("M-x", keys::meta('x'))?;
+    rile.send("undo-redo", b"undo-redo")?;
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("abe\u{301}d")?;
+    rile.assert_cursor(0, 3)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn transpose_words_and_lines_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("one two three\nalpha\nbeta\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

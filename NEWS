@@ -15,6 +15,11 @@ Interface features:
 
 Security fixes:
 
+* Character transposition now locates only the needed UTF-8 grapheme boundaries
+  without collecting line-sized metadata.  Same-line insertion also avoids
+  cloning the complete line, so nearby transpositions allocate only for the
+  affected text and store only that text in undo data.
+
 * Paragraph filling now builds, compares, replaces, and records undo data only
   for the affected paragraphs.  Wrapping and cursor mapping also stream words
   without collecting per-word metadata or filling the same text twice.

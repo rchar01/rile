@@ -8764,33 +8764,56 @@ fn transpose_chars_edit(line: &str, position: Position, argument: i32) -> Option
         return None;
     }
 
-    let graphemes = line.grapheme_indices(true).collect::<Vec<_>>();
-    if graphemes.len() < 2 {
-        return None;
+    let mut graphemes = line.grapheme_indices(true);
+    let mut cursor_index: usize = 0;
+    let mut preceding_start = None;
+    let mut source_start = None;
+    let mut source_end = None;
+    for (byte, _) in graphemes.by_ref() {
+        if byte >= position.byte {
+            source_end = Some(byte);
+            break;
+        }
+        preceding_start = source_start;
+        source_start = Some(byte);
+        cursor_index += 1;
     }
 
-    let cursor_index = graphemes
-        .iter()
-        .take_while(|(byte, _)| *byte < position.byte)
-        .count();
-    if cursor_index == 0 {
-        return None;
-    }
+    let source_start = source_start?;
 
     if argument > 0 {
-        if cursor_index == graphemes.len() {
-            if argument == 1 {
-                return transpose_grapheme_range(line, position.line, graphemes.len() - 2, 1, 1);
+        if let Some(source_end) = source_end {
+            let mut range_end = source_end;
+            for _ in 0..argument as usize {
+                range_end = graphemes.next().map_or(line.len(), |(byte, _)| byte);
+                if range_end == line.len() {
+                    break;
+                }
             }
-            return None;
+            transpose_grapheme_range(
+                line,
+                position.line,
+                source_start,
+                range_end,
+                source_start,
+                source_end,
+                1,
+            )
+        } else {
+            if argument == 1 {
+                let preceding_start = preceding_start?;
+                return transpose_grapheme_range(
+                    line,
+                    position.line,
+                    preceding_start,
+                    line.len(),
+                    preceding_start,
+                    source_start,
+                    1,
+                );
+            }
+            None
         }
-
-        let source = cursor_index - 1;
-        let distance = (argument as usize).min(graphemes.len() - 1 - source);
-        if distance == 0 {
-            return None;
-        }
-        transpose_grapheme_range(line, position.line, source, distance, 1)
     } else {
         let source = cursor_index - 1;
         let distance = argument.unsigned_abs() as usize;
@@ -8798,39 +8821,32 @@ fn transpose_chars_edit(line: &str, position: Position, argument: i32) -> Option
         if target == source {
             return None;
         }
-        transpose_grapheme_range(line, position.line, target, source - target, -1)
+        let range_start = line.grapheme_indices(true).nth(target)?.0;
+        let source_end = source_end.unwrap_or(line.len());
+        transpose_grapheme_range(
+            line,
+            position.line,
+            range_start,
+            source_end,
+            source_start,
+            source_end,
+            -1,
+        )
     }
 }
 
 fn transpose_grapheme_range(
     line: &str,
     line_index: usize,
-    range_start_index: usize,
-    distance: usize,
+    range_start: usize,
+    range_end: usize,
+    source_start: usize,
+    source_end: usize,
     direction: i32,
 ) -> Option<TransposeEdit> {
-    let graphemes = line.grapheme_indices(true).collect::<Vec<_>>();
-    let source = if direction >= 0 {
-        range_start_index
-    } else {
-        range_start_index + distance
-    };
-    let range_end_index = range_start_index + distance + 1;
-    let range_start = graphemes.get(range_start_index)?.0;
-    let range_end = if range_end_index < graphemes.len() {
-        graphemes[range_end_index].0
-    } else {
-        line.len()
-    };
-    let source_start = graphemes.get(source)?.0;
-    let source_end = if source + 1 < graphemes.len() {
-        graphemes[source + 1].0
-    } else {
-        line.len()
-    };
     let dragged = &line[source_start..source_end];
 
-    let mut replacement = String::new();
+    let mut replacement = String::with_capacity(range_end - range_start);
     let cursor_byte = if direction >= 0 {
         replacement.push_str(&line[range_start..source_start]);
         replacement.push_str(&line[source_end..range_end]);
@@ -8843,7 +8859,6 @@ fn transpose_grapheme_range(
         replacement.push_str(&line[source_end..range_end]);
         cursor_byte
     };
-
     Some(TransposeEdit {
         range: TextRange::new(
             Position::new(line_index, range_start),
@@ -17805,16 +17820,32 @@ M-g g           goto-line                      Go to line or line:column\n"
         let mut document = Document::scratch();
         document
             .buffer_mut()
-            .insert(Position::new(0, 0), "aé界d")
+            .insert(Position::new(0, 0), "ae\u{301}界d")
             .expect("fixture should insert");
         let mut editor = Editor::new(document);
-        editor.cursor = Position::new(0, "aé".len());
+        editor.cursor = Position::new(0, "ae\u{301}".len());
 
         editor
             .handle_key(KeyEvent::Ctrl('t'))
             .expect("C-t should transpose UTF-8 graphemes");
-        assert_eq!(editor.document().buffer().serialize(), "a界éd");
-        assert_eq!(editor.cursor(), Position::new(0, "a界é".len()));
+        assert_eq!(editor.document().buffer().serialize(), "a界e\u{301}d");
+        assert_eq!(editor.cursor(), Position::new(0, "a界e\u{301}".len()));
+
+        let inside_grapheme = Position::new(0, "ae".len());
+        let positive_edit = super::transpose_chars_edit("ae\u{301}b", inside_grapheme, 1)
+            .expect("point inside a grapheme should select that grapheme");
+        assert_eq!(positive_edit.replacement, "be\u{301}");
+        assert_eq!(
+            positive_edit.cursor_after,
+            Position::new(0, "abe\u{301}".len())
+        );
+        let negative_edit = super::transpose_chars_edit("ae\u{301}b", inside_grapheme, -1)
+            .expect("negative transpose should preserve inside-grapheme selection");
+        assert_eq!(negative_edit.replacement, "e\u{301}a");
+        assert_eq!(
+            negative_edit.cursor_after,
+            Position::new(0, "e\u{301}".len())
+        );
 
         let mut document = Document::scratch();
         document
@@ -17885,6 +17916,93 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("C-u -1 C-t should drag char backward");
         assert_eq!(editor.document().buffer().serialize(), "adcb");
         assert_eq!(editor.cursor(), Position::new(0, 2));
+    }
+
+    #[test]
+    fn transpose_chars_bounds_saturated_arguments_by_line_progress() {
+        let mut positive_document = Document::scratch();
+        positive_document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut positive_editor = Editor::new(positive_document);
+        positive_editor.cursor = Position::new(0, 2);
+
+        positive_editor
+            .transpose_chars(Some(i32::MAX))
+            .expect("maximum positive argument should clamp at line end");
+        assert_eq!(positive_editor.document().buffer().serialize(), "acdb");
+        assert_eq!(positive_editor.cursor(), Position::new(0, 4));
+
+        let mut negative_document = Document::scratch();
+        negative_document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "abcd")
+            .expect("fixture should insert");
+        let mut negative_editor = Editor::new(negative_document);
+        negative_editor.cursor = Position::new(0, 3);
+
+        negative_editor
+            .transpose_chars(Some(i32::MIN))
+            .expect("minimum negative argument should clamp at line start");
+        assert_eq!(negative_editor.document().buffer().serialize(), "cabd");
+        assert_eq!(negative_editor.cursor(), Position::new(0, 1));
+    }
+
+    #[test]
+    fn transpose_chars_keeps_long_line_edit_and_undo_local() {
+        let suffix = "x".repeat(2_000_000);
+        let text = format!("abc{suffix}");
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), &text)
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let cursor_before = Position::new(0, 2);
+        let cursor_after = Position::new(0, 3);
+        editor.cursor = cursor_before;
+
+        editor
+            .handle_key(KeyEvent::Ctrl('t'))
+            .expect("C-t should transpose near the start of a long line");
+        let line = editor
+            .document()
+            .buffer()
+            .line(0)
+            .expect("transposed line should exist");
+        assert!(line.starts_with("acb"));
+        assert_eq!(&line[3..], suffix);
+        assert_eq!(editor.cursor(), cursor_after);
+        assert_eq!(
+            editor
+                .undo_stack
+                .last()
+                .expect("transpose should record undo")
+                .record,
+            UndoRecord::Replace {
+                range: TextRange::new(Position::new(0, 1), Position::new(0, 3)),
+                old_text: "bc".to_owned(),
+                new_text: "cb".to_owned(),
+                cursor_before,
+                cursor_after,
+            }
+        );
+
+        editor.undo().expect("undo should restore the long line");
+        assert_eq!(editor.document().buffer().line(0), Some(text.as_str()));
+        assert_eq!(editor.cursor(), cursor_before);
+        editor
+            .undo_redo()
+            .expect("redo should restore the transposed long line");
+        let line = editor
+            .document()
+            .buffer()
+            .line(0)
+            .expect("redone line should exist");
+        assert!(line.starts_with("acb"));
+        assert_eq!(&line[3..], suffix);
+        assert_eq!(editor.cursor(), cursor_after);
     }
 
     #[test]
