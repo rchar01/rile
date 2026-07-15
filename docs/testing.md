@@ -120,6 +120,14 @@ control sequence itself is the behavior under test. The harness should include
 the scenario action, expected and actual cursor positions when relevant,
 normalized visible rows, and a caret marker.
 
+File-prompt security tests cover C0 and C1 controls, OSC sequences terminated by
+BEL and string terminators, and the shared `find-file`, `find-file-read-only`,
+and `insert-file` display boundary. Unix coverage also verifies that invalid
+filename bytes are emitted only through the lossy UTF-8 replacement character;
+it does not treat those lossy prompt paths as round-trippable filesystem names.
+Narrow control-escape clipping remains a terminal unit test because its exact
+viewport boundary is more deterministic below the PTY layer.
+
 ## Fixtures
 
 Visual and PTY fixtures live under `fixtures/visual/`. Keep them as UTF-8 text with LF line endings.

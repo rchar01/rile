@@ -11,7 +11,8 @@ Interface features:
   adjacent buffer text and mode lines no longer run together.
 * Terminal rendering now displays control characters from buffer text, file
   names, paths, prompts, completions, messages, and command output as visible
-  escapes instead of sending them to the terminal.
+  escapes instead of sending them to the terminal. Narrow minibuffer prompts
+  also clip those expanded escapes without hiding the cursor-side path tail.
 
 Security fixes:
 

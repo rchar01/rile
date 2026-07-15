@@ -1,5 +1,24 @@
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
+	Keep expanded controls aligned in narrow file prompts.
+
+	* src/terminal/mod.rs (raw_minibuffer_cursor_column): Measure the combined
+	prompt text so tab stops match rendering.
+	(minibuffer_visible_line): Expand display text and remap spans before slicing
+	a horizontally scrolled minibuffer line.
+	(minibuffer_visible_line_can_start_inside_expanded_control_character,
+	minibuffer_visible_line_expands_tabs_before_clipping): New tests.
+	* tests/pty_completion.rs
+	(find_file_read_only_escapes_osc_string_terminators,
+	insert_file_escapes_c1_controls,
+	file_prompt_lossily_displays_invalid_utf8_without_emitting_raw_bytes): New
+	tests.
+	* NEWS: Announce safe narrow-prompt control clipping.
+	* docs/development.md: Document clipping expanded minibuffer text.
+	* docs/testing.md: Document file-prompt control and filename-byte coverage.
+
+2026-07-15  Robert Charusta  <rch-public@posteo.net>
+
 	Bound character transposition memory to the affected text.
 
 	* src/buffer/mod.rs (Buffer::insert): Insert newline-free text without

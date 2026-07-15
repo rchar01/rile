@@ -567,6 +567,7 @@ fn minibuffer_visible_line(editor: &Editor, columns: usize) -> Option<Minibuffer
         });
     }
     let start_column = cursor + 1 - columns;
+    let (text, spans) = expand_display_text(&text, &spans, 4);
     let start_byte = byte_from_display_column(&text, start_column);
     let text = text[start_byte..].to_owned();
     let spans = spans
@@ -648,16 +649,16 @@ fn prompt_supports_ido_candidates(kind: PromptKind) -> bool {
 fn raw_minibuffer_cursor_column(editor: &Editor) -> Option<usize> {
     let prompt = editor.minibuffer().prompt()?;
     let input_before_cursor = editor.minibuffer().prompt_input_before_cursor()?;
-    let prompt_column = text_display_width(&prompt.label) + text_display_width(input_before_cursor);
-    let Some(completion) = editor.completion() else {
-        return Some(prompt_column);
-    };
-    if completion.style() == CompletionStyle::Vertical {
+    let mut text = String::new();
+    if let Some(completion) = editor.completion()
+        && completion.style() == CompletionStyle::Vertical
+    {
         let selected = completion.selected_match_number().unwrap_or(0);
-        let prefix = format!("{selected}/{}  ", completion.match_count());
-        return Some(text_display_width(&prefix) + prompt_column);
+        text.push_str(&format!("{selected}/{}  ", completion.match_count()));
     }
-    Some(prompt_column)
+    text.push_str(&prompt.label);
+    text.push_str(input_before_cursor);
+    Some(text_display_width(&text))
 }
 
 #[cfg(test)]
@@ -1730,9 +1731,10 @@ mod tests {
         display_width_with_tabs, draw_editor_frame, draw_editor_frame_with_options,
         escape_terminal_controls, expand_display_text, format_completion_row,
         minibuffer_visible_line, mode_line_position, text_clipped_to_display_width,
-        text_from_display_column, visible_display_range, wrapped_help_cursor_position,
-        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
-        write_fixed_width_text_with_spans, write_line_number_gutter, write_line_with_spans,
+        text_display_width, text_from_display_column, visible_display_range,
+        wrapped_help_cursor_position, wrapped_help_visual_lines, write_buffer_line,
+        write_fixed_width_text_with_face, write_fixed_width_text_with_spans,
+        write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
@@ -2518,6 +2520,42 @@ mod tests {
         assert_eq!(line.text, "e\u{301}abc");
         assert!(line.spans.is_empty());
         assert_eq!(line.cursor, Some(4));
+    }
+
+    #[test]
+    fn minibuffer_visible_line_can_start_inside_expanded_control_character() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("123\u{1b}456".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 8).expect("prompt should render");
+
+        assert_eq!(line.text, "{1b}456");
+        assert!(line.spans.is_empty());
+        assert_eq!(line.cursor, Some(7));
+        assert_eq!(text_display_width(&line.text), 7);
+    }
+
+    #[test]
+    fn minibuffer_visible_line_expands_tabs_before_clipping() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("goto-line should start prompt");
+        editor
+            .handle_key(KeyEvent::Text("123\t456".to_owned()))
+            .expect("prompt input should insert");
+
+        let line = minibuffer_visible_line(&editor, 8).expect("prompt should render");
+
+        assert_eq!(line.text, "23  456");
+        assert!(line.spans.is_empty());
+        assert_eq!(line.cursor, Some(7));
+        assert_eq!(text_display_width(&line.text), 7);
     }
 
     #[test]

@@ -5,6 +5,8 @@ mod support;
 
 use anyhow::{Result, bail};
 use std::fs;
+#[cfg(unix)]
+use std::{ffi::OsString, os::unix::ffi::OsStringExt};
 
 use support::{fixtures, keys, pty::RilePty};
 
@@ -588,6 +590,99 @@ fn ido_find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> 
 #[test]
 fn completions_buffer_find_file_prompt_and_completion_escape_terminal_controls() -> Result<()> {
     exercise_find_file_control_escaping("completions-buffer")
+}
+
+#[cfg(unix)]
+#[test]
+fn find_file_read_only_escapes_osc_string_terminators() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let working = directory
+        .path()
+        .join("dir_\u{1b}]0;BASE_READ_ONLY_PWN\u{1b}\\");
+    fs::create_dir(&working)?;
+    let start = working.join("start.txt");
+    let hostile = working.join("readonly_\u{1b}]0;READ_ONLY_PWN\u{1b}\\.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&hostile, "read only hostile name\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 200)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-r", keys::control_sequence("xr"))?;
+    rile.wait_for_screen_contains("dir_\\u{1b}]0;BASE_READ_ONLY_PWN\\u{1b}\\")?;
+    rile.send("read-only prefix", b"readonly_")?;
+    rile.assert_screen_contains("readonly_\\u{1b}]0;READ_ONLY_PWN\\u{1b}\\.txt")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;BASE_READ_ONLY_PWN\x1b\\")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;READ_ONLY_PWN\x1b\\")?;
+
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("read only hostile name")?;
+    rile.assert_status_contains("ro:true")?;
+    rile.assert_raw_output_excludes(b"\x1b]0;READ_ONLY_PWN\x1b\\")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn insert_file_escapes_c1_controls() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let working = directory.path().join("dir_\u{9d}BASE_INSERT_PWN\u{9c}");
+    fs::create_dir(&working)?;
+    let start = working.join("start.txt");
+    let hostile = working.join("insert_\u{9b}2J_\u{9d}INSERT_PWN\u{9c}.txt");
+    fs::write(&start, "start\n")?;
+    fs::write(&hostile, "inserted hostile name\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 200)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("i", b"i")?;
+    rile.wait_for_screen_contains("dir_\\u{9d}BASE_INSERT_PWN\\u{9c}")?;
+    rile.send("insert prefix", b"insert_")?;
+    rile.assert_screen_contains("insert_\\u{9b}2J_\\u{9d}INSERT_PWN\\u{9c}.txt")?;
+    rile.assert_raw_output_excludes("\u{9d}BASE_INSERT_PWN\u{9c}".as_bytes())?;
+    rile.assert_raw_output_excludes("\u{9b}2J_\u{9d}INSERT_PWN\u{9c}".as_bytes())?;
+
+    rile.send("Enter", keys::ENTER)?;
+    rile.wait_for_screen_contains("inserted hostile name")?;
+    rile.assert_screen_contains("start")?;
+    rile.assert_status_contains("modified:true")?;
+    rile.assert_raw_output_excludes("\u{9b}2J_\u{9d}INSERT_PWN\u{9c}".as_bytes())?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn file_prompt_lossily_displays_invalid_utf8_without_emitting_raw_bytes() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let working = directory
+        .path()
+        .join(OsString::from_vec(b"dir_invalid_\xff".to_vec()));
+    fs::create_dir(&working)?;
+    let start = working.join("start.txt");
+    fs::write(&start, "start\n")?;
+    let mut rile = RilePty::spawn(&start, 14, 120)?;
+
+    rile.wait_for_screen_contains("start")?;
+    rile.send("C-x C-f", keys::control_sequence("xf"))?;
+    rile.wait_for_screen_contains("Find file:")?;
+    let lossy_path = "dir_invalid_\u{fffd}/";
+    assert!(
+        rile.raw_output()
+            .windows(lossy_path.len())
+            .any(|window| window == lossy_path.as_bytes()),
+        "raw output should contain the lossy prompt path\n{}",
+        rile.screen_dump()
+    );
+    rile.assert_raw_output_excludes(&[0xff])?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.assert_screen_contains("start")?;
+    rile.quit()?;
+    Ok(())
 }
 
 #[test]
