@@ -36,6 +36,12 @@ Security fixes:
   source-character budget conservatively marks pathological zero-width runs as
   truncated so repeated redraws remain bounded near the start of a line.
 
+* Shell commands now pump region input, stdout, and stderr concurrently, retain
+  at most 8 MiB of combined output, and stop after 30 seconds. Infinite-output
+  commands and pipe back-pressure can no longer block the editor indefinitely
+  or grow captured output until memory exhaustion. Resource-limit failures do
+  not insert or replace partial output.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 

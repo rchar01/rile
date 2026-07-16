@@ -52,6 +52,8 @@ on the owning modules or through PTY tests that spawn the real binary.
   behavior.
 - `src/minibuffer.rs`: prompt state, editable prompt text, cursor movement, and
   minibuffer messages.
+- `src/shell.rs`: synchronous shell-process spawning, bounded nonblocking pipe
+  transfer, output capture, deadlines, and process-group cleanup.
 - `src/syntax.rs`: major-mode selection and lightweight syntax highlighting.
 - `src/config.rs`, `src/option.rs`, and `src/mode.rs`: user configuration and
   inspectable option/mode metadata.
@@ -87,6 +89,22 @@ IDs, duplicate names, and missing metadata.
 editing, while local maps handle special buffers such as `*Help*`, `*Messages*`,
 `*Shell Command Output*`, and `*Buffer List*`. Prefix help and describe-key
 commands inspect the same active keymap stack that dispatch uses.
+
+## Shell Commands
+
+`Editor` collects the command and optional region input before calling the
+synchronous runner in `src/shell.rs`. The runner places `/bin/sh` in a dedicated
+process group and uses nonblocking pipe polling so region input, stdout, and
+stderr make progress together. Captured stdout and stderr share an 8 MiB byte
+budget, and command execution has a 30-second deadline. A limit failure kills
+the process group, bounds direct-child reaping, discards partial output, and
+returns an error before `Editor` can insert or replace text.
+
+The terminal loop remains blocked while a command is running, so `C-g` cannot
+cancel it and redraw resumes only after completion or the deadline. Process-group
+cleanup covers ordinary descendants; a process that deliberately starts a new
+session can escape that group, but closing Rile's local pipes prevents it from
+holding shell output capture open.
 
 ## Buffers And Documents
 

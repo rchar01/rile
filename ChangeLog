@@ -1,5 +1,53 @@
 2026-07-16  Robert Charusta  <rch-public@posteo.net>
 
+	Bound shell command execution resources.
+
+	* src/shell.rs (MAX_SHELL_COMMAND_OUTPUT_BYTES,
+	SHELL_COMMAND_TIMEOUT, CHILD_STATUS_POLL_INTERVAL,
+	CHILD_TERMINATION_WAIT, PIPE_BUFFER_BYTES): New constants.
+	(ShellCommandLimits, InputWrite, OutputRead): New types.
+	(ShellCommandLimits::default): Initialize production limits.
+	(run_shell_command): Delegate to the bounded runner.
+	(run_shell_command_with_limits): Pump nonblocking stdin, stdout, and
+	stderr with a combined output limit and execution deadline.
+	(set_nonblocking, poll_timeout_millis, write_available_stdin,
+	read_available_output): New functions.
+	(shell_command_output_limit_error, shell_command_timeout_error): New
+	functions.
+	(cleanup_error, terminate_child_group, terminate_child): New bounded
+	process-group cleanup functions.
+	(test_limits): New test limits helper.
+	(AlwaysReadyReader, AlwaysReadyWriter): New synthetic pipe endpoints for
+	deadline tests.
+	(AlwaysReadyReader::read, AlwaysReadyWriter::write,
+	AlwaysReadyWriter::flush): Keep synthetic pipes continuously ready.
+	(accepts_combined_output_exactly_at_limit,
+	rejects_combined_output_above_limit,
+	terminates_an_infinite_producer_at_output_limit,
+	applies_output_limit_before_utf8_decoding,
+	times_out_and_reaps_a_silent_command,
+	timeout_terminates_shell_descendants,
+	pumps_large_stdin_and_stdout_without_pipe_deadlock,
+	succeeds_when_child_closes_large_stdin_without_reading_it,
+	output_drain_checks_deadline_while_reader_stays_ready,
+	stdin_pump_checks_deadline_while_writer_stays_ready): New tests.
+	* src/editor.rs (submit_shell_command): Report shell resource failures
+	without redundant prefixes.
+	(format_shell_command_error): New function.
+	(oversized_prefix_shell_command_does_not_mutate_buffer,
+	oversized_region_shell_command_does_not_mutate_buffer,
+	shell_cleanup_error_keeps_single_command_prefix): New tests.
+	* tests/support/pty.rs (RilePty::wait_for_screen_contains_for): New
+	timeout-aware helper.
+	* tests/pty_shell_command.rs
+	(shell_command_on_large_region_avoids_duplex_pipe_deadlock): New test.
+	* README.md, NEWS, docs/development.md: Document shell command resource
+	limits and synchronous cancellation limitation.
+	* docs/architecture.md: Document shell process supervision.
+	* docs/testing.md: Document shell resource regression coverage.
+
+2026-07-16  Robert Charusta  <rch-public@posteo.net>
+
 	Measure long-line redraw latency directly.
 
 	* tools/perf/bench.py (build_cases): Add redraw cases for 100,000- and

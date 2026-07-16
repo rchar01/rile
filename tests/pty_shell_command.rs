@@ -3,6 +3,8 @@
 
 mod support;
 
+use std::time::Duration;
+
 use anyhow::Result;
 
 use support::{fixtures, keys, pty::RilePty};
@@ -50,6 +52,30 @@ fn shell_output_escapes_terminal_control_sequences() -> Result<()> {
     rile.wait_for_screen_contains("\\u{1b}[999;999H\\u{9b}2J\\u{7}")?;
     rile.assert_raw_output_excludes(b"\x1b[999;999H")?;
     rile.assert_raw_output_excludes(b"\xc2\x9b2J")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn shell_command_on_large_region_avoids_duplex_pipe_deadlock() -> Result<()> {
+    let region = "x".repeat(2 * 1024 * 1024);
+    let file = fixtures::named_temp_file(&region)?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("xxxx")?;
+    rile.send("C-x h", keys::control('x'))?;
+    rile.send("h", b"h")?;
+    rile.send("M-|", keys::meta('|'))?;
+    rile.assert_screen_contains("Shell command on region:")?;
+    rile.send("cat command", b"cat")?;
+    rile.send("RET", keys::ENTER)?;
+
+    rile.wait_for_screen_contains_for(
+        "Shell command completed (2097152 bytes)",
+        Duration::from_secs(10),
+    )?;
+    rile.assert_screen_contains("*Shell Command Output*")?;
 
     rile.quit()?;
     Ok(())

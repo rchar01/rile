@@ -6332,8 +6332,7 @@ impl Editor {
         let output = match run_shell_command(command, &state.stdin, &current_dir) {
             Ok(output) => output,
             Err(error) => {
-                self.minibuffer
-                    .set_error(format!("shell command failed: {error}"));
+                self.minibuffer.set_error(format_shell_command_error(error));
                 return Ok(EditorOutcome::Continue);
             }
         };
@@ -9550,6 +9549,19 @@ fn format_shell_command_output(command: &str, output: &ShellCommandOutput) -> St
     text
 }
 
+fn format_shell_command_error(error: RileError) -> String {
+    match error {
+        RileError::InvalidInput(message) => {
+            if message.starts_with("shell command ") {
+                message
+            } else {
+                format!("shell command failed: {message}")
+            }
+        }
+        error => format!("shell command failed: {error}"),
+    }
+}
+
 fn format_shell_status(status_code: Option<i32>) -> String {
     status_code
         .map(|code| code.to_string())
@@ -9604,8 +9616,10 @@ mod tests {
     use super::{
         AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
         Editor, EditorOutcome, EditorPatternMatch, KillEntry, SearchDirection,
-        file_prompt_base_input, format_rectangle_number, highlight_phrase_regexp,
+        file_prompt_base_input, format_rectangle_number, format_shell_command_error,
+        highlight_phrase_regexp,
     };
+    use crate::RileError;
     use crate::buffer::undo::UndoRecord;
     use crate::buffer::{BufferId, Position, TextRange};
     use crate::command::{Command, CommandContext, CommandRegistry, Invocation};
@@ -20883,6 +20897,70 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(
             editor.minibuffer().message.as_deref(),
             Some("Error: Shell command failed with code 2")
+        );
+    }
+
+    #[test]
+    fn oversized_prefix_shell_command_does_not_mutate_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
+
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: shell command output exceeded the 8388608-byte limit")
+        );
+    }
+
+    #[test]
+    fn oversized_region_shell_command_does_not_mutate_buffer() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .execute_command_by_name("mark-whole-buffer")
+            .expect("whole buffer should mark");
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('|'))
+            .expect("C-u M-| should prompt");
+        submit_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
+
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: shell command output exceeded the 8388608-byte limit")
+        );
+    }
+
+    #[test]
+    fn shell_cleanup_error_keeps_single_command_prefix() {
+        let message = format_shell_command_error(RileError::InvalidInput(
+            "shell command timed out after 30s; shell command cleanup also failed: denied"
+                .to_owned(),
+        ));
+
+        assert_eq!(
+            message,
+            "shell command timed out after 30s; shell command cleanup also failed: denied"
         );
     }
 

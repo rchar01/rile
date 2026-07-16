@@ -535,19 +535,23 @@ successful command exit; nonzero exits show output and do not mutate the edited
 buffer. Output must decode as UTF-8. V1 deliberately does not support `M-&`,
 process cancellation, live process buffers, interactive TTY subprocesses, remote
 file handlers, configurable shells, coding-system prompts, or rectangle piping.
+The synchronous runner pumps region input, stdout, and stderr concurrently. It
+retains at most 8 MiB across stdout and stderr and allows a command to run for at
+most 30 seconds. Exceeding either limit terminates the shell process group,
+discards partial output, and leaves insertion or replacement targets unchanged.
 
 Post-Milestone 14 quit polish makes `C-x C-c` protect modified normal buffers.
 Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: there is no shell-command process timeout/cancellation,
-message history does not persist across sessions, and there is no selective
-region undo yet. The in-memory message log retains the newest 1,000 entries
-within a 1 MiB UTF-8 payload budget and visibly truncates an individual message
-that exceeds that budget. Redraw refreshes a generated `*Messages*` document
-only while visible and after the retained history changes; explicitly reopening
-the buffer materializes the current history.
+Current limitations: shell commands remain synchronous and cannot be cancelled
+with `C-g`, message history does not persist across sessions, and there is no
+selective region undo yet. The in-memory message log retains the newest 1,000
+entries within a 1 MiB UTF-8 payload budget and visibly truncates an individual
+message that exceeds that budget. Redraw refreshes a generated `*Messages*`
+document only while visible and after the retained history changes; explicitly
+reopening the buffer materializes the current history.
 Literal search, regexp incremental search, query replace, regexp query replace,
 and `replace-regexp` use Emacs-style smart-case matching: lowercase search text
 matches case-insensitively, while unescaped uppercase search text is

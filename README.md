@@ -109,7 +109,9 @@ Basic editor keys:
   after a successful command.
 - `M-|` sends the active region to a shell command on stdin and displays
   captured output. `C-u M-|` replaces the active region with stdout after a
-  successful command.
+  successful command. Shell commands have a 30-second deadline and an 8 MiB
+  combined stdout/stderr limit; exceeding either limit discards partial output
+  without inserting or replacing buffer text.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `M-x just-one-space` collapses spaces and tabs around point to one space;

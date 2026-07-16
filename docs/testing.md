@@ -85,6 +85,16 @@ budget-exhaustion regression verifies a right marker replaces trailing
 zero-width characters without exceeding the viewport. Existing PTY scrolling
 tests cover visible horizontal markers and cursor placement.
 
+Shell-runner unit tests use small injected output budgets and deadlines to cover
+the exact combined-output boundary, infinite producers, UTF-8 byte boundaries,
+silent-command timeout, ordinary descendant cleanup, early stdin closure, and
+simultaneous multi-megabyte stdin/stdout transfer. Synthetic always-ready pipes
+verify the deadline is checked inside drain loops. Editor coverage verifies the
+production 8 MiB failure leaves prefix insertion and region replacement targets
+unchanged. A PTY regression sends a 2 MiB region through `M-|` and `cat`,
+exceeding normal pipe capacity so sequential stdin/output handling would
+deadlock.
+
 Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions
 open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the

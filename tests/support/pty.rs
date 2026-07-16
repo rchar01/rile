@@ -125,7 +125,15 @@ impl RilePty {
     }
 
     pub fn wait_for_screen_contains(&mut self, expected: &str) -> Result<()> {
-        let deadline = Instant::now() + Duration::from_secs(2);
+        self.wait_for_screen_contains_for(expected, Duration::from_secs(2))
+    }
+
+    pub fn wait_for_screen_contains_for(
+        &mut self,
+        expected: &str,
+        timeout: Duration,
+    ) -> Result<()> {
+        let deadline = Instant::now() + timeout;
         while Instant::now() < deadline {
             self.drain_for(Duration::from_millis(50))?;
             if self.snapshot_text().contains(expected) {
@@ -133,7 +141,7 @@ impl RilePty {
             }
         }
         bail!(
-            "screen did not contain `{expected}` after {}\n{}",
+            "screen did not contain `{expected}` within {timeout:?} after {}\n{}",
             self.last_action,
             self.screen_dump()
         );
