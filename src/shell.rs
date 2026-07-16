@@ -187,9 +187,14 @@ fn run_shell_command_with_limits(
                     .expect("polled shell stdin should remain open"),
                 stdin_bytes,
                 &mut stdin_offset,
+                deadline,
             ) {
-                Ok(true) => child_stdin = None,
-                Ok(false) => {}
+                Ok(InputWrite::Open) => {}
+                Ok(InputWrite::Closed) => child_stdin = None,
+                Ok(InputWrite::TimedOut) => {
+                    let error = shell_command_timeout_error(limits.timeout);
+                    return Err(cleanup_error(&mut child, process_group, error));
+                }
                 Err(error) => {
                     return Err(cleanup_error(&mut child, process_group, error.into()));
                 }
@@ -203,11 +208,16 @@ fn run_shell_command_with_limits(
                 &mut stdout_bytes,
                 &mut retained_output_bytes,
                 limits.max_output_bytes,
+                deadline,
             ) {
                 Ok(OutputRead::Open) => {}
                 Ok(OutputRead::Closed) => stdout_open = false,
                 Ok(OutputRead::LimitExceeded) => {
                     let error = shell_command_output_limit_error(limits.max_output_bytes);
+                    return Err(cleanup_error(&mut child, process_group, error));
+                }
+                Ok(OutputRead::TimedOut) => {
+                    let error = shell_command_timeout_error(limits.timeout);
                     return Err(cleanup_error(&mut child, process_group, error));
                 }
                 Err(error) => {
@@ -223,11 +233,16 @@ fn run_shell_command_with_limits(
                 &mut stderr_bytes,
                 &mut retained_output_bytes,
                 limits.max_output_bytes,
+                deadline,
             ) {
                 Ok(OutputRead::Open) => {}
                 Ok(OutputRead::Closed) => stderr_open = false,
                 Ok(OutputRead::LimitExceeded) => {
                     let error = shell_command_output_limit_error(limits.max_output_bytes);
+                    return Err(cleanup_error(&mut child, process_group, error));
+                }
+                Ok(OutputRead::TimedOut) => {
+                    let error = shell_command_timeout_error(limits.timeout);
                     return Err(cleanup_error(&mut child, process_group, error));
                 }
                 Err(error) => {
@@ -306,18 +321,35 @@ fn write_available_stdin(
     writer: &mut impl Write,
     input: &[u8],
     offset: &mut usize,
-) -> io::Result<bool> {
+    deadline: Instant,
+) -> io::Result<InputWrite> {
+    let mut attempted = false;
     while *offset < input.len() {
+        if attempted && Instant::now() >= deadline {
+            return Ok(InputWrite::TimedOut);
+        }
+        attempted = true;
         match writer.write(&input[*offset..]) {
             Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
             Ok(written) => *offset += written,
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => return Ok(false),
-            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => return Ok(true),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                return Ok(InputWrite::Open);
+            }
+            Err(error) if error.kind() == io::ErrorKind::BrokenPipe => {
+                return Ok(InputWrite::Closed);
+            }
             Err(error) => return Err(error),
         }
     }
-    Ok(true)
+    Ok(InputWrite::Closed)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputWrite {
+    Open,
+    Closed,
+    TimedOut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,6 +357,7 @@ enum OutputRead {
     Open,
     Closed,
     LimitExceeded,
+    TimedOut,
 }
 
 fn read_available_output(
@@ -332,9 +365,15 @@ fn read_available_output(
     output: &mut Vec<u8>,
     retained_bytes: &mut usize,
     limit: usize,
+    deadline: Instant,
 ) -> io::Result<OutputRead> {
     let mut buffer = [0; PIPE_BUFFER_BYTES];
+    let mut attempted = false;
     loop {
+        if attempted && Instant::now() >= deadline {
+            return Ok(OutputRead::TimedOut);
+        }
+        attempted = true;
         match reader.read(&mut buffer) {
             Ok(0) => return Ok(OutputRead::Closed),
             Ok(read) if read > limit.saturating_sub(*retained_bytes) => {
@@ -356,9 +395,15 @@ fn read_available_output(
 fn cleanup_error(child: &mut Child, process_group: libc::pid_t, error: RileError) -> RileError {
     match terminate_child_group(child, process_group) {
         Ok(()) => error,
-        Err(cleanup_error) => RileError::InvalidInput(format!(
-            "{error}; shell command cleanup also failed: {cleanup_error}"
-        )),
+        Err(cleanup_error) => {
+            let message = match error {
+                RileError::InvalidInput(message) => message,
+                error => error.to_string(),
+            };
+            RileError::InvalidInput(format!(
+                "{message}; shell command cleanup also failed: {cleanup_error}"
+            ))
+        }
     }
 }
 
@@ -402,9 +447,35 @@ fn terminate_child(child: &mut Child, process_group: Option<libc::pid_t>) -> io:
 
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Duration};
+    use std::{
+        io, thread,
+        time::{Duration, Instant},
+    };
 
-    use super::{ShellCommandLimits, run_shell_command, run_shell_command_with_limits};
+    use super::{
+        InputWrite, OutputRead, PIPE_BUFFER_BYTES, ShellCommandLimits, read_available_output,
+        run_shell_command, run_shell_command_with_limits, write_available_stdin,
+    };
+
+    struct AlwaysReadyReader;
+    struct AlwaysReadyWriter;
+
+    impl io::Read for AlwaysReadyReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            buffer.fill(b'x');
+            Ok(buffer.len())
+        }
+    }
+
+    impl io::Write for AlwaysReadyWriter {
+        fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+            Ok(buffer.len().min(1))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
 
     fn test_limits(max_output_bytes: usize, timeout: Duration) -> ShellCommandLimits {
         ShellCommandLimits {
@@ -568,5 +639,37 @@ mod tests {
 
         assert_eq!(output.stdout, "output");
         assert!(output.success());
+    }
+
+    #[test]
+    fn output_drain_checks_deadline_while_reader_stays_ready() {
+        let mut output = Vec::new();
+        let mut retained = 0;
+        let result = read_available_output(
+            &mut AlwaysReadyReader,
+            &mut output,
+            &mut retained,
+            1024 * 1024,
+            Instant::now(),
+        )
+        .expect("synthetic reader should not fail");
+
+        assert_eq!(result, OutputRead::TimedOut);
+        assert_eq!(retained, PIPE_BUFFER_BYTES);
+    }
+
+    #[test]
+    fn stdin_pump_checks_deadline_while_writer_stays_ready() {
+        let mut offset = 0;
+        let result = write_available_stdin(
+            &mut AlwaysReadyWriter,
+            &[b'x'; 1024],
+            &mut offset,
+            Instant::now(),
+        )
+        .expect("synthetic writer should not fail");
+
+        assert_eq!(result, InputWrite::TimedOut);
+        assert_eq!(offset, 1);
     }
 }
