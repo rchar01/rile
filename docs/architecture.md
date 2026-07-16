@@ -127,6 +127,14 @@ as visible ASCII escapes. Only renderer-owned cursor, clearing, and face
 sequences use the raw ANSI path. Display-width, clipping, span, and cursor
 calculations account for the expanded control representation.
 
+Normal buffer rows project source text directly into the horizontal viewport
+instead of expanding the complete logical line. Projection retains source-byte
+face boundaries, expands tabs and controls incrementally, and uses a bounded
+source-character budget. Exhausting that budget produces a conservative right
+truncation marker. Syntax, search, and persistent-highlight providers still
+prepare source spans before terminal projection and may inspect the complete
+logical line.
+
 Decorations are expressed as face spans. `src/render/` merges overlapping spans by
 priority and clips them to the visible byte range. This lets syntax, region,
 search, query-replace, mode-line, minibuffer, warning, and error styling share

@@ -618,6 +618,14 @@ renders deterministic mode-line text for PTY, snapshot, and VHS review. PTY
 tests normally assert parsed `vt100` screen state; targeted security tests also
 inspect retained raw output for untrusted control sequences.
 
+Normal buffer rendering incrementally expands only source text needed for the
+horizontal viewport. It inspects at most eight source characters per display
+column through the viewport end plus 256 characters of slack, preserving
+ordinary combining text while bounding pathological zero-width runs. Budget
+exhaustion uses the normal right-edge marker. This bounds plain-text redraw work
+near line start; active syntax, search, and persistent highlights may still scan
+a complete source line before terminal projection.
+
 ## Line Ending Policy
 
 The in-memory buffer model uses `\n` as the only line separator. `Buffer::from_text` splits on `\n`, `Buffer::serialize` joins lines with `\n`, and `Buffer::final_newline` records whether the serialized text ends with a final newline.

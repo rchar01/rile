@@ -31,6 +31,11 @@ Security fixes:
   *Messages* buffers no longer rematerialize hidden or unchanged history during
   redraw.
 
+* Normal buffer redraw now projects only the source needed for the horizontal
+  viewport instead of expanding and rescanning complete long lines. A bounded
+  source-character budget conservatively marks pathological zero-width runs as
+  truncated so repeated redraws remain bounded near the start of a line.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 

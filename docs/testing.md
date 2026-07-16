@@ -76,6 +76,15 @@ tests cover every matching mode and exact directory fallback. PTY coverage
 confirms a candidate-overflow directory remains responsive and visibly marks
 its results as partial in vertical, ido, and completions-buffer styles.
 
+Terminal projection unit tests count inspected source characters rather than
+asserting wall-clock timing. Million-character ASCII and pathological
+zero-width lines verify bounded normal-row projection. Differential cases check
+tabs, C0/C1 escapes, wide and combining characters, source spans, and hidden
+edge flags against the prior full-line pipeline below the budget. A direct
+budget-exhaustion regression verifies a right marker replaces trailing
+zero-width characters without exceeding the viewport. Existing PTY scrolling
+tests cover visible horizontal markers and cursor placement.
+
 Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions
 open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the

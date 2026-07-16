@@ -19,6 +19,9 @@ use crate::window::{Viewport, WindowLayout, WindowSeparator};
 use crate::{Result, RileError};
 use unicode_width::UnicodeWidthChar;
 
+const MAX_RENDER_SOURCE_CHARS_PER_COLUMN: usize = 8;
+const MAX_RENDER_SOURCE_CHAR_SLACK: usize = 256;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TerminalSize {
     pub rows: u16,
@@ -1161,6 +1164,16 @@ struct LineRenderOptions {
     highlight_line_end_space: bool,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+struct LineProjection {
+    text: String,
+    spans: Vec<Span>,
+    left_hidden: bool,
+    right_hidden: bool,
+    #[cfg(test)]
+    source_chars_scanned: usize,
+}
+
 fn write_buffer_line<W: Write>(
     terminal: &mut AnsiTerminal<W>,
     _buffer: &Buffer,
@@ -1170,22 +1183,22 @@ fn write_buffer_line<W: Write>(
     spans: &[Span],
     options: LineRenderOptions,
 ) -> Result<()> {
-    let (line, spans) = expand_display_text(line, spans, options.tab_width);
-    let range = visible_display_range(
-        &line,
+    let projection = project_buffer_line(
+        line,
+        spans,
         viewport.first_visible_column,
         options.width,
         options.tab_width,
     );
-    let segment = &line[range.clone()];
-    let line_width = display_width_with_tabs(&line, options.tab_width);
-    let left_hidden = viewport.first_visible_column > 0;
-    let right_hidden = line_width > viewport.first_visible_column.saturating_add(options.width);
-    let relative_spans = clip_spans(&spans, range);
-    let (segment, relative_spans) = if left_hidden || right_hidden {
-        mark_hidden_line_edges(segment, &relative_spans, left_hidden, right_hidden)
+    let (segment, relative_spans) = if projection.left_hidden || projection.right_hidden {
+        mark_hidden_line_edges(
+            &projection.text,
+            &projection.spans,
+            projection.left_hidden,
+            projection.right_hidden,
+        )
     } else {
-        (segment.to_owned(), relative_spans)
+        (projection.text, projection.spans)
     };
     let used_width = write_expanded_line_with_spans(
         terminal,
@@ -1212,25 +1225,174 @@ fn write_buffer_line<W: Write>(
     Ok(())
 }
 
+fn project_buffer_line(
+    line: &str,
+    spans: &[Span],
+    start_column: usize,
+    width: usize,
+    tab_width: usize,
+) -> LineProjection {
+    let end_column = start_column.saturating_add(width);
+    let source_char_budget = end_column
+        .saturating_mul(MAX_RENDER_SOURCE_CHARS_PER_COLUMN)
+        .saturating_add(MAX_RENDER_SOURCE_CHAR_SLACK);
+    let mut characters = line.char_indices().peekable();
+    let mut text = String::new();
+    let mut byte_map = vec![(0, 0)];
+    let mut source_column = 0;
+    let mut source_chars_scanned = 0;
+    let mut visible_source_start = None;
+    let mut visible_source_end = 0;
+    let mut right_hidden = false;
+
+    loop {
+        if source_chars_scanned >= source_char_budget {
+            // Conservatively mark uninspected source as hidden rather than let
+            // an unbounded zero-width run monopolize every redraw.
+            right_hidden = characters.peek().is_some();
+            break;
+        }
+        let Some((source_start, character)) = characters.next() else {
+            break;
+        };
+        source_chars_scanned += 1;
+        let source_end = source_start + character.len_utf8();
+        let target_start = text.len();
+        source_column = append_projected_character(
+            &mut text,
+            character,
+            source_column,
+            start_column,
+            end_column,
+            tab_width,
+        );
+        let target_end = text.len();
+        byte_map.push((source_start, target_start));
+        byte_map.push((source_end, target_end));
+        if target_start < target_end {
+            visible_source_start.get_or_insert(source_start);
+            visible_source_end = source_end;
+        }
+        if source_column > end_column {
+            right_hidden = true;
+            break;
+        }
+    }
+
+    let spans = visible_source_start
+        .map(|start| project_spans(spans, &byte_map, start..visible_source_end))
+        .unwrap_or_default();
+    LineProjection {
+        text,
+        spans,
+        left_hidden: start_column > 0,
+        right_hidden,
+        #[cfg(test)]
+        source_chars_scanned,
+    }
+}
+
+fn append_projected_character(
+    projected: &mut String,
+    character: char,
+    column: usize,
+    start_column: usize,
+    end_column: usize,
+    tab_width: usize,
+) -> usize {
+    if character == '\t' {
+        let spaces = tab_spaces(tab_width, column);
+        return append_projected_text(
+            projected,
+            &" ".repeat(spaces),
+            column,
+            start_column,
+            end_column,
+        );
+    }
+    if let Some(replacement) = control_character_escape(character) {
+        return append_projected_text(projected, &replacement, column, start_column, end_column);
+    }
+
+    let next_column = column.saturating_add(character.width().unwrap_or(0));
+    if next_column > start_column && next_column <= end_column {
+        projected.push(character);
+    }
+    next_column
+}
+
+fn append_projected_text(
+    projected: &mut String,
+    text: &str,
+    mut column: usize,
+    start_column: usize,
+    end_column: usize,
+) -> usize {
+    for character in text.chars() {
+        let next_column = column.saturating_add(character.width().unwrap_or(0));
+        if next_column > start_column && next_column <= end_column {
+            projected.push(character);
+        }
+        column = next_column;
+    }
+    column
+}
+
+fn project_spans(spans: &[Span], byte_map: &[(usize, usize)], range: Range<usize>) -> Vec<Span> {
+    spans
+        .iter()
+        .filter_map(|span| {
+            let source_start = span.start_byte.max(range.start);
+            let source_end = span.end_byte.min(range.end);
+            if source_start >= source_end {
+                return None;
+            }
+            let start = mapped_byte(byte_map, source_start)?;
+            let end = mapped_byte(byte_map, source_end)?;
+            (start < end).then(|| Span::new(start, end, span.face))
+        })
+        .collect()
+}
+
 fn mark_hidden_line_edges(
     segment: &str,
     spans: &[Span],
     left_hidden: bool,
     right_hidden: bool,
 ) -> (String, Vec<Span>) {
-    let character_count = segment.chars().count();
-    if character_count == 0 {
+    let characters = segment.char_indices().collect::<Vec<_>>();
+    if characters.is_empty() {
         return ("$".to_owned(), Vec::new());
     }
 
+    let first_visible = characters
+        .iter()
+        .position(|(_, character)| character.width().unwrap_or(0) > 0);
+    let last_visible = characters
+        .iter()
+        .rposition(|(_, character)| character.width().unwrap_or(0) > 0);
+    if first_visible.is_none() {
+        return ("$".to_owned(), Vec::new());
+    }
+    let first_visible = first_visible.expect("positive-width character should exist");
+    let last_visible = last_visible.expect("positive-width character should exist");
+    let retained_start = if left_hidden { first_visible } else { 0 };
+    let retained_end = if right_hidden {
+        last_visible
+    } else {
+        characters.len() - 1
+    };
+
     let mut marked = String::new();
     let mut byte_map = vec![(0, 0)];
-    for (index, (byte, character)) in segment.char_indices().enumerate() {
+    for (index, (byte, character)) in characters.iter().copied().enumerate() {
         let replacement =
-            (left_hidden && index == 0) || (right_hidden && index + 1 == character_count);
+            (left_hidden && index == first_visible) || (right_hidden && index == last_visible);
         let source_end = byte + character.len_utf8();
         let target_start = marked.len();
-        marked.push(if replacement { '$' } else { character });
+        if index >= retained_start && index <= retained_end {
+            marked.push(if replacement { '$' } else { character });
+        }
         let target_end = marked.len();
         byte_map.push((byte, target_start));
         byte_map.push((source_end, target_end));
@@ -1249,8 +1411,9 @@ fn mark_hidden_line_edges(
 
 fn mapped_byte(byte_map: &[(usize, usize)], source: usize) -> Option<usize> {
     byte_map
-        .iter()
-        .find_map(|(from, to)| (*from == source).then_some(*to))
+        .binary_search_by_key(&source, |(from, _)| *from)
+        .ok()
+        .map(|index| byte_map[index].1)
 }
 
 fn write_fixed_width_text<W: Write>(
@@ -1741,14 +1904,14 @@ mod tests {
     use std::fs;
 
     use super::{
-        AnsiTerminal, FrameOptions, LineRenderOptions, TerminalSize, clipped_text,
-        display_width_with_tabs, draw_editor_frame, draw_editor_frame_with_options,
-        escape_terminal_controls, expand_display_text, format_completion_row,
-        minibuffer_visible_line, mode_line_position, text_clipped_to_display_width,
-        text_display_width, text_from_display_column, visible_display_range,
-        wrapped_help_cursor_position, wrapped_help_visual_lines, write_buffer_line,
-        write_fixed_width_text_with_face, write_fixed_width_text_with_spans,
-        write_line_number_gutter, write_line_with_spans,
+        AnsiTerminal, FrameOptions, LineRenderOptions, MAX_RENDER_SOURCE_CHAR_SLACK,
+        MAX_RENDER_SOURCE_CHARS_PER_COLUMN, TerminalSize, clipped_text, display_width_with_tabs,
+        draw_editor_frame, draw_editor_frame_with_options, escape_terminal_controls,
+        expand_display_text, format_completion_row, minibuffer_visible_line, mode_line_position,
+        project_buffer_line, text_clipped_to_display_width, text_display_width,
+        text_from_display_column, visible_display_range, wrapped_help_cursor_position,
+        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
+        write_fixed_width_text_with_spans, write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
@@ -2032,6 +2195,106 @@ mod tests {
         .expect("render should succeed");
 
         assert_eq!(terminal.into_inner(), b"\x1b[44mabc$\x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn long_line_projection_stops_after_visible_ascii_prefix() {
+        let line = "x".repeat(1_000_000);
+
+        let projection = project_buffer_line(&line, &[], 0, 80, 4);
+
+        assert_eq!(projection.text, "x".repeat(80));
+        assert!(projection.right_hidden);
+        assert!(projection.source_chars_scanned <= 81);
+    }
+
+    #[test]
+    fn long_zero_width_run_stops_at_source_budget() {
+        let width = 80;
+        let budget = width * MAX_RENDER_SOURCE_CHARS_PER_COLUMN + MAX_RENDER_SOURCE_CHAR_SLACK;
+        let line = format!("{}x", "\u{301}".repeat(budget + 1));
+
+        let projection = project_buffer_line(&line, &[], 0, width, 4);
+
+        assert!(projection.text.is_empty());
+        assert!(projection.right_hidden);
+        assert_eq!(projection.source_chars_scanned, budget);
+    }
+
+    #[test]
+    fn projected_tabs_controls_and_spans_preserve_visible_source() {
+        let line = "a\t\u{1b}b";
+        let control_start = "a\t".len();
+        let spans = [Span::new(
+            control_start,
+            control_start + '\u{1b}'.len_utf8(),
+            Face::Region,
+        )];
+
+        let projection = project_buffer_line(line, &spans, 2, 8, 4);
+
+        assert_eq!(projection.text, "  \\u{1b}");
+        assert!(projection.left_hidden);
+        assert!(projection.right_hidden);
+        assert_eq!(
+            projection.spans,
+            vec![Span::new(2, projection.text.len(), Face::Region)]
+        );
+    }
+
+    #[test]
+    fn right_edge_marker_replaces_trailing_zero_width_run() {
+        let width = 1;
+        let budget = width * MAX_RENDER_SOURCE_CHARS_PER_COLUMN + MAX_RENDER_SOURCE_CHAR_SLACK;
+        let line = format!("a{}b", "\u{301}".repeat(budget));
+        let buffer = Buffer::from_text(&line);
+        let viewport = Viewport::new(BufferId(0));
+        let spans = [Span::new(0, line.len(), Face::Region)];
+        let mut terminal = AnsiTerminal::new(Vec::new());
+
+        write_buffer_line(
+            &mut terminal,
+            &buffer,
+            &viewport,
+            0,
+            buffer.line(0).expect("line should exist"),
+            &spans,
+            LineRenderOptions {
+                width,
+                tab_width: 4,
+                theme: ThemeName::Default,
+                highlight_line_end_space: false,
+            },
+        )
+        .expect("render should succeed");
+
+        assert_eq!(terminal.into_inner(), b"\x1b[44m$\x1b[0m".to_vec());
+    }
+
+    #[test]
+    fn bounded_projection_matches_full_pipeline_below_budget() {
+        let cases = [
+            ("a\tb", 0, 2),
+            ("a\tb", 2, 2),
+            ("a\u{1b}b", 2, 5),
+            ("a\u{9b}b", 3, 4),
+            ("a界b", 0, 2),
+            ("a界b", 1, 2),
+            ("\u{301}a", 0, 1),
+            ("a\u{301}", 0, 1),
+        ];
+
+        for (line, start_column, width) in cases {
+            let spans = [Span::new(0, line.len(), Face::Region)];
+            let projection = project_buffer_line(line, &spans, start_column, width, 4);
+            let (expected_text, expected_spans, expected_left, expected_right) =
+                full_line_projection(line, &spans, start_column, width, 4);
+
+            assert_eq!(projection.text, expected_text, "line={line:?}");
+            assert_eq!(projection.spans, expected_spans, "line={line:?}");
+            assert_eq!(projection.left_hidden, expected_left, "line={line:?}");
+            assert_eq!(projection.right_hidden, expected_right, "line={line:?}");
+        }
     }
 
     #[test]
@@ -3000,6 +3263,23 @@ mod tests {
 
     fn rendered_cursor_position(editor: &mut Editor, size: TerminalSize) -> Option<(usize, usize)> {
         last_cursor_position(rendered_frame_bytes(editor, size).as_slice())
+    }
+
+    fn full_line_projection(
+        line: &str,
+        spans: &[Span],
+        start_column: usize,
+        width: usize,
+        tab_width: usize,
+    ) -> (String, Vec<Span>, bool, bool) {
+        let (line, spans) = expand_display_text(line, spans, tab_width);
+        let range = visible_display_range(&line, start_column, width, tab_width);
+        let text = line[range.clone()].to_owned();
+        let spans = crate::render::clip_spans(&spans, range);
+        let left_hidden = start_column > 0;
+        let right_hidden =
+            display_width_with_tabs(&line, tab_width) > start_column.saturating_add(width);
+        (text, spans, left_hidden, right_hidden)
     }
 
     fn rendered_frame(editor: &mut Editor, size: TerminalSize) -> String {

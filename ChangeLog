@@ -1,5 +1,32 @@
 2026-07-16  Robert Charusta  <rch-public@posteo.net>
 
+	Bound normal long-line rendering work.
+
+	* src/terminal/mod.rs (MAX_RENDER_SOURCE_CHARS_PER_COLUMN,
+	MAX_RENDER_SOURCE_CHAR_SLACK): New constants.
+	(LineProjection): New structure.
+	(write_buffer_line): Render a bounded viewport projection instead of
+	expanding and measuring the complete line.
+	(project_buffer_line, append_projected_character, append_projected_text,
+	project_spans): New functions.
+	(mark_hidden_line_edges): Replace a positive-width edge cell and discard
+	trailing zero-width characters when marking truncation.
+	(mapped_byte): Use binary lookup for source boundaries.
+	(long_line_projection_stops_after_visible_ascii_prefix,
+	long_zero_width_run_stops_at_source_budget,
+	projected_tabs_controls_and_spans_preserve_visible_source,
+	bounded_projection_matches_full_pipeline_below_budget,
+	right_edge_marker_replaces_trailing_zero_width_run): New tests.
+	(full_line_projection): New test helper.
+	* README.md: Document bounded normal long-line redraws.
+	* NEWS: Announce long-line rendering hardening.
+	* docs/architecture.md: Document viewport projection and residual decoration
+	scans.
+	* docs/development.md: Document the source-character budget.
+	* docs/testing.md: Document deterministic projection coverage.
+
+2026-07-16  Robert Charusta  <rch-public@posteo.net>
+
 	Avoid redundant Messages buffer materialization.
 
 	* src/minibuffer.rs (MinibufferState): Track message-history revisions.
