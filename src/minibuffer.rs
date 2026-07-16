@@ -16,6 +16,7 @@ pub struct MinibufferState {
     pub message: Option<String>,
     messages: VecDeque<Box<str>>,
     message_history_bytes: usize,
+    message_history_revision: u64,
     prompt: Option<PromptState>,
 }
 
@@ -75,6 +76,7 @@ impl MinibufferState {
                 .expect("new message must leave history nonempty");
             self.message_history_bytes -= removed.len();
         }
+        self.message_history_revision = self.message_history_revision.wrapping_add(1);
         self.message = Some(message);
         self.prompt = None;
     }
@@ -263,6 +265,10 @@ impl MinibufferState {
             text.push('\n');
         }
         text
+    }
+
+    pub(crate) fn messages_revision(&self) -> u64 {
+        self.message_history_revision
     }
 
     pub fn clear(&mut self) {
@@ -509,5 +515,18 @@ mod tests {
             minibuffer.messages_text().len(),
             minibuffer.message_history_bytes + 1
         );
+    }
+
+    #[test]
+    fn message_history_revision_changes_only_with_history() {
+        let mut minibuffer = MinibufferState::default();
+
+        assert_eq!(minibuffer.messages_revision(), 0);
+        minibuffer.set_message("Saved alpha.txt");
+        assert_eq!(minibuffer.messages_revision(), 1);
+        minibuffer.clear();
+        assert_eq!(minibuffer.messages_revision(), 1);
+        minibuffer.set_error("missing file name");
+        assert_eq!(minibuffer.messages_revision(), 2);
     }
 }

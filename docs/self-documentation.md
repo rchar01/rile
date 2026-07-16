@@ -119,7 +119,9 @@ preformatted sections.
 the bounded recent history of minibuffer status and error messages. The history
 retains the newest 1,000 entries within a 1 MiB UTF-8 payload budget. If the
 buffer already exists, redraw refreshes it from the current message history so
-new messages appear while it is visible. The local messages keymap binds `q` to
+new messages appear while it is visible. During redraw, hidden or unchanged
+message buffers do not rematerialize their history. Explicitly reopening the
+buffer materializes the current history. The local messages keymap binds `q` to
 restore the previous buffer.
 
 `about-rile` / `C-h C-a` renders editor-level runtime metadata through the same

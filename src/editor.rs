@@ -85,6 +85,7 @@ pub struct Editor {
     minibuffer: MinibufferState,
     help_return: Option<Viewport>,
     messages_return: Option<Viewport>,
+    messages_buffer_revision: Option<u64>,
     shell_output_return: Option<Viewport>,
     buffer_list_rows: Vec<Option<BufferId>>,
     auto_revert_buffers: HashSet<BufferId>,
@@ -672,6 +673,7 @@ impl Editor {
             minibuffer: MinibufferState::default(),
             help_return: None,
             messages_return: None,
+            messages_buffer_revision: None,
             shell_output_return: None,
             buffer_list_rows: Vec::new(),
             auto_revert_buffers: HashSet::new(),
@@ -834,15 +836,17 @@ impl Editor {
         let Some(messages) = self.buffers.find_by_kind(DocumentKind::Messages) else {
             return;
         };
-        let text = self.minibuffer.messages_text();
-        let Some(document) = self.buffers.document(messages) else {
-            return;
-        };
-        if document.buffer().serialize() == text {
+        if self.windows.window_showing_buffer(messages).is_none() {
             return;
         }
+        let revision = self.minibuffer.messages_revision();
+        if self.messages_buffer_revision == Some(revision) {
+            return;
+        }
+        let text = self.minibuffer.messages_text();
         if let Some(document) = self.buffers.document_mut(messages) {
             *document = Document::messages(text);
+            self.messages_buffer_revision = Some(revision);
         }
     }
 
@@ -1441,7 +1445,9 @@ impl Editor {
             current_viewport,
             current_is_messages,
         );
+        let revision = self.minibuffer.messages_revision();
         let messages = self.buffers.open_messages(self.minibuffer.messages_text());
+        self.messages_buffer_revision = Some(revision);
 
         self.show_returnable_special_buffer(messages);
         self.minibuffer
@@ -9616,6 +9622,7 @@ mod tests {
     use crate::render::{DecorationProvider, Face, Span};
     use crate::search_pattern::{PatternKind, SearchPattern};
     use crate::syntax::{MajorMode, SyntaxMode};
+    use crate::window::SplitAxis;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -14357,6 +14364,104 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .buffer()
                 .serialize()
                 .contains("No such command: another-missing-command")
+        );
+    }
+
+    #[test]
+    fn hidden_messages_buffer_defers_refresh_until_reopened() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .execute_command_by_name("first-missing-command")
+            .expect("unknown command should set message");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+        let messages = editor.current_buffer_id();
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+        editor
+            .execute_command_by_name("second-missing-command")
+            .expect("another unknown command should set message");
+
+        editor.refresh_messages_buffer();
+
+        let hidden_text = editor
+            .document_for_buffer(messages)
+            .expect("messages buffer should still exist")
+            .buffer()
+            .serialize();
+        assert!(!hidden_text.contains("second-missing-command"));
+
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should reopen");
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("second-missing-command")
+        );
+    }
+
+    #[test]
+    fn messages_buffer_refreshes_in_nonselected_window() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .split_window(SplitAxis::Horizontal)
+            .expect("window should split");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+        let messages = editor.current_buffer_id();
+        editor.other_window().expect("other window should select");
+        assert_ne!(editor.current_buffer_id(), messages);
+
+        editor.refresh_messages_buffer();
+
+        assert!(
+            editor
+                .document_for_buffer(messages)
+                .expect("messages buffer should remain visible")
+                .buffer()
+                .serialize()
+                .contains("Selected other window")
+        );
+    }
+
+    #[test]
+    fn messages_buffer_refreshes_after_kill_and_recreate() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should open");
+        let first_messages = editor.current_buffer_id();
+        editor
+            .handle_key(KeyEvent::Text("q".to_owned()))
+            .expect("q should restore previous buffer");
+        editor
+            .finish_kill_buffer(first_messages, false)
+            .expect("messages buffer should be killed");
+        editor
+            .execute_command_by_name("view-echo-area-messages")
+            .expect("messages buffer should be recreated");
+        let recreated_messages = editor.current_buffer_id();
+        assert_ne!(recreated_messages, first_messages);
+        editor
+            .execute_command_by_name("missing-after-recreate")
+            .expect("unknown command should set message");
+
+        editor.refresh_messages_buffer();
+
+        assert!(
+            editor
+                .document_for_buffer(recreated_messages)
+                .expect("recreated messages buffer should exist")
+                .buffer()
+                .serialize()
+                .contains("missing-after-recreate")
         );
     }
 

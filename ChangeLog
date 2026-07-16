@@ -1,5 +1,25 @@
 2026-07-16  Robert Charusta  <rch-public@posteo.net>
 
+	Avoid redundant Messages buffer materialization.
+
+	* src/minibuffer.rs (MinibufferState): Track message-history revisions.
+	(MinibufferState::set_message): Advance the revision after appending.
+	(MinibufferState::messages_revision): New method.
+	(message_history_revision_changes_only_with_history): New test.
+	* src/editor.rs (Editor): Track the materialized Messages revision.
+	(Editor::refresh_messages_buffer): Refresh only visible stale buffers without
+	serializing the existing document.
+	(Editor::open_messages_buffer): Record the materialized revision.
+	(hidden_messages_buffer_defers_refresh_until_reopened,
+	messages_buffer_refreshes_in_nonselected_window,
+	messages_buffer_refreshes_after_kill_and_recreate): New tests.
+	* NEWS: Announce bounded Messages redraw work.
+	* docs/development.md: Document Messages refresh bounds.
+	* docs/self-documentation.md: Distinguish redraw refresh from reopening.
+	* docs/testing.md: Document refresh and lifecycle regression coverage.
+
+2026-07-16  Robert Charusta  <rch-public@posteo.net>
+
 	Bound retained minibuffer message history.
 
 	* src/minibuffer.rs (MAX_MESSAGE_HISTORY_ENTRIES,

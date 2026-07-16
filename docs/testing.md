@@ -82,7 +82,10 @@ open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the
 file, and confirm unsaved edits can still be written to its original path.
 Minibuffer unit tests verify message retention evicts the oldest entries at both
 the count and byte limits and truncates oversized messages at valid UTF-8
-boundaries.
+boundaries. Editor and terminal tests verify visible message buffers refresh
+after history changes while hidden buffers defer materialization until reopened.
+Editor regressions cover visibility in a non-selected split and killing then
+recreating the generated buffer.
 
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error
