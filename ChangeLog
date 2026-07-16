@@ -1,5 +1,15 @@
 2026-07-16  Robert Charusta  <rch-public@posteo.net>
 
+	Measure long-line redraw latency directly.
+
+	* tools/perf/bench.py (build_cases): Add redraw cases for 100,000- and
+	1,000,000-column lines.
+	(run_case): Time redraw completion from fresh PTY output.
+	* docs/performance.md: Document long-line redraw cases.
+	* docs/testing.md: Document redraw-at-column-zero smoke coverage.
+
+2026-07-16  Robert Charusta  <rch-public@posteo.net>
+
 	Bound normal long-line rendering work.
 
 	* src/terminal/mod.rs (MAX_RENDER_SOURCE_CHARS_PER_COLUMN,

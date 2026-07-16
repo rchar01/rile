@@ -26,6 +26,7 @@ The default suite runs three repetitions of these cases:
 
 - open a roughly 52 MB file with 500,000 normal-width lines;
 - open a single-line file with a 100,000-column line;
+- redraw at column zero on that 100,000-column line;
 - move to the end of that 100,000-column line;
 - send a burst of page-down commands in a 100,000-line file.
 
@@ -35,9 +36,9 @@ Run larger cases with:
 make perf-smoke PERF_LEVEL=full
 ```
 
-`PERF_LEVEL=full` adds a roughly 208 MB normal-line file and a 1,000,000-column
-line. Use it only when the machine has enough memory and the longer runtime is
-acceptable.
+`PERF_LEVEL=full` adds a roughly 208 MB normal-line file plus redraw and
+end-of-line cases on a 1,000,000-column line. Use it only when the machine has
+enough memory and the longer runtime is acceptable.
 
 After a successful run has built the reference editor binaries, reuse them by
 skipping the reference build step:

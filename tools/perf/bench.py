@@ -147,6 +147,14 @@ def build_cases(fixture_dir, level):
             "timeout": 15,
         },
         {
+            "name": "long-line-100k-redraw",
+            "file": fixture_dir / "long-line-100k.txt",
+            "wait": "LONG_LINE_START",
+            "operation": "redraw",
+            "operation_wait": "LONG_LINE_START",
+            "timeout": 15,
+        },
+        {
             "name": "long-line-100k-end",
             "file": fixture_dir / "long-line-100k.txt",
             "wait": "LONG_LINE_START",
@@ -178,6 +186,14 @@ def build_cases(fixture_dir, level):
                     "wait": "LONG_LINE_START",
                     "operation": "end_of_line",
                     "operation_wait": "LINE_END",
+                    "timeout": 45,
+                },
+                {
+                    "name": "long-line-1m-redraw",
+                    "file": fixture_dir / "long-line-1m.txt",
+                    "wait": "LONG_LINE_START",
+                    "operation": "redraw",
+                    "operation_wait": "LONG_LINE_START",
                     "timeout": 45,
                 },
             ]
@@ -285,6 +301,12 @@ def run_case(editor, case, repetition, time_dir, home_dir, pty_dir):
             before = runner.bytes_seen()
             operation_started = time.perf_counter()
             runner.send(editor["end_of_line"])
+            runner.wait_for(case["operation_wait"], start=before)
+            operation_elapsed = time.perf_counter() - operation_started
+        elif case.get("operation") == "redraw":
+            before = runner.bytes_seen()
+            operation_started = time.perf_counter()
+            runner.send(editor["redraw"])
             runner.wait_for(case["operation_wait"], start=before)
             operation_elapsed = time.perf_counter() - operation_started
         elif case.get("operation") == "page_down_burst":

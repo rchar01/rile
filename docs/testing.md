@@ -115,8 +115,9 @@ Optional visual demos live under `demos/*.tape`. They run Rile through VHS and w
 
 Optional performance smoke tests run through `make perf-smoke`. They compare
 Rile, GNU Emacs, GNU Zile, kg, and Debian `vi` on generated large-file and
-long-line fixtures. They write ignored timing evidence under `artifacts/perf/`
-and are documented in `docs/performance.md`.
+long-line fixtures, including explicit redraw-at-column-zero timing. They write
+ignored timing evidence under `artifacts/perf/` and are documented in
+`docs/performance.md`.
 
 ## Metadata And Help Tests
 
