@@ -1,14 +1,21 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::collections::VecDeque;
+
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::text::{move_word_backward_byte, move_word_forward_byte};
 
+const MAX_MESSAGE_HISTORY_ENTRIES: usize = 1_000;
+const MAX_MESSAGE_HISTORY_BYTES: usize = 1024 * 1024;
+const TRUNCATED_MESSAGE_SUFFIX: &str = "... [truncated]";
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct MinibufferState {
     pub message: Option<String>,
-    messages: Vec<String>,
+    messages: VecDeque<Box<str>>,
+    message_history_bytes: usize,
     prompt: Option<PromptState>,
 }
 
@@ -56,8 +63,18 @@ pub struct PromptState {
 
 impl MinibufferState {
     pub fn set_message(&mut self, message: impl Into<String>) {
-        let message = message.into();
-        self.messages.push(message.clone());
+        let message = bounded_message(message.into());
+        self.message_history_bytes += message.len();
+        self.messages.push_back(message.clone().into_boxed_str());
+        while self.messages.len() > MAX_MESSAGE_HISTORY_ENTRIES
+            || self.message_history_bytes > MAX_MESSAGE_HISTORY_BYTES
+        {
+            let removed = self
+                .messages
+                .pop_front()
+                .expect("new message must leave history nonempty");
+            self.message_history_bytes -= removed.len();
+        }
         self.message = Some(message);
         self.prompt = None;
     }
@@ -240,8 +257,11 @@ impl MinibufferState {
             return "No messages.\n".to_owned();
         }
 
-        let mut text = self.messages.join("\n");
-        text.push('\n');
+        let mut text = String::with_capacity(self.message_history_bytes + self.messages.len());
+        for message in &self.messages {
+            text.push_str(message);
+            text.push('\n');
+        }
         text
     }
 
@@ -251,9 +271,27 @@ impl MinibufferState {
     }
 }
 
+fn bounded_message(message: String) -> String {
+    if message.len() <= MAX_MESSAGE_HISTORY_BYTES {
+        return message.into_boxed_str().into_string();
+    }
+
+    let mut end = MAX_MESSAGE_HISTORY_BYTES - TRUNCATED_MESSAGE_SUFFIX.len();
+    while !message.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut bounded = String::with_capacity(end + TRUNCATED_MESSAGE_SUFFIX.len());
+    bounded.push_str(&message[..end]);
+    bounded.push_str(TRUNCATED_MESSAGE_SUFFIX);
+    bounded
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{MinibufferState, PromptKind};
+    use super::{
+        MAX_MESSAGE_HISTORY_BYTES, MAX_MESSAGE_HISTORY_ENTRIES, MinibufferState, PromptKind,
+        TRUNCATED_MESSAGE_SUFFIX,
+    };
 
     #[test]
     fn prompt_display_combines_label_and_input() {
@@ -422,5 +460,54 @@ mod tests {
             "Saved alpha.txt\nError: missing file name\n"
         );
         assert_eq!(minibuffer.display_text(), None);
+    }
+
+    #[test]
+    fn message_history_evicts_oldest_entries_at_count_limit() {
+        let mut minibuffer = MinibufferState::default();
+
+        for index in 0..=MAX_MESSAGE_HISTORY_ENTRIES {
+            minibuffer.set_message(format!("message {index}"));
+        }
+
+        let messages = minibuffer.messages_text();
+        let expected_last = format!("message {MAX_MESSAGE_HISTORY_ENTRIES}");
+        assert_eq!(messages.lines().count(), MAX_MESSAGE_HISTORY_ENTRIES);
+        assert_eq!(messages.lines().next(), Some("message 1"));
+        assert_eq!(messages.lines().next_back(), Some(expected_last.as_str()));
+    }
+
+    #[test]
+    fn message_history_evicts_oldest_entries_at_byte_limit() {
+        let mut minibuffer = MinibufferState::default();
+        let first = "a".repeat(MAX_MESSAGE_HISTORY_BYTES / 2 + 1);
+        let second = "b".repeat(MAX_MESSAGE_HISTORY_BYTES / 2 + 1);
+
+        minibuffer.set_message(first);
+        minibuffer.set_message(&second);
+
+        assert_eq!(minibuffer.messages.len(), 1);
+        assert_eq!(minibuffer.message_history_bytes, second.len());
+        assert_eq!(minibuffer.messages_text(), format!("{second}\n"));
+    }
+
+    #[test]
+    fn oversized_message_is_truncated_at_utf8_boundary() {
+        let mut minibuffer = MinibufferState::default();
+        let oversized = "é".repeat(MAX_MESSAGE_HISTORY_BYTES);
+
+        minibuffer.set_message(oversized);
+
+        let message = minibuffer
+            .message
+            .as_deref()
+            .expect("bounded message should be displayed");
+        assert!(message.len() <= MAX_MESSAGE_HISTORY_BYTES);
+        assert!(message.ends_with(TRUNCATED_MESSAGE_SUFFIX));
+        assert_eq!(minibuffer.message_history_bytes, message.len());
+        assert_eq!(
+            minibuffer.messages_text().len(),
+            minibuffer.message_history_bytes + 1
+        );
     }
 }

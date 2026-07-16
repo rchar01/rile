@@ -541,9 +541,11 @@ Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: there is no shell-command process timeout/cancellation, no
-message-log retention limit or persistence across sessions, and no selective
-region undo yet.
+Current limitations: there is no shell-command process timeout/cancellation,
+message history does not persist across sessions, and there is no selective
+region undo yet. The in-memory message log retains the newest 1,000 entries
+within a 1 MiB UTF-8 payload budget and visibly truncates an individual message
+that exceeds that budget.
 Literal search, regexp incremental search, query replace, regexp query replace,
 and `replace-regexp` use Emacs-style smart-case matching: lowercase search text
 matches case-insensitively, while unescaped uppercase search text is

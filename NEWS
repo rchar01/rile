@@ -25,6 +25,10 @@ Security fixes:
   paths, and working directories as visible escapes before constructing help
   fields. Embedded line breaks can no longer insert misleading help rows.
 
+* Message history now retains at most 1,000 entries and 1 MiB of UTF-8 payload.
+  Repeated status and error messages can no longer grow editor memory without
+  bound, and oversized individual messages are visibly truncated.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 

@@ -244,8 +244,8 @@ Basic editor keys:
   `M-x describe-buffer` describes the current buffer. `C-x =` reports the
   current line, column, and point location. `C-h C-a` (`about-rile`)
   shows version, build, terminal, config, and runtime path information, and
-  `C-h e` opens the read-only `*Messages*` message history, which updates while
-  it is visible.
+  `C-h e` opens the read-only `*Messages*` bounded recent-message history,
+  which updates while it is visible.
 - `C-z` suspends Rile and returns to the invoking shell on terminals with job
   control; resuming the process redraws the editor.
 - `M-p` and `M-n` move through history in command, file, buffer, write-file,

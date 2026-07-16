@@ -80,6 +80,9 @@ Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions
 open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the
 file, and confirm unsaved edits can still be written to its original path.
+Minibuffer unit tests verify message retention evicts the oldest entries at both
+the count and byte limits and truncates oversized messages at valid UTF-8
+boundaries.
 
 Auto-revert editor tests combine a failed binary-file reload, a successful
 reload, and an unrelated dirty buffer in one poll to verify per-buffer error

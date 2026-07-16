@@ -116,9 +116,11 @@ prose is wrapped near terminal-friendly widths while preserving tables and
 preformatted sections.
 
 `C-h e` / `view-echo-area-messages` opens the read-only `*Messages*` buffer with
-prior minibuffer status and error messages. If the buffer already exists, redraw
-refreshes it from the current message history so new messages appear while it is
-visible. The local messages keymap binds `q` to restore the previous buffer.
+the bounded recent history of minibuffer status and error messages. The history
+retains the newest 1,000 entries within a 1 MiB UTF-8 payload budget. If the
+buffer already exists, redraw refreshes it from the current message history so
+new messages appear while it is visible. The local messages keymap binds `q` to
+restore the previous buffer.
 
 `about-rile` / `C-h C-a` renders editor-level runtime metadata through the same
 help-buffer path. It reports version, build profile, feature-reporting status,

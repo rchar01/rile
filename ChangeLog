@@ -1,3 +1,23 @@
+2026-07-16  Robert Charusta  <rch-public@posteo.net>
+
+	Bound retained minibuffer message history.
+
+	* src/minibuffer.rs (MAX_MESSAGE_HISTORY_ENTRIES,
+	MAX_MESSAGE_HISTORY_BYTES, TRUNCATED_MESSAGE_SUFFIX): New constants.
+	(MinibufferState): Store bounded boxed messages and retained byte count.
+	(MinibufferState::set_message): Bound individual messages and evict oldest
+	entries at the count and byte limits.
+	(MinibufferState::messages_text): Materialize the bounded history.
+	(bounded_message): New function.
+	(message_history_evicts_oldest_entries_at_count_limit,
+	message_history_evicts_oldest_entries_at_byte_limit,
+	oversized_message_is_truncated_at_utf8_boundary): New tests.
+	* README.md: Describe the bounded recent-message history.
+	* NEWS: Announce bounded message retention.
+	* docs/development.md: Document retention limits.
+	* docs/self-documentation.md: Document bounded Messages contents.
+	* docs/testing.md: Document retention boundary coverage.
+
 2026-07-15  Robert Charusta  <rch-public@posteo.net>
 
 	Protect structured help from filesystem control characters.
