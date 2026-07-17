@@ -27,7 +27,7 @@ use crate::mode::{ModeId, ModeRegistry};
 use crate::option::{OptionId, OptionRegistry, OptionValue};
 use crate::render::{DecorationProvider, Face, Span, collect_spans_for_line};
 use crate::search_pattern::{PatternKind, SearchPattern};
-use crate::shell::{ShellCommandOutput, run_shell_command};
+use crate::shell::ShellCommandOutput;
 use crate::syntax::{CommentSyntax, Highlighter, MajorMode, SyntaxHighlighter, SyntaxMode};
 use crate::text::{control_character_escape, is_word_character};
 use crate::window::{SplitAxis, Viewport, WindowId, WindowLayout, WindowSeparator, WindowSet};
@@ -56,6 +56,7 @@ use search::{
 use search_history::SearchHistoryStore;
 
 const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
+const SHELL_COMMAND_RUNNING_MESSAGE: &str = "Running shell command... (C-g to cancel)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -109,6 +110,10 @@ pub struct Editor {
     replace_regexp: Option<ReplaceRegexpState>,
     rectangle_number_prompt: Option<RectangleNumberPromptState>,
     shell_command_prompt: Option<ShellCommandPromptState>,
+    running_shell_command: Option<RunningShellCommand>,
+    pending_shell_request: Option<PendingShellRequest>,
+    shell_cancel_request: Option<ShellCancellationRequest>,
+    shell_quit_prefix: bool,
     pending_kill_buffer: Option<BufferId>,
     save_some_buffers: Option<SaveSomeBuffersState>,
     pending_register: Option<PendingRegisterCommand>,
@@ -548,6 +553,25 @@ struct ShellCommandPromptState {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct PendingShellRequest {
+    pub(crate) command: String,
+    pub(crate) stdin: String,
+    pub(crate) current_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ShellCancellationRequest {
+    Interrupt,
+    Quit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RunningShellCommand {
+    command: String,
+    action: ShellCommandAction,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct SaveSomeBuffersState {
     pending: Vec<BufferId>,
     saved: usize,
@@ -556,8 +580,8 @@ struct SaveSomeBuffersState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ShellCommandAction {
     Display,
-    Insert,
-    ReplaceRegion { range: TextRange },
+    Insert { buffer: BufferId, at: Position },
+    ReplaceRegion { buffer: BufferId, range: TextRange },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -697,6 +721,10 @@ impl Editor {
             replace_regexp: None,
             rectangle_number_prompt: None,
             shell_command_prompt: None,
+            running_shell_command: None,
+            pending_shell_request: None,
+            shell_cancel_request: None,
+            shell_quit_prefix: false,
             pending_kill_buffer: None,
             save_some_buffers: None,
             pending_register: None,
@@ -830,6 +858,38 @@ impl Editor {
 
     pub fn minibuffer(&self) -> &MinibufferState {
         &self.minibuffer
+    }
+
+    pub(crate) fn take_pending_shell_request(&mut self) -> Option<PendingShellRequest> {
+        self.pending_shell_request.take()
+    }
+
+    pub(crate) fn take_shell_cancel_request(&mut self) -> Option<ShellCancellationRequest> {
+        self.shell_cancel_request.take()
+    }
+
+    pub(crate) fn shell_command_running(&self) -> bool {
+        self.running_shell_command.is_some()
+    }
+
+    pub(crate) fn reject_shell_command_start(&mut self, message: impl Into<String>) {
+        self.pending_shell_request = None;
+        self.running_shell_command = None;
+        self.shell_quit_prefix = false;
+        self.minibuffer.set_error(message);
+    }
+
+    pub(crate) fn report_shell_cancellation_escalated(&mut self) {
+        self.minibuffer
+            .set_message("Shell command cancellation escalated");
+    }
+
+    pub(crate) fn finish_shell_cancellation(&mut self) {
+        if self.running_shell_command.take().is_some() {
+            self.pending_shell_request = None;
+            self.shell_quit_prefix = false;
+            self.minibuffer.set_message("Shell command cancelled");
+        }
     }
 
     pub(crate) fn refresh_messages_buffer(&mut self) {
@@ -1037,11 +1097,77 @@ impl Editor {
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
+        if self.shell_command_running() {
+            return Ok(self.handle_running_shell_command_key(key));
+        }
         let outcome = self.handle_key_inner(key)?;
-        if outcome != EditorOutcome::Quit {
+        if outcome != EditorOutcome::Quit && !self.shell_command_running() {
             self.after_key_auto_save()?;
         }
         Ok(outcome)
+    }
+
+    fn handle_running_shell_command_key(&mut self, key: KeyEvent) -> EditorOutcome {
+        if self.shell_quit_prefix {
+            self.shell_quit_prefix = false;
+            return match key {
+                KeyEvent::Ctrl('c') => {
+                    self.cancel_running_shell_command(
+                        "Shell command cancelled",
+                        ShellCancellationRequest::Quit,
+                    );
+                    self.save_buffers_kill_terminal()
+                }
+                KeyEvent::Ctrl('g') => {
+                    self.cancel_running_shell_command(
+                        "Shell command cancelled",
+                        ShellCancellationRequest::Interrupt,
+                    );
+                    EditorOutcome::Continue
+                }
+                KeyEvent::Ctrl('z') => {
+                    self.minibuffer
+                        .set_message("Cancel the shell command with C-g before suspending");
+                    EditorOutcome::Continue
+                }
+                _ => {
+                    self.show_shell_command_running_message();
+                    EditorOutcome::Continue
+                }
+            };
+        }
+
+        match key {
+            KeyEvent::Ctrl('g') => {
+                self.cancel_running_shell_command(
+                    "Shell command cancelled",
+                    ShellCancellationRequest::Interrupt,
+                );
+            }
+            KeyEvent::Ctrl('x') => {
+                self.shell_quit_prefix = true;
+                self.show_shell_command_running_message();
+            }
+            KeyEvent::Ctrl('z') => self
+                .minibuffer
+                .set_message("Cancel the shell command with C-g before suspending"),
+            _ => self.show_shell_command_running_message(),
+        }
+        EditorOutcome::Continue
+    }
+
+    fn show_shell_command_running_message(&mut self) {
+        if self.minibuffer.message.as_deref() != Some(SHELL_COMMAND_RUNNING_MESSAGE) {
+            self.minibuffer.set_message(SHELL_COMMAND_RUNNING_MESSAGE);
+        }
+    }
+
+    fn cancel_running_shell_command(&mut self, message: &str, request: ShellCancellationRequest) {
+        self.running_shell_command = None;
+        self.pending_shell_request = None;
+        self.shell_cancel_request = Some(request);
+        self.shell_quit_prefix = false;
+        self.minibuffer.set_message(message);
     }
 
     fn handle_key_inner(&mut self, key: KeyEvent) -> Result<EditorOutcome> {
@@ -1140,6 +1266,9 @@ impl Editor {
     }
 
     pub fn poll_auto_revert(&mut self) -> Result<bool> {
+        if self.shell_command_running() {
+            return Ok(false);
+        }
         let auto_saved = self.poll_auto_save();
         if self.minibuffer.prompt().is_some() {
             return Ok(auto_saved);
@@ -6280,7 +6409,10 @@ impl Editor {
             if !self.ensure_buffer_editable() {
                 return Ok(());
             }
-            ShellCommandAction::Insert
+            ShellCommandAction::Insert {
+                buffer: self.current_buffer,
+                at: self.cursor,
+            }
         } else {
             ShellCommandAction::Display
         };
@@ -6303,7 +6435,10 @@ impl Editor {
         }
         let stdin = self.document().buffer().text_in_range(range)?;
         let action = if argument.is_some() {
-            ShellCommandAction::ReplaceRegion { range }
+            ShellCommandAction::ReplaceRegion {
+                buffer: self.current_buffer,
+                range,
+            }
         } else {
             ShellCommandAction::Display
         };
@@ -6329,32 +6464,60 @@ impl Editor {
                 return Ok(EditorOutcome::Continue);
             }
         };
-        let output = match run_shell_command(command, &state.stdin, &current_dir) {
+        self.running_shell_command = Some(RunningShellCommand {
+            command: command.to_owned(),
+            action: state.action,
+        });
+        self.pending_shell_request = Some(PendingShellRequest {
+            command: command.to_owned(),
+            stdin: state.stdin,
+            current_dir,
+        });
+        self.shell_quit_prefix = false;
+        self.show_shell_command_running_message();
+        Ok(EditorOutcome::Continue)
+    }
+
+    pub(crate) fn complete_shell_command(
+        &mut self,
+        result: Result<ShellCommandOutput>,
+    ) -> Result<()> {
+        let Some(running) = self.running_shell_command.take() else {
+            return Ok(());
+        };
+        self.pending_shell_request = None;
+        self.shell_quit_prefix = false;
+
+        let output = match result {
             Ok(output) => output,
             Err(error) => {
                 self.minibuffer.set_error(format_shell_command_error(error));
-                return Ok(EditorOutcome::Continue);
+                return Ok(());
             }
         };
-
         if output.success() {
-            return self.handle_successful_shell_command_output(state.action, output);
+            return self.handle_successful_shell_command_output(
+                &running.command,
+                running.action,
+                output,
+            );
         }
 
-        let text = format_shell_command_output(command, &output);
+        let text = format_shell_command_output(&running.command, &output);
         self.open_shell_output_buffer(text);
         self.minibuffer.set_error(format!(
             "Shell command failed with code {}",
             format_shell_status(output.status_code)
         ));
-        Ok(EditorOutcome::Continue)
+        Ok(())
     }
 
     fn handle_successful_shell_command_output(
         &mut self,
+        command: &str,
         action: ShellCommandAction,
         output: ShellCommandOutput,
-    ) -> Result<EditorOutcome> {
+    ) -> Result<()> {
         match action {
             ShellCommandAction::Display => {
                 let text = format_shell_command_output("", &output);
@@ -6362,12 +6525,16 @@ impl Editor {
                 self.minibuffer
                     .set_message(format_shell_success_message(&output));
             }
-            ShellCommandAction::Insert => {
+            ShellCommandAction::Insert { buffer, at } => {
+                if let Some(error) = self.shell_insert_target_error(buffer, at) {
+                    self.preserve_unapplied_shell_output(command, &output, &error);
+                    return Ok(());
+                }
                 if output.stdout.is_empty() {
                     self.minibuffer
                         .set_message("Shell command produced no output");
                 } else {
-                    self.insert_shell_stdout(&output.stdout)?;
+                    self.insert_shell_stdout(at, &output.stdout)?;
                     let message = format_shell_mutation_message(
                         "Inserted",
                         output.stdout.len(),
@@ -6376,7 +6543,11 @@ impl Editor {
                     self.minibuffer.set_message(message);
                 }
             }
-            ShellCommandAction::ReplaceRegion { range } => {
+            ShellCommandAction::ReplaceRegion { buffer, range } => {
+                if let Some(error) = self.shell_region_target_error(buffer, range) {
+                    self.preserve_unapplied_shell_output(command, &output, &error);
+                    return Ok(());
+                }
                 if output.stdout.is_empty() {
                     self.minibuffer
                         .set_message("Shell command produced no output");
@@ -6391,20 +6562,13 @@ impl Editor {
                 }
             }
         }
-        Ok(EditorOutcome::Continue)
+        Ok(())
     }
 
-    fn insert_shell_stdout(&mut self, stdout: &str) -> Result<()> {
-        if !self.ensure_buffer_editable() {
-            return Ok(());
-        }
+    fn insert_shell_stdout(&mut self, at: Position, stdout: &str) -> Result<()> {
         self.clear_insert_group();
-        let cursor_before = self.cursor;
-        self.cursor = self
-            .document_mut()
-            .buffer_mut()
-            .insert(cursor_before, stdout)?;
-        self.record_insert(cursor_before, self.cursor, stdout, false);
+        self.cursor = self.document_mut().buffer_mut().insert(at, stdout)?;
+        self.record_insert(at, self.cursor, stdout, false);
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
@@ -6412,9 +6576,6 @@ impl Editor {
     }
 
     fn replace_region_with_shell_stdout(&mut self, range: TextRange, stdout: &str) -> Result<()> {
-        if !self.ensure_buffer_editable() {
-            return Ok(());
-        }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let old_text = self.document_mut().buffer_mut().delete_range(range)?;
@@ -6434,6 +6595,57 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         Ok(())
+    }
+
+    fn shell_insert_target_error(&self, buffer: BufferId, at: Position) -> Option<String> {
+        if let Some(error) = self.shell_mutation_target_error(buffer) {
+            return Some(error);
+        }
+        self.buffers
+            .document(buffer)
+            .expect("validated shell target should exist")
+            .buffer()
+            .validate_position(at)
+            .err()
+            .map(|error| format!("captured insertion position is no longer valid: {error}"))
+    }
+
+    fn shell_region_target_error(&self, buffer: BufferId, range: TextRange) -> Option<String> {
+        if let Some(error) = self.shell_mutation_target_error(buffer) {
+            return Some(error);
+        }
+        self.buffers
+            .document(buffer)
+            .expect("validated shell target should exist")
+            .buffer()
+            .validate_range(range)
+            .err()
+            .map(|error| format!("captured region is no longer valid: {error}"))
+    }
+
+    fn shell_mutation_target_error(&self, buffer: BufferId) -> Option<String> {
+        let Some(document) = self.buffers.document(buffer) else {
+            return Some("captured target buffer no longer exists".to_owned());
+        };
+        if buffer != self.current_buffer {
+            return Some("captured target buffer is no longer current".to_owned());
+        }
+        document
+            .is_read_only()
+            .then(|| "captured target buffer is now read-only".to_owned())
+    }
+
+    fn preserve_unapplied_shell_output(
+        &mut self,
+        command: &str,
+        output: &ShellCommandOutput,
+        error: &str,
+    ) {
+        let text = format_shell_command_output(command, output);
+        self.open_shell_output_buffer(text);
+        self.minibuffer.set_error(format!(
+            "Shell command output was not applied: {error}; output preserved in *Shell Command Output*"
+        ));
     }
 
     fn shell_command_current_dir(&self) -> Result<PathBuf> {
@@ -9615,9 +9827,9 @@ mod tests {
     };
     use super::{
         AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
-        Editor, EditorOutcome, EditorPatternMatch, KillEntry, SearchDirection,
-        file_prompt_base_input, format_rectangle_number, format_shell_command_error,
-        highlight_phrase_regexp,
+        Editor, EditorOutcome, EditorPatternMatch, KillEntry, SHELL_COMMAND_RUNNING_MESSAGE,
+        SearchDirection, ShellCancellationRequest, file_prompt_base_input, format_rectangle_number,
+        format_shell_command_error, highlight_phrase_regexp,
     };
     use crate::RileError;
     use crate::buffer::undo::UndoRecord;
@@ -9635,6 +9847,7 @@ mod tests {
     use crate::option::{OptionId, OptionRegistry, OptionValue};
     use crate::render::{DecorationProvider, Face, Span};
     use crate::search_pattern::{PatternKind, SearchPattern};
+    use crate::shell::{ShellCommandOutput, run_shell_command};
     use crate::syntax::{MajorMode, SyntaxMode};
     use crate::window::SplitAxis;
 
@@ -20759,6 +20972,265 @@ M-g g           goto-line                      Go to line or line:column\n"
         }
     }
 
+    fn submit_shell_prompt_text(editor: &mut Editor, text: &str) {
+        submit_prompt_text(editor, text);
+        complete_pending_shell_command(editor);
+    }
+
+    fn complete_pending_shell_command(editor: &mut Editor) {
+        let request = editor
+            .take_pending_shell_request()
+            .expect("shell prompt should create a pending request");
+        let result = run_shell_command(&request.command, &request.stdin, &request.current_dir);
+        editor
+            .complete_shell_command(result)
+            .expect("shell completion should be handled");
+    }
+
+    #[test]
+    fn shell_prompt_submission_creates_pending_request_without_running_it() {
+        let mut editor = Editor::new(Document::scratch());
+
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+
+        assert!(editor.shell_command_running());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some(SHELL_COMMAND_RUNNING_MESSAGE)
+        );
+        let request = editor
+            .take_pending_shell_request()
+            .expect("submission should create a shell request");
+        assert_eq!(request.command, "sleep 10");
+        assert!(request.stdin.is_empty());
+        assert_eq!(request.clone(), request);
+    }
+
+    #[test]
+    fn running_shell_command_suppresses_normal_keys_and_macro_recording() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        editor.recording_keyboard_macro = Some(Vec::new());
+
+        editor
+            .handle_key(KeyEvent::Text("changed".to_owned()))
+            .expect("key should be consumed");
+
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert!(editor.key_sequence.is_empty());
+        assert_eq!(editor.recording_keyboard_macro, Some(Vec::new()));
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('z'))
+                .expect("C-z should be suppressed"),
+            EditorOutcome::Continue
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Cancel the shell command with C-g before suspending")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('f'))
+            .expect("normal command should remain suppressed");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some(SHELL_COMMAND_RUNNING_MESSAGE)
+        );
+        assert_eq!(editor.take_shell_cancel_request(), None);
+        assert!(editor.take_pending_shell_request().is_some());
+    }
+
+    #[test]
+    fn cancelling_shell_command_ignores_late_completion() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("submission should create a shell request");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should cancel the logical job");
+
+        assert!(!editor.shell_command_running());
+        assert_eq!(
+            editor.take_shell_cancel_request(),
+            Some(ShellCancellationRequest::Interrupt)
+        );
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Shell command cancelled")
+        );
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: "late".to_owned(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("late completion should be ignored");
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+    }
+
+    #[test]
+    fn running_shell_command_allows_clean_c_x_c_c_quit() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('x'))
+                .expect("C-x should be consumed"),
+            EditorOutcome::Continue
+        );
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('c'))
+                .expect("C-x C-c should quit"),
+            EditorOutcome::Quit
+        );
+        assert_eq!(
+            editor.take_shell_cancel_request(),
+            Some(ShellCancellationRequest::Quit)
+        );
+        assert!(!editor.shell_command_running());
+    }
+
+    #[test]
+    fn running_shell_command_c_x_c_c_preserves_dirty_quit_prompt() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "dirty")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should be consumed");
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('c'))
+                .expect("C-x C-c should prompt"),
+            EditorOutcome::Continue
+        );
+
+        assert_eq!(
+            editor.take_shell_cancel_request(),
+            Some(ShellCancellationRequest::Quit)
+        );
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::QuitDirtyBuffers)
+        );
+    }
+
+    #[test]
+    fn shell_insertion_uses_position_captured_at_prompt_start() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "printf captured");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("submission should create a shell request");
+        editor.cursor = Position::new(0, "alpha".len());
+
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: "captured".to_owned(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("completion should insert at the captured point");
+
+        assert_eq!(editor.document().buffer().serialize(), "capturedalpha");
+    }
+
+    #[test]
+    fn stale_shell_target_preserves_output_without_mutating_replacement_buffer() {
+        let mut editor = Editor::new(Document::scratch());
+        let target = editor.current_buffer_id();
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("C-u M-! should prompt");
+        submit_prompt_text(&mut editor, "printf preserved");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("submission should create a shell request");
+        editor
+            .finish_kill_buffer(target, false)
+            .expect("clean target should be killable");
+        let replacement = editor.current_buffer_id();
+
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: "preserved".to_owned(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("stale completion should be preserved");
+
+        assert_eq!(
+            editor
+                .document_for_buffer(replacement)
+                .expect("replacement buffer should remain")
+                .buffer()
+                .serialize(),
+            ""
+        );
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert!(editor.document().buffer().serialize().contains("preserved"));
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("target buffer no longer exists"))
+        );
+    }
+
     #[test]
     fn shell_command_displays_output_buffer_and_returns() {
         let mut editor = Editor::new(Document::scratch());
@@ -20771,7 +21243,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.minibuffer().display_text().as_deref(),
             Some("Shell command: ")
         );
-        submit_prompt_text(&mut editor, "printf 'shell-out\\n'");
+        submit_shell_prompt_text(&mut editor, "printf 'shell-out\\n'");
 
         assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
         assert!(editor.document().buffer().serialize().contains("shell-out"));
@@ -20825,7 +21297,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Meta('!'))
             .expect("C-u M-! should prompt");
-        submit_prompt_text(&mut editor, "printf 'INSERTED'");
+        submit_shell_prompt_text(&mut editor, "printf 'INSERTED'");
 
         assert_eq!(editor.document().buffer().serialize(), "INSERTEDalpha");
         assert_eq!(editor.cursor(), Position::new(0, "INSERTED".len()));
@@ -20858,7 +21330,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             editor.minibuffer().display_text().as_deref(),
             Some("Shell command on region: ")
         );
-        submit_prompt_text(&mut editor, "sort");
+        submit_shell_prompt_text(&mut editor, "sort");
 
         assert_eq!(editor.document().buffer().serialize(), "a\nb\n");
         editor
@@ -20883,7 +21355,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Meta('!'))
             .expect("C-u M-! should prompt");
-        submit_prompt_text(&mut editor, "printf 'changed'; exit 2");
+        submit_shell_prompt_text(&mut editor, "printf 'changed'; exit 2");
 
         assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
         assert_eq!(
@@ -20915,7 +21387,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Meta('!'))
             .expect("C-u M-! should prompt");
-        submit_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
+        submit_shell_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
 
         assert_eq!(editor.document().buffer().serialize(), "alpha");
         assert_eq!(
@@ -20942,7 +21414,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Meta('|'))
             .expect("C-u M-| should prompt");
-        submit_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
+        submit_shell_prompt_text(&mut editor, "head -c 8388609 /dev/zero");
 
         assert_eq!(editor.document().buffer().serialize(), "alpha");
         assert_eq!(

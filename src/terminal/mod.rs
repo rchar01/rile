@@ -9,11 +9,12 @@ use std::path::Path;
 use crate::buffer::{Buffer, Position};
 use crate::completion::CompletionStyle;
 use crate::config::{Config, ThemeName};
-use crate::editor::{Editor, EditorOutcome};
+use crate::editor::{Editor, EditorOutcome, ShellCancellationRequest};
 use crate::file::Document;
-use crate::input::KeyReader;
+use crate::input::{KeyEvent, KeyReader};
 use crate::minibuffer::PromptKind;
 use crate::render::{Face, Span, clip_spans, merge_spans};
+use crate::shell::{ShellJob, ShellJobPoll};
 use crate::text::control_character_escape;
 use crate::window::{Viewport, WindowLayout, WindowSeparator};
 use crate::{Result, RileError};
@@ -293,6 +294,9 @@ struct TerminalSession<R, W: Write> {
     test_size: Option<TerminalSize>,
     frame_options: FrameOptions,
     last_size: Option<TerminalSize>,
+    shell_job: Option<ShellJob>,
+    shell_input_suppression: bool,
+    shell_c_g_escalation: bool,
 }
 
 impl<R, W> TerminalSession<R, W>
@@ -323,23 +327,178 @@ where
                 clear_screen: false,
             },
             last_size: None,
+            shell_job: None,
+            shell_input_suppression: false,
+            shell_c_g_escalation: false,
         })
     }
 
     fn run(&mut self, mut editor: Editor) -> Result<()> {
         loop {
+            let allow_completion = !self.shell_input_suppression;
+            let shell_changed = self.poll_shell_job(&mut editor, allow_completion)?;
+            if shell_changed {
+                self.draw(&mut editor)?;
+            }
             if let Some(key) = self.input.read_key_or_timeout()? {
-                match editor.handle_key(key)? {
-                    EditorOutcome::Quit => return Ok(()),
-                    EditorOutcome::Continue => self.draw(&mut editor)?,
+                if self.consume_shell_input_before_editor(&mut editor, &key)? {
+                    self.poll_shell_job(&mut editor, false)?;
+                    self.draw(&mut editor)?;
+                    continue;
+                }
+
+                let outcome = editor.handle_key(key)?;
+                self.process_shell_requests(&mut editor)?;
+                match outcome {
+                    EditorOutcome::Quit => {
+                        self.cancel_shell_job_immediately();
+                        return Ok(());
+                    }
+                    EditorOutcome::Continue => {
+                        self.poll_shell_job(&mut editor, false)?;
+                        self.draw(&mut editor)?;
+                    }
                     EditorOutcome::Suspend => {
+                        self.poll_shell_job(&mut editor, false)?;
                         self.suspend()?;
                         self.draw(&mut editor)?;
                     }
                 }
-            } else if editor.poll_auto_revert()? {
-                self.draw(&mut editor)?;
+            } else {
+                let shell_changed = self.finish_shell_input_quiet_period(&mut editor)?;
+                let redraw = if self.shell_job.is_some() || editor.shell_command_running() {
+                    true
+                } else {
+                    shell_changed || editor.poll_auto_revert()?
+                };
+                if redraw {
+                    self.draw(&mut editor)?;
+                }
             }
+        }
+    }
+
+    fn consume_shell_input_before_editor(
+        &mut self,
+        editor: &mut Editor,
+        key: &KeyEvent,
+    ) -> Result<bool> {
+        if self.try_escalate_shell_cancellation(editor, key)? {
+            return Ok(true);
+        }
+        Ok(self.shell_input_suppression
+            && !editor.shell_command_running()
+            && editor.minibuffer().prompt().is_none())
+    }
+
+    fn try_escalate_shell_cancellation(
+        &mut self,
+        editor: &mut Editor,
+        key: &KeyEvent,
+    ) -> Result<bool> {
+        if *key != KeyEvent::Ctrl('g') {
+            self.shell_c_g_escalation = false;
+            return Ok(false);
+        }
+        if !self.shell_c_g_escalation
+            || editor.minibuffer().prompt().is_some()
+            || !self.shell_job.as_ref().is_some_and(ShellJob::is_cancelling)
+        {
+            return Ok(false);
+        }
+
+        self.shell_c_g_escalation = false;
+        self.shell_job
+            .as_mut()
+            .expect("cancellation escalation should retain the shell job")
+            .request_cancel();
+        editor.report_shell_cancellation_escalated();
+        Ok(true)
+    }
+
+    fn finish_shell_input_quiet_period(&mut self, editor: &mut Editor) -> Result<bool> {
+        let shell_changed = self.poll_shell_job(editor, true)?;
+        if self.shell_input_suppression && !editor.shell_command_running() {
+            self.shell_input_suppression = false;
+        }
+        Ok(shell_changed)
+    }
+
+    fn process_shell_requests(&mut self, editor: &mut Editor) -> Result<()> {
+        if let Some(request) = editor.take_shell_cancel_request() {
+            match request {
+                ShellCancellationRequest::Interrupt => {
+                    self.shell_c_g_escalation = if let Some(job) = self.shell_job.as_mut() {
+                        job.request_cancel();
+                        job.is_cancelling()
+                    } else {
+                        false
+                    };
+                }
+                ShellCancellationRequest::Quit => {
+                    self.shell_c_g_escalation = false;
+                    if let Some(job) = self.shell_job.as_mut() {
+                        job.request_cancel();
+                    }
+                }
+            }
+        }
+
+        let Some(request) = editor.take_pending_shell_request() else {
+            return Ok(());
+        };
+        if self.shell_job.is_some() {
+            editor.reject_shell_command_start(
+                "cannot start a shell command while the previous command is still cancelling",
+            );
+            return Ok(());
+        }
+
+        match ShellJob::spawn(&request.command, &request.stdin, &request.current_dir) {
+            Ok(job) => {
+                self.shell_c_g_escalation = false;
+                self.shell_job = Some(job);
+                self.shell_input_suppression = true;
+            }
+            Err(error) => editor.complete_shell_command(Err(error))?,
+        }
+        Ok(())
+    }
+
+    fn poll_shell_job(&mut self, editor: &mut Editor, allow_completion: bool) -> Result<bool> {
+        let cancelled = match self.shell_job.as_mut() {
+            Some(job) => match job.poll() {
+                ShellJobPoll::Pending => return Ok(false),
+                ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_) | ShellJobPoll::Cancelled
+                    if !allow_completion =>
+                {
+                    return Ok(false);
+                }
+                ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_) => false,
+                ShellJobPoll::Cancelled => true,
+            },
+            None => return Ok(false),
+        };
+
+        self.shell_c_g_escalation = false;
+        self.shell_input_suppression = false;
+        let job = self
+            .shell_job
+            .take()
+            .expect("terminal shell poll should retain the job");
+        if cancelled {
+            editor.finish_shell_cancellation();
+        } else {
+            editor.complete_shell_command(job.into_result())?;
+        }
+        Ok(true)
+    }
+
+    fn cancel_shell_job_immediately(&mut self) {
+        self.shell_c_g_escalation = false;
+        if let Some(job) = self.shell_job.as_mut() {
+            job.request_cancel();
+            job.request_cancel();
         }
     }
 
@@ -1902,25 +2061,257 @@ impl<W: Write> Drop for ScreenGuard<W> {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::net::UnixStream;
+    use std::thread;
+    use std::time::{Duration, Instant};
 
     use super::{
         AnsiTerminal, FrameOptions, LineRenderOptions, MAX_RENDER_SOURCE_CHAR_SLACK,
-        MAX_RENDER_SOURCE_CHARS_PER_COLUMN, TerminalSize, clipped_text, display_width_with_tabs,
-        draw_editor_frame, draw_editor_frame_with_options, escape_terminal_controls,
-        expand_display_text, format_completion_row, minibuffer_visible_line, mode_line_position,
-        project_buffer_line, text_clipped_to_display_width, text_display_width,
-        text_from_display_column, visible_display_range, wrapped_help_cursor_position,
-        wrapped_help_visual_lines, write_buffer_line, write_fixed_width_text_with_face,
-        write_fixed_width_text_with_spans, write_line_number_gutter, write_line_with_spans,
+        MAX_RENDER_SOURCE_CHARS_PER_COLUMN, RawModeGuard, ScreenGuard, TerminalSession,
+        TerminalSize, clipped_text, display_width_with_tabs, draw_editor_frame,
+        draw_editor_frame_with_options, escape_terminal_controls, expand_display_text,
+        format_completion_row, minibuffer_visible_line, mode_line_position, project_buffer_line,
+        text_clipped_to_display_width, text_display_width, text_from_display_column,
+        visible_display_range, wrapped_help_cursor_position, wrapped_help_visual_lines,
+        write_buffer_line, write_fixed_width_text_with_face, write_fixed_width_text_with_spans,
+        write_line_number_gutter, write_line_with_spans,
     };
     use crate::buffer::{Buffer, BufferId, Position};
     use crate::completion::{CompletionConfig, CompletionStyle};
     use crate::config::{Config, ThemeName};
     use crate::editor::Editor;
     use crate::file::{Document, DocumentKind};
-    use crate::input::KeyEvent;
+    use crate::input::{KeyEvent, KeyReader, SpecialKey};
+    use crate::minibuffer::PromptKind;
     use crate::render::{Face, Span};
+    use crate::shell::ShellJobPoll;
     use crate::window::Viewport;
+
+    fn shell_test_session() -> (
+        TerminalSession<UnixStream, UnixStream>,
+        UnixStream,
+        UnixStream,
+    ) {
+        let (input, input_peer) = UnixStream::pair().expect("input socket pair should open");
+        let (output, output_peer) = UnixStream::pair().expect("output socket pair should open");
+        let output_fd = output.as_raw_fd();
+        (
+            TerminalSession {
+                screen: ScreenGuard {
+                    terminal: AnsiTerminal::new(output),
+                    active: false,
+                    reset_cursor_style_on_drop: false,
+                },
+                raw_mode: RawModeGuard::inactive(),
+                input: KeyReader::new(input),
+                output_fd,
+                test_size: Some(TerminalSize {
+                    rows: 12,
+                    columns: 80,
+                }),
+                frame_options: FrameOptions::default(),
+                last_size: None,
+                shell_job: None,
+                shell_input_suppression: false,
+                shell_c_g_escalation: false,
+            },
+            input_peer,
+            output_peer,
+        )
+    }
+
+    fn submit_shell_command(editor: &mut Editor, command: &str) {
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        editor
+            .handle_key(KeyEvent::Text(command.to_owned()))
+            .expect("shell command should be entered");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("shell command should submit");
+    }
+
+    #[test]
+    fn shell_completion_waits_until_completion_is_allowed() {
+        let (mut session, _input_peer, _output_peer) = shell_test_session();
+        let mut editor = Editor::new(Document::scratch());
+        submit_shell_command(&mut editor, "printf held");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("shell job should start");
+        assert!(session.shell_input_suppression);
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            assert!(
+                !session
+                    .poll_shell_job(&mut editor, false)
+                    .expect("shell polling should succeed")
+            );
+            let terminal = session.shell_job.as_mut().is_some_and(|job| {
+                matches!(
+                    job.poll(),
+                    ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_)
+                )
+            });
+            if terminal {
+                break;
+            }
+            assert!(Instant::now() < deadline, "shell job should finish");
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(editor.shell_command_running());
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert!(
+            !session
+                .poll_shell_job(&mut editor, false)
+                .expect("terminal completion should remain held")
+        );
+        assert!(
+            session
+                .finish_shell_input_quiet_period(&mut editor)
+                .expect("quiet-period completion should be delivered")
+        );
+        assert!(!session.shell_input_suppression);
+        assert!(!editor.shell_command_running());
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert!(editor.document().buffer().serialize().contains("held"));
+    }
+
+    #[test]
+    fn cancelled_shell_discards_queued_text_until_quiet_period() {
+        let (mut session, _input_peer, _output_peer) = shell_test_session();
+        let mut editor = Editor::new(Document::scratch());
+        submit_shell_command(&mut editor, "sleep 10");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("shell job should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("first C-g should cancel logically");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("first C-g should request interruption");
+
+        assert!(!editor.shell_command_running());
+        assert!(session.shell_input_suppression);
+        assert!(
+            session
+                .consume_shell_input_before_editor(
+                    &mut editor,
+                    &KeyEvent::Text("queued".to_owned()),
+                )
+                .expect("queued text should be consumed")
+        );
+        session
+            .poll_shell_job(&mut editor, false)
+            .expect("cancelled job should keep making progress");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(session.shell_input_suppression);
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            session
+                .poll_shell_job(&mut editor, false)
+                .expect("cancelled job should keep making progress");
+            let terminal = session.shell_job.as_mut().is_some_and(|job| {
+                matches!(
+                    job.poll(),
+                    ShellJobPoll::Cancelled | ShellJobPoll::Failed(_)
+                )
+            });
+            if terminal {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "shell cancellation should finish"
+            );
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(session.shell_job.is_some());
+        assert!(session.shell_input_suppression);
+        assert!(
+            session
+                .finish_shell_input_quiet_period(&mut editor)
+                .expect("quiet period should finalize cancellation")
+        );
+        assert!(session.shell_job.is_none());
+        assert!(!session.shell_input_suppression);
+    }
+
+    #[test]
+    fn second_c_g_escalates_before_editor_dispatch() {
+        let (mut session, _input_peer, _output_peer) = shell_test_session();
+        let mut editor = Editor::new(Document::scratch());
+        submit_shell_command(&mut editor, "trap '' 2; sleep 10");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("shell job should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("first C-g should cancel logically");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("first C-g should request interruption");
+
+        assert!(session.shell_c_g_escalation);
+        assert!(session.shell_input_suppression);
+        assert!(
+            session
+                .consume_shell_input_before_editor(&mut editor, &KeyEvent::Ctrl('g'))
+                .expect("second C-g should escalate")
+        );
+        assert!(!session.shell_c_g_escalation);
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Shell command cancellation escalated")
+        );
+    }
+
+    #[test]
+    fn dirty_quit_cancellation_does_not_arm_c_g_escalation() {
+        let (mut session, _input_peer, _output_peer) = shell_test_session();
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "dirty")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        submit_shell_command(&mut editor, "sleep 10");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("shell job should start");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should be consumed");
+        editor
+            .handle_key(KeyEvent::Ctrl('c'))
+            .expect("C-x C-c should prompt for dirty buffers");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("quit cancellation should be requested");
+
+        assert!(!session.shell_c_g_escalation);
+        assert!(session.shell_input_suppression);
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::QuitDirtyBuffers)
+        );
+        assert!(
+            !session
+                .consume_shell_input_before_editor(&mut editor, &KeyEvent::Ctrl('g'))
+                .expect("prompt C-g should not escalate")
+        );
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("prompt C-g should retain normal semantics");
+        assert!(editor.minibuffer().prompt().is_none());
+    }
 
     #[test]
     fn writes_buffered_ansi_sequences() {

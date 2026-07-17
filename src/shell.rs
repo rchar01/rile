@@ -198,6 +198,13 @@ impl ShellJob {
         self.request_cancel_at(Instant::now());
     }
 
+    pub fn is_cancelling(&self) -> bool {
+        matches!(
+            self.state,
+            ShellJobState::Reaping(ReapOutcome::Cancelled { .. })
+        )
+    }
+
     fn request_cancel_at(&mut self, now: Instant) {
         if matches!(self.state, ShellJobState::Running) {
             self.close_pipes(true);
