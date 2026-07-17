@@ -111,7 +111,10 @@ Basic editor keys:
   captured output. `C-u M-|` replaces the active region with stdout after a
   successful command. Shell commands have a 30-second deadline and an 8 MiB
   combined stdout/stderr limit; exceeding either limit discards partial output
-  without inserting or replacing buffer text.
+  without inserting or replacing buffer text. Commands remain foreground, but
+  redraw continues and `C-g` cancels them; a second `C-g` escalates cancellation.
+  Normal editing input typed while a command is active is discarded rather than
+  replayed. `C-x C-c` cancels before quitting, while `C-z` asks you to cancel.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `M-x just-one-space` collapses spaces and tabs around point to one space;

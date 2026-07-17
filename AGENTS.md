@@ -70,6 +70,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 - `src/buffer/` and `src/file.rs` handle UTF-8 text storage and file-backed documents; saves use same-directory temp files and `rename`.
 - `src/render/` centralizes face spans and priority merging used by region, search, query-replace, syntax, mode-line, and minibuffer rendering.
 - `src/window.rs` manages split layout and per-window viewport state; terminal drawing must keep point visible in the selected window.
+- `src/shell.rs` owns bounded nonblocking shell jobs; `TerminalSession` polls and
+  cancels them while `Editor` retains only logical foreground command targets.
 
 ## Documentation And History
 

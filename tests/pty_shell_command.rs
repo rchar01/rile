@@ -80,3 +80,56 @@ fn shell_command_on_large_region_avoids_duplex_pipe_deadlock() -> Result<()> {
     rile.quit()?;
     Ok(())
 }
+
+#[test]
+fn foreground_completion_discards_input_queued_after_enter() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send("short shell command", b"printf shell-out")?;
+    let mut submission = keys::ENTER.to_vec();
+    submission.extend_from_slice(b"QUEUED");
+    rile.send("RET with queued text", submission)?;
+
+    rile.wait_for_screen_contains("shell-out")?;
+    rile.send("q", b"q")?;
+    rile.wait_for_screen_contains("alpha")?;
+    rile.assert_status_contains("modified:false")?;
+    assert!(!rile.snapshot_text().contains("QUEUED"));
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn foreground_shell_cancels_and_resumes_editing() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send(
+        "SIGINT-resistant shell command",
+        b"trap '' 2; while :; do :; done",
+    )?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("Running shell command... (C-g to cancel)")?;
+
+    rile.send("suppressed foreground text", b"IGNORED")?;
+    rile.assert_screen_contains("Running shell command... (C-g to cancel)")?;
+    let mut cancel = keys::control('g').to_vec();
+    cancel.extend_from_slice(&keys::control('g'));
+    rile.send("C-g C-g", cancel)?;
+    rile.wait_for_screen_contains("Shell command cancellation escalated")?;
+    rile.wait_for_screen_contains("Shell command cancelled")?;
+
+    rile.send("normal text after cancellation", b"Z")?;
+    rile.wait_for_screen_contains("Zalpha")?;
+    rile.assert_status_contains("modified:true")?;
+    assert!(!rile.snapshot_text().contains("IGNORED"));
+
+    rile.quit()?;
+    Ok(())
+}

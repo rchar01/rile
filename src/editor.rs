@@ -885,9 +885,14 @@ impl Editor {
     }
 
     pub(crate) fn finish_shell_cancellation(&mut self) {
-        if self.running_shell_command.take().is_some() {
-            self.pending_shell_request = None;
-            self.shell_quit_prefix = false;
+        let was_running = self.running_shell_command.take().is_some();
+        self.pending_shell_request = None;
+        self.shell_quit_prefix = false;
+        let cancellation_message_visible = matches!(
+            self.minibuffer.message.as_deref(),
+            Some("Shell command cancelled" | "Shell command cancellation escalated")
+        );
+        if self.minibuffer.prompt().is_none() && (was_running || cancellation_message_visible) {
             self.minibuffer.set_message("Shell command cancelled");
         }
     }

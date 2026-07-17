@@ -1,3 +1,120 @@
+2026-07-17  Robert Charusta  <rch-public@posteo.net>
+
+	Make foreground shell commands interruptible.
+
+	* src/shell.rs (CANCELLATION_GRACE, POLL_BYTE_BUDGET,
+	POLL_OPERATION_BUDGET): New constants.
+	(ShellJobPoll, ShellJobState, ReapOutcome, ShellJob, PollBudget): New
+	types.
+	(ShellJob::spawn, ShellJob::poll, ShellJob::request_cancel,
+	ShellJob::is_cancelling, ShellJob::into_result): New public methods.
+	(ShellJob::spawn_with_limits_at, ShellJob::poll_at,
+	ShellJob::request_cancel_at, ShellJob::poll_running,
+	ShellJob::refresh_status, ShellJob::write_stdin,
+	ShellJob::read_stdout, ShellJob::read_stderr,
+	ShellJob::handle_output_read, ShellJob::ready_to_finish,
+	ShellJob::finish, ShellJob::begin_failure, ShellJob::poll_reaping,
+	ShellJob::escalate_cancellation, ShellJob::finish_reap_timeout,
+	ShellJob::fail_terminal, ShellJob::handoff_unreaped_child,
+	ShellJob::close_pipes, ShellJob::signal): New methods.
+	(Drop for ShellJob): Kill and asynchronously reap unfinished jobs.
+	(run_shell_command, run_shell_command_with_limits): Drive ShellJob
+	synchronously for compatibility callers.
+	(PollBudget::new, PollBudget::can_poll_io, PollBudget::can_io,
+	PollBudget::take_operation, PollBudget::io_len,
+	PollBudget::record_bytes): New methods.
+	(InputWrite, OutputRead): Replace deadline outcomes with bounded poll
+	progress outcomes.
+	(write_available_stdin, read_available_output): Use a shared per-poll
+	work budget.
+	(append_cleanup_error): Preserve primary and cleanup failures.
+	(signal_child_group_and_direct, signal_error, process_group_exists,
+	detach_child_reaper, cleanup_spawn_error): New functions.
+	(terminate_child): Provide bounded spawn and reaper-thread fallback
+	cleanup.
+	(poll_timeout_millis, cleanup_error, terminate_child_group): Remove.
+	(public_poll_returns_pending_for_sleep,
+	cancellation_discards_partial_output_and_completes,
+	second_cancellation_escalates_immediately,
+	poll_escalates_cancellation_after_grace,
+	cancellation_escalation_kills_sigint_ignoring_descendant,
+	reap_state_has_a_bounded_terminal_failure,
+	drop_kills_and_reaps_an_active_child,
+	event_loop_cadence_preserves_large_duplex_throughput,
+	continuously_ready_reader_respects_per_poll_byte_budget,
+	continuously_ready_writer_respects_per_poll_operation_budget): New tests.
+	(output_drain_checks_deadline_while_reader_stays_ready,
+	stdin_pump_checks_deadline_while_writer_stays_ready): Remove superseded
+	deadline-loop tests.
+	(ShellJobTerminal, test_limits, wait_for_path, process_exists,
+	poll_until_terminal, poll_until_output): Add test support for incremental
+	job lifecycle assertions.
+	* src/editor.rs (SHELL_COMMAND_RUNNING_MESSAGE): New constant.
+	(Editor): Track pending, running, cancellation, and quit-prefix shell
+	state.
+	(PendingShellRequest, ShellCancellationRequest, RunningShellCommand): New
+	types.
+	(ShellCommandAction): Capture explicit insertion and replacement targets.
+	(Editor::take_pending_shell_request, Editor::take_shell_cancel_request,
+	Editor::shell_command_running, Editor::reject_shell_command_start,
+	Editor::report_shell_cancellation_escalated,
+	Editor::finish_shell_cancellation): New terminal coordination methods;
+	report physical cancellation completion without replacing newer activity.
+	(Editor::handle_key, Editor::handle_running_shell_command_key): Suppress
+	normal editing and route cancellation while a shell job is foreground.
+	(Editor::poll_auto_revert): Pause editor-owned idle work while a logical
+	shell command remains foreground.
+	(Editor::show_shell_command_running_message,
+	Editor::cancel_running_shell_command): Maintain foreground status and
+	logical cancellation state.
+	(Editor::start_shell_command, Editor::start_shell_command_on_region):
+	Capture explicit mutation targets.
+	(Editor::submit_shell_command): Queue a request instead of running it.
+	(Editor::complete_shell_command): Apply a terminal-delivered result.
+	(Editor::handle_successful_shell_command_output): Route captured output
+	through validated foreground targets.
+	(Editor::insert_shell_stdout): Insert at the captured position.
+	(Editor::replace_region_with_shell_stdout): Replace only after target
+	validation.
+	(Editor::shell_insert_target_error, Editor::shell_region_target_error,
+	Editor::shell_mutation_target_error,
+	Editor::preserve_unapplied_shell_output): Validate captured targets and
+	preserve stale output.
+	(shell_prompt_submission_creates_pending_request_without_running_it,
+	running_shell_command_suppresses_normal_keys_and_macro_recording,
+	cancelling_shell_command_ignores_late_completion,
+	running_shell_command_allows_clean_c_x_c_c_quit,
+	running_shell_command_c_x_c_c_preserves_dirty_quit_prompt,
+	shell_insertion_uses_position_captured_at_prompt_start,
+	stale_shell_target_preserves_output_without_mutating_replacement_buffer):
+	New tests.
+	(submit_shell_prompt_text, complete_pending_shell_command): New test
+	helpers.
+	* src/terminal/mod.rs (TerminalSession): Own the physical shell job and
+	terminal input-suppression state.
+	(TerminalSession::run, TerminalSession::process_shell_requests,
+	TerminalSession::poll_shell_job,
+	TerminalSession::consume_shell_input_before_editor,
+	TerminalSession::try_escalate_shell_cancellation,
+	TerminalSession::finish_shell_input_quiet_period,
+	TerminalSession::cancel_shell_job_immediately): Coordinate foreground
+	input, completion, cancellation, and quit cleanup.
+	(shell_completion_waits_until_completion_is_allowed,
+	cancelled_shell_discards_queued_text_until_quiet_period,
+	second_c_g_escalates_before_editor_dispatch,
+	dirty_quit_cancellation_does_not_arm_c_g_escalation): New tests.
+	(shell_test_session, submit_shell_command): New terminal test helpers.
+	* tests/pty_shell_command.rs
+	(foreground_completion_discards_input_queued_after_enter,
+	foreground_shell_cancels_and_resumes_editing): New tests.
+	* README.md, NEWS: Document interruptible foreground shell behavior.
+	* docs/development.md: Document foreground behavior, resource and
+	background limitations, and detached-descendant constraints.
+	* AGENTS.md: Record shell job and foreground target ownership.
+	* docs/architecture.md: Document ShellJob ownership, polling,
+	cancellation, input suppression, target validation, and reaping.
+	* docs/testing.md: Document shell lifecycle and PTY coverage.
+
 2026-07-16  Robert Charusta  <rch-public@posteo.net>
 
 	Bound shell command execution resources.

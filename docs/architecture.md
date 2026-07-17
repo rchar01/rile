@@ -52,8 +52,8 @@ on the owning modules or through PTY tests that spawn the real binary.
   behavior.
 - `src/minibuffer.rs`: prompt state, editable prompt text, cursor movement, and
   minibuffer messages.
-- `src/shell.rs`: synchronous shell-process spawning, bounded nonblocking pipe
-  transfer, output capture, deadlines, and process-group cleanup.
+- `src/shell.rs`: foreground shell-job spawning, bounded incremental pipe
+  transfer, output capture, deadlines, cancellation, and process-group cleanup.
 - `src/syntax.rs`: major-mode selection and lightweight syntax highlighting.
 - `src/config.rs`, `src/option.rs`, and `src/mode.rs`: user configuration and
   inspectable option/mode metadata.
@@ -92,19 +92,35 @@ commands inspect the same active keymap stack that dispatch uses.
 
 ## Shell Commands
 
-`Editor` collects the command and optional region input before calling the
-synchronous runner in `src/shell.rs`. The runner places `/bin/sh` in a dedicated
-process group and uses nonblocking pipe polling so region input, stdout, and
-stderr make progress together. Captured stdout and stderr share an 8 MiB byte
-budget, and command execution has a 30-second deadline. A limit failure kills
-the process group, bounds direct-child reaping, discards partial output, and
-returns an error before `Editor` can insert or replace text.
+`Editor` collects the command, optional region input, working directory, and
+explicit insertion or replacement target. `TerminalSession` owns the resulting
+`ShellJob`; no OS process handle is stored in cloneable editor state. The job
+places `/bin/sh` in a dedicated process group and incrementally polls nonblocking
+stdin, stdout, stderr, and child status with fixed per-poll work budgets. Captured
+stdout and stderr share an 8 MiB byte budget, and execution has a 30-second
+deadline.
 
-The terminal loop remains blocked while a command is running, so `C-g` cannot
-cancel it and redraw resumes only after completion or the deadline. Process-group
-cleanup covers ordinary descendants; a process that deliberately starts a new
-session can escape that group, but closing Rile's local pipes prevents it from
-holding shell output capture open.
+Shell commands remain logically foreground: normal editor keys do not execute
+while a job is active, but the terminal loop continues polling, redrawing, and
+reading input. Terminal-owned suppression remains active through a quiet input
+boundary so bytes queued behind Enter, completion, or cancellation cannot become
+later edits. `C-g` discards partial output and sends `SIGINT` to the process group;
+a second `C-g` or a 250 ms grace-period expiry sends `SIGKILL`. `C-x C-c` cancels
+before following normal clean or dirty-buffer quit behavior, and suspension is
+rejected until the command is cancelled.
+
+Completion applies output only to the captured buffer and position or range.
+If that target is unavailable or invalid, Rile preserves successful output in
+`*Shell Command Output*` instead of guessing another target. Timeout, output
+overflow, cancellation, and decoding failures never apply partial output.
+
+Reaping is event-loop driven rather than a blocking cleanup sleep. Emergency
+drop cleanup closes pipes, signals the group and direct child, and hands an
+unreaped child to a detached reaper. Process-group cleanup covers ordinary
+descendants; a process that deliberately starts a new session can escape that
+group and may keep inherited output descriptors open until the command deadline.
+Timeout or cancellation closes Rile's local pipes, so detached descendants cannot
+hold capture open indefinitely.
 
 ## Buffers And Documents
 

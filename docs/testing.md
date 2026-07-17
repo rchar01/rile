@@ -85,15 +85,22 @@ budget-exhaustion regression verifies a right marker replaces trailing
 zero-width characters without exceeding the viewport. Existing PTY scrolling
 tests cover visible horizontal markers and cursor placement.
 
-Shell-runner unit tests use small injected output budgets and deadlines to cover
-the exact combined-output boundary, infinite producers, UTF-8 byte boundaries,
+Shell-job unit tests use small injected output budgets and deadlines to cover the
+exact combined-output boundary, infinite producers, UTF-8 byte boundaries,
 silent-command timeout, ordinary descendant cleanup, early stdin closure, and
 simultaneous multi-megabyte stdin/stdout transfer. Synthetic always-ready pipes
-verify the deadline is checked inside drain loops. Editor coverage verifies the
-production 8 MiB failure leaves prefix insertion and region replacement targets
-unchanged. A PTY regression sends a 2 MiB region through `M-|` and `cat`,
-exceeding normal pipe capacity so sequential stdin/output handling would
-deadlock.
+verify fixed per-poll work budgets, and a 100 ms cadence case verifies a 2 MiB
+duplex filter completes within its command deadline. Cancellation tests cover
+partial-output discard, `SIGINT`-resistant descendants, timed and explicit
+`SIGKILL` escalation, bounded reap failure, and emergency Drop reaping.
+
+Editor and terminal tests verify pending request ownership, foreground key and
+macro suppression, first/second `C-g`, clean and dirty `C-x C-c`, quiet-boundary
+input isolation, held completion, stale-target output preservation, and captured
+insertion positions. Production-limit tests leave prefix insertion and region
+replacement targets unchanged. PTY regressions send a 2 MiB region through
+`M-|` and `cat`, discard text queued after Enter, cancel a SIGINT-resistant
+command with `C-g C-g`, and confirm normal editing resumes afterward.
 
 Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions
