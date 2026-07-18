@@ -42,10 +42,13 @@ Security fixes:
   or grow captured output until memory exhaustion. Resource-limit failures do
   not insert or replace partial output. Foreground commands now keep terminal
   redraw responsive: `C-g` interrupts the process group, a second `C-g` or a
-  short grace-period expiry escalates to `SIGKILL`, and cleanup no longer blocks
-  the editor. Editing remains paused until completion or cancellation, and keys
-  queued during the command remain suppressed through a quiet input boundary
-  instead of being replayed afterward.
+   short grace-period expiry escalates to `SIGKILL`, and cleanup no longer blocks
+   the editor. Editing remains paused until completion or cancellation, and keys
+   queued during the command remain suppressed through a quiet input boundary
+   instead of being replayed afterward. Display commands now stream stdout and
+   stderr through one ordered process transcript before completion. Partial
+   transcripts remain visible after cancellation or failure, while insertion
+   and replacement commands remain atomic.
 
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)

@@ -58,6 +58,29 @@ fn shell_output_escapes_terminal_control_sequences() -> Result<()> {
 }
 
 #[test]
+fn foreground_shell_streams_output_before_completion() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-!", keys::meta('!'))?;
+    rile.send(
+        "delayed streaming command",
+        b"printf first; sleep 0.5; printf second >&2",
+    )?;
+    rile.send("RET", keys::ENTER)?;
+
+    rile.wait_for_screen_contains("first")?;
+    rile.assert_screen_contains("Running shell command... (C-g to cancel)")?;
+    assert!(!rile.snapshot_text().contains("second"));
+    rile.wait_for_screen_contains("second")?;
+    rile.wait_for_screen_contains("Process finished")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn shell_command_on_large_region_avoids_duplex_pipe_deadlock() -> Result<()> {
     let region = "x".repeat(2 * 1024 * 1024);
     let file = fixtures::named_temp_file(&region)?;
@@ -94,6 +117,7 @@ fn foreground_completion_discards_input_queued_after_enter() -> Result<()> {
     rile.send("RET with queued text", submission)?;
 
     rile.wait_for_screen_contains("shell-out")?;
+    rile.wait_for_screen_contains("Process finished")?;
     rile.send("q", b"q")?;
     rile.wait_for_screen_contains("alpha")?;
     rile.assert_status_contains("modified:false")?;
@@ -112,9 +136,10 @@ fn foreground_shell_cancels_and_resumes_editing() -> Result<()> {
     rile.send("M-!", keys::meta('!'))?;
     rile.send(
         "SIGINT-resistant shell command",
-        b"trap '' 2; while :; do :; done",
+        b"printf partial; trap '' 2; while :; do :; done",
     )?;
     rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("partial")?;
     rile.wait_for_screen_contains("Running shell command... (C-g to cancel)")?;
 
     rile.send("suppressed foreground text", b"IGNORED")?;
@@ -129,6 +154,13 @@ fn foreground_shell_cancels_and_resumes_editing() -> Result<()> {
     rile.wait_for_screen_contains("Zalpha")?;
     rile.assert_status_contains("modified:true")?;
     assert!(!rile.snapshot_text().contains("IGNORED"));
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("shell output buffer", b"*Shell Command Output*")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("partial")?;
+    rile.assert_screen_contains("Process cancelled")?;
 
     rile.quit()?;
     Ok(())

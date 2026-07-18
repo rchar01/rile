@@ -557,6 +557,7 @@ pub(crate) struct PendingShellRequest {
     pub(crate) command: String,
     pub(crate) stdin: String,
     pub(crate) current_dir: PathBuf,
+    pub(crate) stream_output: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -569,6 +570,8 @@ pub(crate) enum ShellCancellationRequest {
 struct RunningShellCommand {
     command: String,
     action: ShellCommandAction,
+    streaming_output: bool,
+    streamed_output_bytes: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -884,7 +887,7 @@ impl Editor {
             .set_message("Shell command cancellation escalated");
     }
 
-    pub(crate) fn finish_shell_cancellation(&mut self) {
+    pub(crate) fn finish_shell_cancellation(&mut self, streamed_output: bool) {
         let was_running = self.running_shell_command.take().is_some();
         self.pending_shell_request = None;
         self.shell_quit_prefix = false;
@@ -895,6 +898,56 @@ impl Editor {
         if self.minibuffer.prompt().is_none() && (was_running || cancellation_message_visible) {
             self.minibuffer.set_message("Shell command cancelled");
         }
+        if streamed_output {
+            let _ = self.append_shell_process_status("cancelled");
+            if self.document().is_shell_output()
+                && let Some(viewport) = self.shell_output_return.take()
+                && self.buffers.document(viewport.buffer).is_some()
+            {
+                self.restore_returnable_special_buffer(viewport, false);
+            }
+        }
+    }
+
+    pub(crate) fn append_shell_command_output(&mut self, text: &str) -> Result<bool> {
+        if text.is_empty() {
+            return Ok(false);
+        }
+        if let Some(running) = self.running_shell_command.as_mut()
+            && running.streaming_output
+        {
+            running.streamed_output_bytes =
+                running.streamed_output_bytes.saturating_add(text.len());
+        }
+        self.append_shell_output_text(text)?;
+        Ok(true)
+    }
+
+    fn append_shell_output_text(&mut self, text: &str) -> Result<()> {
+        if text.is_empty() {
+            return Ok(());
+        }
+        let output = self
+            .buffers
+            .find_by_kind(DocumentKind::ShellOutput)
+            .unwrap_or_else(|| self.buffers.open_shell_output(""));
+        let document = self
+            .buffers
+            .document_mut(output)
+            .expect("shell output buffer should exist");
+        let end = document.buffer().end_position();
+        let new_end = document.buffer_mut().insert(end, text)?;
+        document.mark_clean();
+        if self.current_buffer == output {
+            self.cursor = new_end;
+            self.goal_display_column = None;
+            self.sync_current_window();
+        }
+        Ok(())
+    }
+
+    fn append_shell_process_status(&mut self, status: &str) -> Result<()> {
+        self.append_shell_output_text(&format!("\nProcess {status}\n"))
     }
 
     pub(crate) fn refresh_messages_buffer(&mut self) {
@@ -6469,15 +6522,22 @@ impl Editor {
                 return Ok(EditorOutcome::Continue);
             }
         };
+        let streaming_output = state.action == ShellCommandAction::Display;
         self.running_shell_command = Some(RunningShellCommand {
             command: command.to_owned(),
             action: state.action,
+            streaming_output,
+            streamed_output_bytes: 0,
         });
         self.pending_shell_request = Some(PendingShellRequest {
             command: command.to_owned(),
             stdin: state.stdin,
             current_dir,
+            stream_output: streaming_output,
         });
+        if streaming_output {
+            self.open_shell_output_buffer("");
+        }
         self.shell_quit_prefix = false;
         self.show_shell_command_running_message();
         Ok(EditorOutcome::Continue)
@@ -6496,6 +6556,9 @@ impl Editor {
         let output = match result {
             Ok(output) => output,
             Err(error) => {
+                if running.streaming_output {
+                    self.append_shell_process_status("failed")?;
+                }
                 self.minibuffer.set_error(format_shell_command_error(error));
                 return Ok(());
             }
@@ -6504,10 +6567,23 @@ impl Editor {
             return self.handle_successful_shell_command_output(
                 &running.command,
                 running.action,
+                running.streaming_output,
+                running.streamed_output_bytes,
                 output,
             );
         }
 
+        if running.streaming_output {
+            self.append_shell_process_status(&format!(
+                "exited with code {}",
+                format_shell_status(output.status_code)
+            ))?;
+            self.minibuffer.set_error(format!(
+                "Shell command failed with code {}",
+                format_shell_status(output.status_code)
+            ));
+            return Ok(());
+        }
         let text = format_shell_command_output(&running.command, &output);
         self.open_shell_output_buffer(text);
         self.minibuffer.set_error(format!(
@@ -6521,14 +6597,23 @@ impl Editor {
         &mut self,
         command: &str,
         action: ShellCommandAction,
+        streaming_output: bool,
+        streamed_output_bytes: usize,
         output: ShellCommandOutput,
     ) -> Result<()> {
         match action {
             ShellCommandAction::Display => {
-                let text = format_shell_command_output("", &output);
-                self.open_shell_output_buffer(text);
-                self.minibuffer
-                    .set_message(format_shell_success_message(&output));
+                if streaming_output {
+                    self.append_shell_process_status("finished")?;
+                    self.minibuffer.set_message(format!(
+                        "Shell command completed ({streamed_output_bytes} bytes)"
+                    ));
+                } else {
+                    let text = format_shell_command_output("", &output);
+                    self.open_shell_output_buffer(text);
+                    self.minibuffer
+                        .set_message(format_shell_success_message(&output));
+                }
             }
             ShellCommandAction::Insert { buffer, at } => {
                 if let Some(error) = self.shell_insert_target_error(buffer, at) {
@@ -20986,7 +21071,17 @@ M-g g           goto-line                      Go to line or line:column\n"
         let request = editor
             .take_pending_shell_request()
             .expect("shell prompt should create a pending request");
-        let result = run_shell_command(&request.command, &request.stdin, &request.current_dir);
+        let mut result = run_shell_command(&request.command, &request.stdin, &request.current_dir);
+        if request.stream_output
+            && let Ok(output) = &mut result
+        {
+            let streamed = format!("{}{}", output.stdout, output.stderr);
+            editor
+                .append_shell_command_output(&streamed)
+                .expect("streamed output should append");
+            output.stdout.clear();
+            output.stderr.clear();
+        }
         editor
             .complete_shell_command(result)
             .expect("shell completion should be handled");
@@ -21015,6 +21110,76 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn streamed_shell_output_reuses_clean_buffer_without_user_undo() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let edited_buffer = editor.current_buffer_id();
+        let undo_depth = editor.undo_stack.len();
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let output_buffer = editor.current_buffer_id();
+
+        editor
+            .append_shell_command_output("first")
+            .expect("first chunk should append");
+        editor
+            .append_shell_command_output(" second")
+            .expect("second chunk should append");
+
+        assert_eq!(editor.current_buffer_id(), output_buffer);
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert_eq!(editor.document().buffer().serialize(), "first second");
+        assert!(!editor.document().is_dirty());
+        assert_eq!(editor.undo_stack.len(), undo_depth);
+        assert_eq!(
+            editor
+                .document_for_buffer(edited_buffer)
+                .expect("edited buffer should remain")
+                .buffer()
+                .serialize(),
+            "alpha"
+        );
+    }
+
+    #[test]
+    fn streamed_shell_cancellation_restores_origin_and_retains_transcript() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let edited_buffer = editor.current_buffer_id();
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let output_buffer = editor.current_buffer_id();
+        editor
+            .append_shell_command_output("partial")
+            .expect("partial output should append");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("C-g should request cancellation");
+        editor.finish_shell_cancellation(true);
+
+        assert_eq!(editor.current_buffer_id(), edited_buffer);
+        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        let output = editor
+            .document_for_buffer(output_buffer)
+            .expect("output buffer should remain after cancellation");
+        assert_eq!(output.buffer().serialize(), "partial\nProcess cancelled\n");
+        assert!(!output.is_dirty());
+    }
+
+    #[test]
     fn running_shell_command_suppresses_normal_keys_and_macro_recording() {
         let mut document = Document::scratch();
         document
@@ -21022,6 +21187,7 @@ M-g g           goto-line                      Go to line or line:column\n"
             .insert(Position::new(0, 0), "alpha")
             .expect("fixture should insert");
         let mut editor = Editor::new(document);
+        let edited_buffer = editor.current_buffer_id();
         editor
             .handle_key(KeyEvent::Meta('!'))
             .expect("M-! should prompt");
@@ -21032,7 +21198,14 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Text("changed".to_owned()))
             .expect("key should be consumed");
 
-        assert_eq!(editor.document().buffer().serialize(), "alpha");
+        assert_eq!(
+            editor
+                .document_for_buffer(edited_buffer)
+                .expect("edited buffer should remain")
+                .buffer()
+                .serialize(),
+            "alpha"
+        );
         assert!(editor.key_sequence.is_empty());
         assert_eq!(editor.recording_keyboard_macro, Some(Vec::new()));
         assert_eq!(

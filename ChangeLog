@@ -1,5 +1,61 @@
 2026-07-18  Robert Charusta  <rch-public@posteo.net>
 
+	Stream foreground shell display output.
+
+	* src/shell.rs (ShellOutputMode, ChildOutput): New types.
+	(Read for ChildOutput, AsRawFd for ChildOutput): New implementations.
+	(ShellJob): Store generic output pipes, stream mode, and decoded output.
+	(ShellJob::spawn_streaming, ShellJob::take_streamed_output,
+	ShellJob::streams_output, ShellJob::decode_streamed_output): New methods.
+	(ShellJob::spawn_with_limits_at_and_reaper): Rename to
+	ShellJob::spawn_with_mode_and_limits_at and configure a combined pipe for
+	display jobs.
+	(ShellJob::read_stdout, ShellJob::handle_output_read, ShellJob::finish):
+	Decode and finish streaming output without retaining delivered bytes.
+	(combined_output_pipe): New function.
+	(streaming_combines_stdout_and_stderr_in_pipe_order,
+	streaming_emits_output_before_process_exit,
+	streaming_retains_incomplete_utf8_between_polls,
+	streaming_output_limit_counts_already_delivered_bytes,
+	streaming_preserves_delivered_prefix_across_invalid_utf8_failure,
+	streaming_preserves_delivered_prefix_after_cancellation): New tests.
+	* src/editor.rs (PendingShellRequest, RunningShellCommand): Track output
+	disposition and delivered byte count.
+	(Editor::finish_shell_cancellation): Preserve the transcript and restore
+	the edited buffer after foreground cancellation.
+	(Editor::append_shell_command_output, Editor::append_shell_output_text,
+	Editor::append_shell_process_status): New methods.
+	(Editor::submit_shell_command): Open the output buffer when a display job
+	starts.
+	(Editor::complete_shell_command,
+	Editor::handle_successful_shell_command_output): Preserve streamed output
+	and append terminal process status.
+	(complete_pending_shell_command): Simulate streamed output in editor tests.
+	(running_shell_command_suppresses_normal_keys_and_macro_recording): Check
+	the original buffer while the process buffer is selected.
+	(streamed_shell_output_reuses_clean_buffer_without_user_undo,
+	streamed_shell_cancellation_restores_origin_and_retains_transcript): New
+	tests.
+	* src/terminal/mod.rs (TerminalSession::process_shell_requests): Select
+	streaming or captured shell jobs.
+	(TerminalSession::poll_shell_job): Deliver output chunks before terminal
+	completion.
+	(shell_completion_waits_until_completion_is_allowed): Verify output is
+	delivered while completion remains suppressed.
+	* tests/pty_shell_command.rs
+	(foreground_shell_streams_output_before_completion): New test.
+	(foreground_completion_discards_input_queued_after_enter): Wait for
+	physical completion before leaving the live output buffer.
+	(foreground_shell_cancels_and_resumes_editing): Verify partial output is
+	preserved after cancellation.
+	* README.md, NEWS: Document live shell transcripts.
+	* docs/architecture.md: Document streaming and captured output modes.
+	* docs/development.md: Document live foreground output and remaining
+	limits.
+	* docs/testing.md: Document streaming unit and PTY coverage.
+
+2026-07-18  Robert Charusta  <rch-public@posteo.net>
+
 	Remove blocking shell cleanup fallbacks.
 
 	* src/shell.rs (SHELL_REAPER): New shared reaper state.

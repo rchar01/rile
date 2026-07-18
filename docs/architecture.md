@@ -96,9 +96,11 @@ commands inspect the same active keymap stack that dispatch uses.
 explicit insertion or replacement target. `TerminalSession` owns the resulting
 `ShellJob`; no OS process handle is stored in cloneable editor state. The job
 places `/bin/sh` in a dedicated process group and incrementally polls nonblocking
-stdin, stdout, stderr, and child status with fixed per-poll work budgets. Captured
-stdout and stderr share an 8 MiB byte budget, and execution has a 30-second
-deadline.
+stdin, output, and child status with fixed per-poll work budgets. Display jobs
+connect stdout and stderr to one stream and incrementally decode UTF-8 into the
+generated output buffer. Mutation jobs retain separate stdout and stderr until
+successful completion. Both modes share an 8 MiB cumulative byte budget, and
+execution has a 30-second deadline.
 
 Shell commands remain logically foreground: normal editor keys do not execute
 while a job is active, but the terminal loop continues polling, redrawing, and
@@ -109,7 +111,10 @@ a second `C-g` or a 250 ms grace-period expiry sends `SIGKILL`. `C-x C-c` cancel
 before following normal clean or dirty-buffer quit behavior, and suspension is
 rejected until the command is cancelled.
 
-Completion applies output only to the captured buffer and position or range.
+Streaming display output is appended internally without entering a user undo
+history. Partial transcripts remain visible after timeout, overflow,
+cancellation, or decoding failure. Completion applies mutation output only to
+the captured buffer and position or range.
 If that target is unavailable or invalid, Rile preserves successful output in
 `*Shell Command Output*` instead of guessing another target. Timeout, output
 overflow, cancellation, and decoding failures never apply partial output.

@@ -94,6 +94,8 @@ duplex filter completes within its command deadline. Cancellation tests cover
 partial-output discard, `SIGINT`-resistant descendants, timed and explicit
 `SIGKILL` escalation, bounded reap failure, and emergency Drop reaping.
 Injected reaper startup failure verifies shell setup stops before reaper use.
+Streaming tests cover combined stdout/stderr order, pre-exit delivery, UTF-8
+sequences split across polls, and cumulative limits after delivered chunks.
 
 Editor and terminal tests verify pending request ownership, foreground key and
 macro suppression, first/second `C-g`, clean and dirty `C-x C-c`, quiet-boundary
@@ -101,7 +103,8 @@ input isolation, held completion, stale-target output preservation, and captured
 insertion positions. Production-limit tests leave prefix insertion and region
 replacement targets unchanged. PTY regressions send a 2 MiB region through
 `M-|` and `cat`, discard text queued after Enter, cancel a SIGINT-resistant
-command with `C-g C-g`, and confirm normal editing resumes afterward.
+command with `C-g C-g`, observe output before process exit, and confirm normal
+editing resumes afterward.
 
 Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions

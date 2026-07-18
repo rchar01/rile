@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Robert Charusta <rch-public@posteo.net>
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use std::fs::File;
 use std::io::{self, Read, Write};
-use std::os::fd::{AsRawFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
@@ -80,11 +81,44 @@ enum ReapOutcome {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShellOutputMode {
+    Captured,
+    Streaming,
+}
+
+#[derive(Debug)]
+enum ChildOutput {
+    Stdout(ChildStdout),
+    Stderr(ChildStderr),
+    Combined(File),
+}
+
+impl Read for ChildOutput {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Stdout(output) => output.read(buffer),
+            Self::Stderr(output) => output.read(buffer),
+            Self::Combined(output) => output.read(buffer),
+        }
+    }
+}
+
+impl AsRawFd for ChildOutput {
+    fn as_raw_fd(&self) -> RawFd {
+        match self {
+            Self::Stdout(output) => output.as_raw_fd(),
+            Self::Stderr(output) => output.as_raw_fd(),
+            Self::Combined(output) => output.as_raw_fd(),
+        }
+    }
+}
+
 pub struct ShellJob {
     child: Option<Child>,
     child_stdin: Option<ChildStdin>,
-    child_stdout: Option<ChildStdout>,
-    child_stderr: Option<ChildStderr>,
+    child_stdout: Option<ChildOutput>,
+    child_stderr: Option<ChildOutput>,
     stdin_bytes: Vec<u8>,
     stdin_offset: usize,
     stdout_bytes: Vec<u8>,
@@ -97,6 +131,8 @@ pub struct ShellJob {
     next_pipe: usize,
     state: ShellJobState,
     reaper: ShellReaper,
+    output_mode: ShellOutputMode,
+    streamed_output: String,
 }
 
 impl ShellJob {
@@ -110,6 +146,18 @@ impl ShellJob {
         )
     }
 
+    pub fn spawn_streaming(command: &str, stdin: &str, current_dir: &Path) -> Result<Self> {
+        Self::spawn_with_mode_and_limits_at(
+            command,
+            stdin,
+            current_dir,
+            ShellOutputMode::Streaming,
+            ShellCommandLimits::default(),
+            Instant::now(),
+            shared_shell_reaper,
+        )
+    }
+
     fn spawn_with_limits_at(
         command: &str,
         stdin: &str,
@@ -117,34 +165,45 @@ impl ShellJob {
         limits: ShellCommandLimits,
         started_at: Instant,
     ) -> Result<Self> {
-        Self::spawn_with_limits_at_and_reaper(
+        Self::spawn_with_mode_and_limits_at(
             command,
             stdin,
             current_dir,
+            ShellOutputMode::Captured,
             limits,
             started_at,
             shared_shell_reaper,
         )
     }
 
-    fn spawn_with_limits_at_and_reaper(
+    fn spawn_with_mode_and_limits_at(
         command: &str,
         stdin: &str,
         current_dir: &Path,
+        output_mode: ShellOutputMode,
         limits: ShellCommandLimits,
         started_at: Instant,
         acquire_reaper: impl FnOnce() -> Result<ShellReaper>,
     ) -> Result<Self> {
         let reaper = acquire_reaper()?;
-        let mut child = Command::new("/bin/sh")
+        let mut process = Command::new("/bin/sh");
+        process
             .arg("-c")
             .arg(command)
             .current_dir(current_dir)
             .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .process_group(0)
-            .spawn()?;
+            .process_group(0);
+        let combined_output = if output_mode == ShellOutputMode::Streaming {
+            let (parent, child_stdout, child_stderr) = combined_output_pipe()?;
+            process
+                .stdout(Stdio::from(child_stdout))
+                .stderr(Stdio::from(child_stderr));
+            Some(parent)
+        } else {
+            process.stdout(Stdio::piped()).stderr(Stdio::piped());
+            None
+        };
+        let mut child = process.spawn()?;
 
         let process_group = match libc::pid_t::try_from(child.id()) {
             Ok(process_group) => process_group,
@@ -160,18 +219,31 @@ impl ShellJob {
             .stdin
             .take()
             .expect("shell stdin was configured as piped");
-        let child_stdout = child
-            .stdout
-            .take()
-            .expect("shell stdout was configured as piped");
-        let child_stderr = child
-            .stderr
-            .take()
-            .expect("shell stderr was configured as piped");
+        let (child_stdout, child_stderr) = match combined_output {
+            Some(output) => (ChildOutput::Combined(output), None),
+            None => (
+                ChildOutput::Stdout(
+                    child
+                        .stdout
+                        .take()
+                        .expect("shell stdout was configured as piped"),
+                ),
+                Some(ChildOutput::Stderr(
+                    child
+                        .stderr
+                        .take()
+                        .expect("shell stderr was configured as piped"),
+                )),
+            ),
+        };
 
         if let Err(error) = set_nonblocking(child_stdin.as_raw_fd())
             .and_then(|()| set_nonblocking(child_stdout.as_raw_fd()))
-            .and_then(|()| set_nonblocking(child_stderr.as_raw_fd()))
+            .and_then(|()| {
+                child_stderr
+                    .as_ref()
+                    .map_or(Ok(()), |output| set_nonblocking(output.as_raw_fd()))
+            })
         {
             return Err(cleanup_spawn_error(
                 child,
@@ -186,7 +258,7 @@ impl ShellJob {
             child: Some(child),
             child_stdin: (!stdin_bytes.is_empty()).then_some(child_stdin),
             child_stdout: Some(child_stdout),
-            child_stderr: Some(child_stderr),
+            child_stderr,
             stdin_bytes,
             stdin_offset: 0,
             stdout_bytes: Vec::new(),
@@ -199,6 +271,8 @@ impl ShellJob {
             next_pipe: 0,
             state: ShellJobState::Running,
             reaper,
+            output_mode,
+            streamed_output: String::new(),
         })
     }
 
@@ -231,6 +305,14 @@ impl ShellJob {
             self.state,
             ShellJobState::Reaping(ReapOutcome::Cancelled { .. })
         )
+    }
+
+    pub fn take_streamed_output(&mut self) -> String {
+        std::mem::take(&mut self.streamed_output)
+    }
+
+    pub fn streams_output(&self) -> bool {
+        self.output_mode == ShellOutputMode::Streaming
     }
 
     fn request_cancel_at(&mut self, now: Instant) {
@@ -434,6 +516,9 @@ impl ShellJob {
             self.limits.max_output_bytes,
             budget,
         )?;
+        if self.output_mode == ShellOutputMode::Streaming {
+            self.decode_streamed_output(false)?;
+        }
         self.handle_output_read(result, true)
     }
 
@@ -455,6 +540,9 @@ impl ShellJob {
             OutputRead::Open => Ok(()),
             OutputRead::Closed => {
                 if stdout {
+                    if self.output_mode == ShellOutputMode::Streaming {
+                        self.decode_streamed_output(true)?;
+                    }
                     self.child_stdout = None;
                 } else {
                     self.child_stderr = None;
@@ -472,6 +560,17 @@ impl ShellJob {
     }
 
     fn finish(&mut self) {
+        if self.output_mode == ShellOutputMode::Streaming {
+            self.state = ShellJobState::Finished(ShellCommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+                status_code: self
+                    .status
+                    .expect("finished shell job should have an exit status")
+                    .code(),
+            });
+            return;
+        }
         let stdout = match String::from_utf8(std::mem::take(&mut self.stdout_bytes)) {
             Ok(stdout) => stdout,
             Err(error) => {
@@ -498,6 +597,31 @@ impl ShellJob {
                 .expect("finished shell job should have an exit status")
                 .code(),
         });
+    }
+
+    fn decode_streamed_output(&mut self, eof: bool) -> Result<()> {
+        match std::str::from_utf8(&self.stdout_bytes) {
+            Ok(text) => {
+                self.streamed_output.push_str(text);
+                self.stdout_bytes.clear();
+                Ok(())
+            }
+            Err(error) => {
+                let valid = error.valid_up_to();
+                if valid > 0 {
+                    let text = std::str::from_utf8(&self.stdout_bytes[..valid])
+                        .expect("UTF-8 validator reported a valid prefix");
+                    self.streamed_output.push_str(text);
+                    self.stdout_bytes.drain(..valid);
+                }
+                if error.error_len().is_some() || eof {
+                    return Err(RileError::InvalidInput(format!(
+                        "shell command output is not UTF-8: {error}"
+                    )));
+                }
+                Ok(())
+            }
+        }
     }
 
     fn begin_failure(&mut self, error: RileError, now: Instant) {
@@ -764,6 +888,28 @@ impl PollBudget {
     fn record_bytes(&mut self, bytes: usize) {
         self.remaining_bytes -= bytes;
     }
+}
+
+fn combined_output_pipe() -> io::Result<(File, OwnedFd, OwnedFd)> {
+    let mut descriptors = [-1; 2];
+    // SAFETY: descriptors points to storage for the two pipe descriptors.
+    if unsafe { libc::pipe2(descriptors.as_mut_ptr(), libc::O_CLOEXEC) } == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: pipe2 initialized both descriptors, and each is given one owner.
+    let read_end = unsafe { OwnedFd::from_raw_fd(descriptors[0]) };
+    // SAFETY: pipe2 initialized both descriptors, and each is given one owner.
+    let write_end = unsafe { OwnedFd::from_raw_fd(descriptors[1]) };
+    set_nonblocking(read_end.as_raw_fd())?;
+
+    // SAFETY: F_DUPFD_CLOEXEC duplicates the live write descriptor with a new owner.
+    let stderr_fd = unsafe { libc::fcntl(write_end.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+    if stderr_fd == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    // SAFETY: fcntl returned a new owned descriptor.
+    let stderr_end = unsafe { OwnedFd::from_raw_fd(stderr_fd) };
+    Ok((File::from(read_end), write_end, stderr_end))
 }
 
 fn set_nonblocking(fd: RawFd) -> io::Result<()> {
@@ -1151,10 +1297,11 @@ mod tests {
     #[test]
     fn reaper_initialization_failure_prevents_child_spawn() {
         let directory = tempfile::tempdir().expect("temporary directory should exist");
-        let result = ShellJob::spawn_with_limits_at_and_reaper(
+        let result = ShellJob::spawn_with_mode_and_limits_at(
             "printf spawned > spawned",
             "",
             directory.path(),
+            super::ShellOutputMode::Captured,
             test_limits(1024, Duration::from_secs(1)),
             Instant::now(),
             || {
@@ -1204,6 +1351,167 @@ mod tests {
         assert_eq!(output.stderr, "err-line\n");
         assert_eq!(output.status_code, Some(7));
         assert!(!output.success());
+    }
+
+    #[test]
+    fn streaming_combines_stdout_and_stderr_in_pipe_order() {
+        let mut job = ShellJob::spawn_streaming(
+            "printf stdout; printf stderr >&2",
+            "",
+            std::path::Path::new("."),
+        )
+        .expect("streaming shell job should spawn");
+        let mut streamed = String::new();
+
+        loop {
+            let terminal = !matches!(job.poll(), ShellJobPoll::Pending);
+            streamed.push_str(&job.take_streamed_output());
+            if terminal {
+                break;
+            }
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        assert_eq!(streamed, "stdoutstderr");
+        assert!(job.into_result().expect("job should succeed").success());
+    }
+
+    #[test]
+    fn streaming_emits_output_before_process_exit() {
+        let mut job = ShellJob::spawn_streaming(
+            "printf first; sleep 0.2; printf second",
+            "",
+            std::path::Path::new("."),
+        )
+        .expect("streaming shell job should spawn");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut first = String::new();
+
+        while first.is_empty() && Instant::now() < deadline {
+            assert!(matches!(job.poll(), ShellJobPoll::Pending));
+            first.push_str(&job.take_streamed_output());
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        assert_eq!(first, "first");
+        assert!(matches!(job.poll(), ShellJobPoll::Pending));
+        assert_eq!(poll_until_terminal(&mut job), ShellJobTerminal::Finished);
+        assert_eq!(job.take_streamed_output(), "second");
+    }
+
+    #[test]
+    fn streaming_retains_incomplete_utf8_between_polls() {
+        let mut job = ShellJob::spawn_streaming(
+            r"printf '\303'; sleep 0.1; printf '\251'",
+            "",
+            std::path::Path::new("."),
+        )
+        .expect("streaming shell job should spawn");
+        let deadline = Instant::now() + Duration::from_secs(1);
+
+        while job.stdout_bytes.is_empty() && Instant::now() < deadline {
+            assert!(matches!(job.poll(), ShellJobPoll::Pending));
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(job.stdout_bytes, [0xc3]);
+        assert!(job.take_streamed_output().is_empty());
+
+        assert_eq!(poll_until_terminal(&mut job), ShellJobTerminal::Finished);
+        assert_eq!(job.take_streamed_output(), "é");
+    }
+
+    #[test]
+    fn streaming_output_limit_counts_already_delivered_bytes() {
+        let mut job = ShellJob::spawn_with_mode_and_limits_at(
+            "printf abc; sleep 0.1; printf def",
+            "",
+            std::path::Path::new("."),
+            super::ShellOutputMode::Streaming,
+            test_limits(5, Duration::from_secs(1)),
+            Instant::now(),
+            super::shared_shell_reaper,
+        )
+        .expect("streaming shell job should spawn");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut streamed = String::new();
+
+        while streamed.is_empty() && Instant::now() < deadline {
+            assert!(matches!(job.poll(), ShellJobPoll::Pending));
+            streamed.push_str(&job.take_streamed_output());
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(streamed, "abc");
+
+        let failure = loop {
+            match job.poll() {
+                ShellJobPoll::Pending => thread::sleep(Duration::from_millis(5)),
+                ShellJobPoll::Failed(error) => break error.to_string(),
+                poll => panic!("expected streaming limit failure, got {poll:?}"),
+            }
+        };
+        assert_eq!(
+            failure,
+            "invalid input: shell command output exceeded the 5-byte limit"
+        );
+        assert!(job.take_streamed_output().is_empty());
+    }
+
+    #[test]
+    fn streaming_preserves_delivered_prefix_across_invalid_utf8_failure() {
+        let mut job = ShellJob::spawn_streaming(
+            r"printf good; sleep 0.1; printf '\377'",
+            "",
+            std::path::Path::new("."),
+        )
+        .expect("streaming shell job should spawn");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut streamed = String::new();
+
+        while streamed.is_empty() && Instant::now() < deadline {
+            assert!(matches!(job.poll(), ShellJobPoll::Pending));
+            streamed.push_str(&job.take_streamed_output());
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(streamed, "good");
+
+        let failure = loop {
+            match job.poll() {
+                ShellJobPoll::Pending => {
+                    streamed.push_str(&job.take_streamed_output());
+                    thread::sleep(Duration::from_millis(5));
+                }
+                ShellJobPoll::Failed(error) => break error.to_string(),
+                poll => panic!("expected UTF-8 failure, got {poll:?}"),
+            }
+        };
+        streamed.push_str(&job.take_streamed_output());
+        assert_eq!(streamed, "good");
+        assert!(failure.contains("shell command output is not UTF-8"));
+    }
+
+    #[test]
+    fn streaming_preserves_delivered_prefix_after_cancellation() {
+        let mut job = ShellJob::spawn_streaming(
+            "printf partial; trap '' 2; while :; do sleep 1; done",
+            "",
+            std::path::Path::new("."),
+        )
+        .expect("streaming shell job should spawn");
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let mut streamed = String::new();
+
+        while streamed.is_empty() && Instant::now() < deadline {
+            assert!(matches!(job.poll(), ShellJobPoll::Pending));
+            streamed.push_str(&job.take_streamed_output());
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(streamed, "partial");
+
+        job.request_cancel();
+        job.request_cancel();
+        assert_eq!(poll_until_terminal(&mut job), ShellJobTerminal::Cancelled);
+        assert!(job.take_streamed_output().is_empty());
+        assert_eq!(streamed, "partial");
     }
 
     #[test]

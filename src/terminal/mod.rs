@@ -454,7 +454,12 @@ where
             return Ok(());
         }
 
-        match ShellJob::spawn(&request.command, &request.stdin, &request.current_dir) {
+        let spawned = if request.stream_output {
+            ShellJob::spawn_streaming(&request.command, &request.stdin, &request.current_dir)
+        } else {
+            ShellJob::spawn(&request.command, &request.stdin, &request.current_dir)
+        };
+        match spawned {
             Ok(job) => {
                 self.shell_c_g_escalation = false;
                 self.shell_job = Some(job);
@@ -466,19 +471,19 @@ where
     }
 
     fn poll_shell_job(&mut self, editor: &mut Editor, allow_completion: bool) -> Result<bool> {
-        let cancelled = match self.shell_job.as_mut() {
-            Some(job) => match job.poll() {
-                ShellJobPoll::Pending => return Ok(false),
-                ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_) | ShellJobPoll::Cancelled
-                    if !allow_completion =>
-                {
-                    return Ok(false);
-                }
-                ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_) => false,
-                ShellJobPoll::Cancelled => true,
-            },
-            None => return Ok(false),
+        let Some(job) = self.shell_job.as_mut() else {
+            return Ok(false);
         };
+        let (terminal, cancelled) = match job.poll() {
+            ShellJobPoll::Pending => (false, false),
+            ShellJobPoll::Finished(_) | ShellJobPoll::Failed(_) => (true, false),
+            ShellJobPoll::Cancelled => (true, true),
+        };
+        let streamed_output = job.streams_output();
+        let output_changed = editor.append_shell_command_output(&job.take_streamed_output())?;
+        if !terminal || !allow_completion {
+            return Ok(output_changed);
+        }
 
         self.shell_c_g_escalation = false;
         self.shell_input_suppression = false;
@@ -487,7 +492,7 @@ where
             .take()
             .expect("terminal shell poll should retain the job");
         if cancelled {
-            editor.finish_shell_cancellation();
+            editor.finish_shell_cancellation(streamed_output);
         } else {
             editor.complete_shell_command(job.into_result())?;
         }
@@ -2144,12 +2149,11 @@ mod tests {
         assert!(session.shell_input_suppression);
 
         let deadline = Instant::now() + Duration::from_secs(2);
+        let mut output_changed = false;
         loop {
-            assert!(
-                !session
-                    .poll_shell_job(&mut editor, false)
-                    .expect("shell polling should succeed")
-            );
+            output_changed |= session
+                .poll_shell_job(&mut editor, false)
+                .expect("shell polling should succeed");
             let terminal = session.shell_job.as_mut().is_some_and(|job| {
                 matches!(
                     job.poll(),
@@ -2164,7 +2168,9 @@ mod tests {
         }
 
         assert!(editor.shell_command_running());
-        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert!(output_changed, "streamed output should request a redraw");
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert!(editor.document().buffer().serialize().contains("held"));
         assert!(
             !session
                 .poll_shell_job(&mut editor, false)

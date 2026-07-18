@@ -104,15 +104,16 @@ Basic editor keys:
   `C-x r j` to jump, `C-x r s` to copy the active region, `C-x r r` to copy a
   rectangle, `C-x r i` to insert text, rectangle, or number values, and
   `C-x r n` / `C-x r +` to store and increment number registers.
-- `M-!` prompts for a shell command and displays captured stdout/stderr in a
-  read-only `*Shell Command Output*` buffer. `C-u M-!` inserts stdout at point
-  after a successful command.
-- `M-|` sends the active region to a shell command on stdin and displays
-  captured output. `C-u M-|` replaces the active region with stdout after a
+- `M-!` prompts for a shell command and streams combined stdout/stderr into a
+  read-only `*Shell Command Output*` buffer. `C-u M-!` captures stdout and
+  inserts it at point after a successful command.
+- `M-|` sends the active region to a shell command on stdin and streams its
+  combined output. `C-u M-|` replaces the active region with stdout after a
   successful command. Shell commands have a 30-second deadline and an 8 MiB
-  combined stdout/stderr limit; exceeding either limit discards partial output
-  without inserting or replacing buffer text. Commands remain foreground, but
-  redraw continues and `C-g` cancels them; a second `C-g` escalates cancellation.
+  combined stdout/stderr limit; exceeding either limit preserves any displayed
+  transcript but never inserts or replaces partial output. Commands remain
+  foreground, but redraw continues and `C-g` cancels them; a second `C-g`
+  escalates cancellation.
   Normal editing input typed while a command is active is discarded rather than
   replayed. `C-x C-c` cancels before quitting, while `C-z` asks you to cancel.
 - `C-x h` marks the whole buffer, leaving point at the beginning.

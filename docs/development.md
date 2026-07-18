@@ -528,11 +528,12 @@ commands support single printable-character point registers (`C-x r SPC`,
 Post-Milestone 14 shell-command polish adds `M-!` / `shell-command` and `M-|` /
 `shell-command-on-region`. Rile runs `/bin/sh -c <command>` as an interruptible
 foreground job using the current buffer file's parent directory when file-backed,
-otherwise the editor launch directory. No-prefix `M-!` and `M-|` display captured
-stdout/stderr in a read-only `*Shell Command Output*` buffer. `C-u M-!` inserts
-stdout at the captured point, and `C-u M-|` replaces the captured active linear
-region with stdout, but only after a successful command exit; nonzero exits show
-output and do not mutate the edited buffer. Output must decode as UTF-8.
+otherwise the editor launch directory. No-prefix `M-!` and `M-|` stream combined
+stdout/stderr into a read-only `*Shell Command Output*` buffer. `C-u M-!`
+captures and inserts stdout at the captured point, and `C-u M-|` replaces the
+captured active linear region with stdout, but only after a successful command
+exit; nonzero exits show output and do not mutate the edited buffer. Output must
+decode as UTF-8.
 
 The terminal session incrementally pumps region input, stdout, and stderr while
 continuing redraw and key input. Normal editing remains paused, and input queued
@@ -544,20 +545,20 @@ applied after cancellation.
 
 The runner retains at most 8 MiB across stdout and stderr and allows a command to
 run for at most 30 seconds. Exceeding either limit terminates the shell process
-group, discards partial output, and leaves insertion or replacement targets
-unchanged. V1 deliberately does not support `M-&`, background editing, live
-process buffers, interactive TTY subprocesses, remote file handlers,
-configurable shells, coding-system prompts, or rectangle piping.
+group, preserves any streamed transcript, and leaves insertion or replacement
+targets unchanged. V1 deliberately does not support `M-&`, background editing,
+interactive TTY subprocesses, remote file handlers, configurable shells,
+coding-system prompts, or rectangle piping.
 
 Post-Milestone 14 quit polish makes `C-x C-c` protect modified normal buffers.
 Clean buffers exit immediately. If any normal buffer has unsaved changes, Rile
 prompts `Modified buffers exist; exit anyway? (yes or no) `; `yes` exits and
 `no` or `C-g` cancels. Generated special buffers are ignored for this decision.
 
-Current limitations: shell commands remain foreground and do not stream live
-output, deliberately detached descendants can escape process-group cleanup,
-message history does not persist across sessions, and there is no selective
-region undo yet. The in-memory message log retains the newest 1,000 entries
+Current limitations: shell commands remain foreground, deliberately detached
+descendants can escape process-group cleanup, message history does not persist
+across sessions, and there is no selective region undo yet. The in-memory
+message log retains the newest 1,000 entries
 within a 1 MiB UTF-8 payload budget and visibly truncates an individual message
 that exceeds that budget. Redraw refreshes a generated `*Messages*` document only
 while visible and after the retained history changes; explicitly reopening the
