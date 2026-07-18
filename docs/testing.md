@@ -93,6 +93,7 @@ verify fixed per-poll work budgets, and a 100 ms cadence case verifies a 2 MiB
 duplex filter completes within its command deadline. Cancellation tests cover
 partial-output discard, `SIGINT`-resistant descendants, timed and explicit
 `SIGKILL` escalation, bounded reap failure, and emergency Drop reaping.
+Injected reaper startup failure verifies shell setup stops before reaper use.
 
 Editor and terminal tests verify pending request ownership, foreground key and
 macro suppression, first/second `C-g`, clean and dirty `C-x C-c`, quiet-boundary

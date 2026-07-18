@@ -6,6 +6,7 @@ use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, ExitStatus, Stdio};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use crate::{Result, RileError};
@@ -18,6 +19,8 @@ const CANCELLATION_GRACE: Duration = Duration::from_millis(250);
 const PIPE_BUFFER_BYTES: usize = 8 * 1024;
 const POLL_BYTE_BUDGET: usize = 512 * 1024;
 const POLL_OPERATION_BUDGET: usize = 256;
+
+static SHELL_REAPER: OnceLock<std::result::Result<ShellReaper, String>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy)]
 struct ShellCommandLimits {
@@ -93,6 +96,7 @@ pub struct ShellJob {
     process_group: libc::pid_t,
     next_pipe: usize,
     state: ShellJobState,
+    reaper: ShellReaper,
 }
 
 impl ShellJob {
@@ -113,6 +117,25 @@ impl ShellJob {
         limits: ShellCommandLimits,
         started_at: Instant,
     ) -> Result<Self> {
+        Self::spawn_with_limits_at_and_reaper(
+            command,
+            stdin,
+            current_dir,
+            limits,
+            started_at,
+            shared_shell_reaper,
+        )
+    }
+
+    fn spawn_with_limits_at_and_reaper(
+        command: &str,
+        stdin: &str,
+        current_dir: &Path,
+        limits: ShellCommandLimits,
+        started_at: Instant,
+        acquire_reaper: impl FnOnce() -> Result<ShellReaper>,
+    ) -> Result<Self> {
+        let reaper = acquire_reaper()?;
         let mut child = Command::new("/bin/sh")
             .arg("-c")
             .arg(command)
@@ -130,8 +153,7 @@ impl ShellJob {
                     io::ErrorKind::InvalidData,
                     "shell command process ID does not fit pid_t",
                 );
-                let _ = terminate_child(&mut child, None);
-                return Err(error.into());
+                return Err(cleanup_spawn_error(child, None, &reaper, error.into()));
             }
         };
         let child_stdin = child
@@ -151,7 +173,12 @@ impl ShellJob {
             .and_then(|()| set_nonblocking(child_stdout.as_raw_fd()))
             .and_then(|()| set_nonblocking(child_stderr.as_raw_fd()))
         {
-            return Err(cleanup_spawn_error(&mut child, process_group, error.into()));
+            return Err(cleanup_spawn_error(
+                child,
+                Some(process_group),
+                &reaper,
+                error.into(),
+            ));
         }
 
         let stdin_bytes = stdin.as_bytes().to_vec();
@@ -171,6 +198,7 @@ impl ShellJob {
             process_group,
             next_pipe: 0,
             state: ShellJobState::Running,
+            reaper,
         })
     }
 
@@ -632,7 +660,7 @@ impl ShellJob {
         let Some(child) = self.child.take() else {
             return;
         };
-        detach_child_reaper(child);
+        self.reaper.handoff(child);
     }
 
     fn close_pipes(&mut self, discard_output: bool) {
@@ -890,73 +918,144 @@ fn process_group_exists(process_group: libc::pid_t) -> io::Result<bool> {
     }
 }
 
-fn detach_child_reaper(child: Child) {
-    let child = std::sync::Arc::new(std::sync::Mutex::new(Some(child)));
-    let reaper_child = std::sync::Arc::clone(&child);
-    let spawned = std::thread::Builder::new()
-        .name("rile-shell-reaper".to_owned())
-        .spawn(move || {
-            let child = reaper_child
-                .lock()
-                .expect("shell reaper child mutex should not be poisoned")
-                .take();
-            if let Some(mut child) = child {
-                let _ = child.wait();
-            }
-        });
-    if spawned.is_err() {
-        let child = child
-            .lock()
-            .expect("failed shell reaper spawn should leave mutex usable")
-            .take();
-        if let Some(mut child) = child {
-            let _ = terminate_child(&mut child, None);
+#[derive(Debug, Clone)]
+struct ShellReaper {
+    queue: Arc<ShellReaperQueue>,
+}
+
+#[derive(Debug, Default)]
+struct ShellReaperQueue {
+    children: Mutex<Vec<ReaperChild>>,
+    wake: Condvar,
+}
+
+#[derive(Debug)]
+struct ReaperChild {
+    child: Child,
+    retry_at: Instant,
+    unexpected_errors: u32,
+}
+
+impl ReaperChild {
+    fn new(child: Child) -> Self {
+        Self {
+            child,
+            retry_at: Instant::now(),
+            unexpected_errors: 0,
         }
+    }
+
+    fn poll(&mut self, now: Instant) -> bool {
+        if now < self.retry_at {
+            return true;
+        }
+        let retain = should_retry_reap(self.child.try_wait(), &mut self.unexpected_errors);
+        if retain {
+            let shift = self.unexpected_errors.saturating_sub(1).min(6);
+            self.retry_at = now + CHILD_STATUS_POLL_INTERVAL * (1 << shift);
+        }
+        retain
+    }
+}
+
+impl ShellReaper {
+    fn start() -> io::Result<Self> {
+        Self::start_with(|queue| {
+            std::thread::Builder::new()
+                .name("rile-shell-reaper".to_owned())
+                .spawn(move || reap_children(queue))
+                .map(|_| ())
+        })
+    }
+
+    fn start_with(spawn: impl FnOnce(Arc<ShellReaperQueue>) -> io::Result<()>) -> io::Result<Self> {
+        let queue = Arc::new(ShellReaperQueue::default());
+        spawn(Arc::clone(&queue))?;
+        Ok(Self { queue })
+    }
+
+    fn handoff(&self, child: Child) {
+        let mut children = self
+            .queue
+            .children
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        children.push(ReaperChild::new(child));
+        self.queue.wake.notify_one();
+    }
+}
+
+fn shared_shell_reaper() -> Result<ShellReaper> {
+    match SHELL_REAPER.get_or_init(|| ShellReaper::start().map_err(|error| error.to_string())) {
+        Ok(reaper) => Ok(reaper.clone()),
+        Err(error) => Err(RileError::InvalidInput(format!(
+            "cannot start shell command reaper: {error}"
+        ))),
+    }
+}
+
+fn reap_children(queue: Arc<ShellReaperQueue>) {
+    loop {
+        let mut children = queue
+            .children
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        while children.is_empty() {
+            children = queue
+                .wake
+                .wait(children)
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        let mut pending = std::mem::take(&mut *children);
+        drop(children);
+
+        let now = Instant::now();
+        pending.retain_mut(|child| child.poll(now));
+        if pending.is_empty() {
+            continue;
+        }
+        std::thread::sleep(CHILD_STATUS_POLL_INTERVAL);
+
+        let mut children = queue
+            .children
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        children.extend(pending);
+    }
+}
+
+fn should_retry_reap(result: io::Result<Option<ExitStatus>>, unexpected_errors: &mut u32) -> bool {
+    match result {
+        Ok(None) => {
+            *unexpected_errors = 0;
+            true
+        }
+        Err(error) if error.kind() == io::ErrorKind::Interrupted => true,
+        Err(error) if error.raw_os_error() == Some(libc::ECHILD) => false,
+        Err(_) => {
+            *unexpected_errors = unexpected_errors.saturating_add(1);
+            true
+        }
+        Ok(Some(_)) => false,
     }
 }
 
 fn cleanup_spawn_error(
-    child: &mut Child,
-    process_group: libc::pid_t,
+    mut child: Child,
+    process_group: Option<libc::pid_t>,
+    reaper: &ShellReaper,
     error: RileError,
 ) -> RileError {
-    match terminate_child(child, Some(process_group)) {
-        Ok(()) => error,
-        Err(cleanup_error) => append_cleanup_error(error, cleanup_error),
-    }
-}
-
-fn terminate_child(child: &mut Child, process_group: Option<libc::pid_t>) -> io::Result<()> {
-    let group_error = process_group.and_then(|process_group| {
-        // SAFETY: process_group is the checked positive PID of the child group leader.
-        if unsafe { libc::kill(-process_group, libc::SIGKILL) } == -1 {
-            let error = io::Error::last_os_error();
-            (error.raw_os_error() != Some(libc::ESRCH)).then_some(error)
-        } else {
-            None
+    let signal_error = match process_group {
+        Some(process_group) => {
+            signal_child_group_and_direct(process_group, true, libc::SIGKILL).err()
         }
-    });
-    let direct_kill_error = child.kill().err();
-    let deadline = Instant::now() + CHILD_TERMINATION_WAIT;
-
-    loop {
-        match child.try_wait() {
-            Ok(Some(_)) => return group_error.map_or(Ok(()), Err),
-            Ok(None) if Instant::now() < deadline => {
-                std::thread::sleep(CHILD_STATUS_POLL_INTERVAL);
-            }
-            Ok(None) => {
-                let mut message = "shell command did not exit after SIGKILL".to_owned();
-                if let Some(error) = group_error.as_ref() {
-                    message.push_str(&format!("; process-group kill failed: {error}"));
-                }
-                if let Some(error) = direct_kill_error.as_ref() {
-                    message.push_str(&format!("; direct kill failed: {error}"));
-                }
-                return Err(io::Error::new(io::ErrorKind::TimedOut, message));
-            }
-            Err(error) => return Err(error),
-        }
+        None => child.kill().err(),
+    };
+    reaper.handoff(child);
+    match signal_error {
+        Some(cleanup_error) => append_cleanup_error(error, cleanup_error),
+        None => error,
     }
 }
 
@@ -970,7 +1069,7 @@ mod tests {
     use super::{
         CANCELLATION_GRACE, InputWrite, OutputRead, POLL_BYTE_BUDGET, POLL_OPERATION_BUDGET,
         PollBudget, ShellCommandLimits, ShellJob, ShellJobPoll, read_available_output,
-        run_shell_command, run_shell_command_with_limits, write_available_stdin,
+        run_shell_command, run_shell_command_with_limits, should_retry_reap, write_available_stdin,
     };
 
     struct AlwaysReadyReader;
@@ -1047,6 +1146,49 @@ mod tests {
     enum ShellJobTerminal {
         Finished,
         Cancelled,
+    }
+
+    #[test]
+    fn reaper_initialization_failure_prevents_child_spawn() {
+        let directory = tempfile::tempdir().expect("temporary directory should exist");
+        let result = ShellJob::spawn_with_limits_at_and_reaper(
+            "printf spawned > spawned",
+            "",
+            directory.path(),
+            test_limits(1024, Duration::from_secs(1)),
+            Instant::now(),
+            || {
+                Err(crate::RileError::InvalidInput(
+                    "synthetic reaper failure".to_owned(),
+                ))
+            },
+        );
+        let error = match result {
+            Ok(_) => panic!("reaper startup should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), "invalid input: synthetic reaper failure");
+        assert!(!directory.path().join("spawned").exists());
+    }
+
+    #[test]
+    fn reaper_handles_terminal_and_retryable_wait_results() {
+        let mut unexpected_errors = 0;
+        assert!(should_retry_reap(Ok(None), &mut unexpected_errors));
+        assert!(should_retry_reap(
+            Err(io::ErrorKind::Interrupted.into()),
+            &mut unexpected_errors
+        ));
+        assert!(!should_retry_reap(
+            Err(io::Error::from_raw_os_error(libc::ECHILD)),
+            &mut unexpected_errors
+        ));
+        assert!(should_retry_reap(
+            Err(io::ErrorKind::InvalidInput.into()),
+            &mut unexpected_errors
+        ));
+        assert_eq!(unexpected_errors, 1);
     }
 
     #[test]

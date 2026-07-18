@@ -114,13 +114,15 @@ If that target is unavailable or invalid, Rile preserves successful output in
 `*Shell Command Output*` instead of guessing another target. Timeout, output
 overflow, cancellation, and decoding failures never apply partial output.
 
-Reaping is event-loop driven rather than a blocking cleanup sleep. Emergency
-drop cleanup closes pipes, signals the group and direct child, and hands an
-unreaped child to a detached reaper. Process-group cleanup covers ordinary
+Reaping is event-loop driven rather than a blocking cleanup sleep. A shared
+reaper starts before the first shell child, and shell startup fails if that
+service cannot start. Emergency drop and setup-failure cleanup close pipes,
+signal the group and direct child, and transfer the unreaped child without
+waiting on the terminal thread. Process-group cleanup covers ordinary
 descendants; a process that deliberately starts a new session can escape that
 group and may keep inherited output descriptors open until the command deadline.
-Timeout or cancellation closes Rile's local pipes, so detached descendants cannot
-hold capture open indefinitely.
+Timeout or cancellation closes Rile's local pipes, so detached descendants
+cannot hold capture open indefinitely.
 
 ## Buffers And Documents
 

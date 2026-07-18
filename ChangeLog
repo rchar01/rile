@@ -1,3 +1,28 @@
+2026-07-18  Robert Charusta  <rch-public@posteo.net>
+
+	Remove blocking shell cleanup fallbacks.
+
+	* src/shell.rs (SHELL_REAPER): New shared reaper state.
+	(ShellJob): Retain a reaper handle.
+	(ShellJob::spawn_with_limits_at): Start the reaper before spawning a
+	child.
+	(ShellJob::spawn_with_limits_at_and_reaper): Add injectable reaper
+	acquisition and hand off setup failures without waiting.
+	(ShellJob::handoff_unreaped_child): Queue the child on the shared reaper.
+	(ShellReaper, ShellReaperQueue, ReaperChild): New types.
+	(ShellReaper::start, ShellReaper::start_with, ShellReaper::handoff): New
+	methods.
+	(ReaperChild::new, ReaperChild::poll): New methods.
+	(shared_shell_reaper, reap_children, should_retry_reap): New functions.
+	(cleanup_spawn_error): Signal and queue the child without waiting.
+	(detach_child_reaper, terminate_child): Remove per-child thread and
+	synchronous fallback.
+	(reaper_initialization_failure_prevents_child_spawn,
+	reaper_handles_terminal_and_retryable_wait_results): New tests.
+	* AGENTS.md: Record shared reaper ownership.
+	* docs/architecture.md: Document nonblocking shared reaping.
+	* docs/testing.md: Document reaper initialization coverage.
+
 2026-07-17  Robert Charusta  <rch-public@posteo.net>
 
 	Make foreground shell commands interruptible.
