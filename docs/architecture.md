@@ -102,14 +102,22 @@ generated output buffer. Mutation jobs retain separate stdout and stderr until
 successful completion. Both modes share an 8 MiB cumulative byte budget, and
 execution has a 30-second deadline.
 
-Shell commands remain logically foreground: normal editor keys do not execute
-while a job is active, but the terminal loop continues polling, redrawing, and
-reading input. Terminal-owned suppression remains active through a quiet input
-boundary so bytes queued behind Enter, completion, or cancellation cannot become
-later edits. `C-g` discards partial output and sends `SIGINT` to the process group;
-a second `C-g` or a 250 ms grace-period expiry sends `SIGKILL`. `C-x C-c` cancels
-before following normal clean or dirty-buffer quit behavior, and suspension is
-rejected until the command is cancelled.
+Foreground commands pause normal editor keys, but the terminal loop continues
+polling, redrawing, and reading input. Terminal-owned suppression remains active
+through a quiet input boundary so bytes queued behind Enter, completion, or
+cancellation cannot become later edits. `C-g` discards partial mutation output
+and sends `SIGINT` to the process group; a second `C-g` or a 250 ms grace-period
+expiry sends `SIGKILL`. `C-x C-c` cancels before following normal clean or
+dirty-buffer quit behavior, and suspension is rejected until the command is
+cancelled.
+
+`M-&` creates a display-only background disposition without selecting the
+process buffer or enabling foreground input suppression. Normal editing,
+auto-save, and auto-revert continue. Completion updates the generated buffer and
+message history without replacing another active prompt or changing window
+selection. `interrupt-shell-command`, bound to `C-c C-c` in
+`shell-output-mode-map`, targets the single physical job; ordinary `C-g` remains
+an editor key. A second shell command is rejected until the job is terminal.
 
 Streaming display output is appended internally without entering a user undo
 history. Partial transcripts remain visible after timeout, overflow,

@@ -1,5 +1,70 @@
 2026-07-18  Robert Charusta  <rch-public@posteo.net>
 
+	Add display-only background shell commands.
+
+	* src/command.rs (AsyncShellCommand, InterruptShellCommand): New command
+	IDs, metadata, registry entries, and handlers.
+	(CommandId::category): Classify the commands as shell operations.
+	(default_doc_for_command): Document background execution and interruption.
+	(default_registry_contains_expected_commands): Check both command names.
+	* src/keymap.rs (default_bindings): Bind M-& to async-shell-command.
+	(shell_output_keymap): Bind C-c C-c to interrupt-shell-command.
+	(default_keymap_resolves_expected_bindings,
+	local_special_buffer_keymaps_resolve_local_commands): Cover the new
+	bindings.
+	* src/mode.rs: Document shell-output process interruption.
+	* src/minibuffer.rs (MinibufferState::log_message,
+	MinibufferState::log_error, MinibufferState::retain_message): New methods
+	for prompt-safe background notifications.
+	(logged_messages_preserve_active_prompt): New test.
+	* src/editor.rs (BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE): New constant.
+	(ShellCommandPromptState, PendingShellRequest, RunningShellCommand): Track
+	foreground or background disposition.
+	(ShellCommandDisposition): New type.
+	(Editor::shell_command_running): Report foreground logical jobs only.
+	(Editor::finish_shell_cancellation): Preserve prompt and return-viewport
+	state according to job disposition.
+	(Editor::cancel_running_shell_command): Retain background logical state
+	through physical cancellation.
+	(Editor::command_async_shell_command,
+	Editor::command_interrupt_shell_command): New handlers.
+	(Editor::start_shell_command, Editor::start_shell_command_on_region):
+	Reject a second active shell job and mark foreground prompts.
+	(Editor::start_async_shell_command,
+	Editor::ensure_no_shell_command_running): New methods.
+	(Editor::submit_shell_command): Queue nonselecting background display jobs.
+	(Editor::complete_shell_command,
+	Editor::handle_successful_shell_command_output): Log background completion
+	without replacing active prompts.
+	(background_shell_allows_editing_and_completion_keeps_focus,
+	background_shell_uses_explicit_interrupt_and_rejects_second_job,
+	async_shell_command_rejects_prefix_arguments,
+	background_cancellation_does_not_consume_foreground_return_viewport,
+	background_shell_keeps_auto_save_and_auto_revert_active,
+	background_completion_preserves_dirty_quit_prompt): New tests.
+	* src/terminal/mod.rs (TerminalSession): Track physical foreground
+	disposition.
+	(TerminalSession::run): Continue idle editor work for background jobs.
+	(TerminalSession::try_escalate_shell_cancellation): Reserve global second
+	C-g escalation for foreground jobs.
+	(TerminalSession::process_shell_requests): Route targeted background
+	interrupts and disable background input suppression.
+	(TerminalSession::poll_shell_job): Deliver disposition-aware cancellation.
+	(submit_background_shell_command): New test helper.
+	(background_shell_keeps_input_dispatch_and_focus_active): New test.
+	* tests/pty_shell_command.rs
+	(background_shell_allows_editing_without_stealing_focus,
+	background_shell_cancels_from_process_buffer,
+	quitting_cleans_up_background_shell_process_group): New tests.
+	* README.md, NEWS: Document M-& and targeted interruption.
+	* AGENTS.md: Record physical and logical shell ownership.
+	* docs/architecture.md: Document background disposition and prompt-safe
+	completion.
+	* docs/development.md: Document background scope and limits.
+	* docs/testing.md: Document background state-isolation and PTY coverage.
+
+2026-07-18  Robert Charusta  <rch-public@posteo.net>
+
 	Stream foreground shell display output.
 
 	* src/shell.rs (ShellOutputMode, ChildOutput): New types.

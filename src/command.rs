@@ -6,6 +6,7 @@ use crate::input::KeyEvent;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Command {
     AboutRile,
+    AsyncShellCommand,
     AutoRevertMode,
     BackToIndentation,
     BackwardChar,
@@ -67,6 +68,7 @@ pub enum Command {
     InsertFile,
     InsertRegister,
     IncrementRegister,
+    InterruptShellCommand,
     JoinLine,
     JustOneSpace,
     JumpToRegister,
@@ -277,7 +279,11 @@ impl CommandCategory {
             | QueryReplaceRegexp
             | ReplaceRegexp
             | UnhighlightRegexp => Self::Search,
-            ShellCommand | ShellCommandOnRegion | QuitShellOutputWindow => Self::Shell,
+            AsyncShellCommand
+            | InterruptShellCommand
+            | ShellCommand
+            | ShellCommandOnRegion
+            | QuitShellOutputWindow => Self::Shell,
             CopyRectangleToRegister
             | CopyToRegister
             | IncrementRegister
@@ -313,6 +319,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
 
     match command {
         AboutRile => "Show version, build, terminal, config, and runtime path information.",
+        AsyncShellCommand => "Run a shell command while normal editing continues.",
         AutoRevertMode => "Toggle automatic reloads for the current clean file buffer.",
         BackToIndentation => {
             "Move point to the first non-whitespace character on the current line."
@@ -378,6 +385,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         InsertFile => "Prompt for a file path and insert its contents at point.",
         InsertRegister => "Insert the text, rectangle, or number stored in a register.",
         IncrementRegister => "Add the numeric argument to a prompted number register.",
+        InterruptShellCommand => "Interrupt the active shell command process group.",
         JoinLine => "Join the current line to the previous line, trimming surrounding space.",
         JustOneSpace => "Collapse whitespace around point to a requested number of spaces.",
         JumpToRegister => "Move point to the position stored in a prompted register.",
@@ -600,6 +608,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("about-rile", "Show information about Rile", true, AboutRile)
             .with_handler(crate::editor::Editor::command_about_rile),
+        CommandSpec::new(
+            "async-shell-command",
+            "Run a background shell command",
+            true,
+            AsyncShellCommand,
+        )
+        .with_handler(crate::editor::Editor::command_async_shell_command),
         CommandSpec::new(
             "auto-revert-mode",
             "Toggle current buffer auto-revert",
@@ -987,6 +1002,13 @@ pub fn default_commands() -> Vec<CommandSpec> {
             InsertRegister,
         )
         .with_handler(crate::editor::Editor::command_insert_register),
+        CommandSpec::new(
+            "interrupt-shell-command",
+            "Interrupt the active shell command",
+            true,
+            InterruptShellCommand,
+        )
+        .with_handler(crate::editor::Editor::command_interrupt_shell_command),
         CommandSpec::new(
             "join-line",
             "Join current line to previous line",
@@ -1382,6 +1404,7 @@ mod tests {
             Some(Command::SaveBuffer)
         );
         assert!(registry.contains("about-rile"));
+        assert!(registry.contains("async-shell-command"));
         assert!(registry.contains("auto-revert-mode"));
         assert!(registry.contains("back-to-indentation"));
         assert!(registry.contains("beginning-of-buffer"));
@@ -1419,6 +1442,7 @@ mod tests {
         assert!(registry.contains("increment-register"));
         assert!(registry.contains("insert-file"));
         assert!(registry.contains("insert-register"));
+        assert!(registry.contains("interrupt-shell-command"));
         assert!(registry.contains("join-line"));
         assert!(registry.contains("just-one-space"));
         assert!(registry.contains("jump-to-register"));

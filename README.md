@@ -116,6 +116,10 @@ Basic editor keys:
   escalates cancellation.
   Normal editing input typed while a command is active is discarded rather than
   replayed. `C-x C-c` cancels before quitting, while `C-z` asks you to cancel.
+- `M-&` runs one display-only shell command while normal editing, auto-save, and
+  auto-revert continue. Output streams into `*Shell Command Output*` without
+  selecting it. Use `M-x interrupt-shell-command`, or `C-c C-c` while viewing
+  that buffer, to cancel. Rile allows one shell command at a time.
 - `C-x h` marks the whole buffer, leaving point at the beginning.
 - `C-x C-x` exchanges point and mark.
 - `M-x just-one-space` collapses spaces and tabs around point to one space;

@@ -57,6 +57,8 @@ use search_history::SearchHistoryStore;
 
 const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const SHELL_COMMAND_RUNNING_MESSAGE: &str = "Running shell command... (C-g to cancel)";
+const BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE: &str =
+    "Shell command running in background (M-x interrupt-shell-command to cancel)";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EditorOutcome {
@@ -550,6 +552,7 @@ struct RectangleNumberPromptState {
 struct ShellCommandPromptState {
     action: ShellCommandAction,
     stdin: String,
+    disposition: ShellCommandDisposition,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -558,6 +561,7 @@ pub(crate) struct PendingShellRequest {
     pub(crate) stdin: String,
     pub(crate) current_dir: PathBuf,
     pub(crate) stream_output: bool,
+    pub(crate) foreground: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -572,6 +576,7 @@ struct RunningShellCommand {
     action: ShellCommandAction,
     streaming_output: bool,
     streamed_output_bytes: usize,
+    disposition: ShellCommandDisposition,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -585,6 +590,12 @@ enum ShellCommandAction {
     Display,
     Insert { buffer: BufferId, at: Position },
     ReplaceRegion { buffer: BufferId, range: TextRange },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShellCommandDisposition {
+    Foreground,
+    Background,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -872,7 +883,9 @@ impl Editor {
     }
 
     pub(crate) fn shell_command_running(&self) -> bool {
-        self.running_shell_command.is_some()
+        self.running_shell_command
+            .as_ref()
+            .is_some_and(|running| running.disposition == ShellCommandDisposition::Foreground)
     }
 
     pub(crate) fn reject_shell_command_start(&mut self, message: impl Into<String>) {
@@ -887,20 +900,29 @@ impl Editor {
             .set_message("Shell command cancellation escalated");
     }
 
-    pub(crate) fn finish_shell_cancellation(&mut self, streamed_output: bool) {
-        let was_running = self.running_shell_command.take().is_some();
+    pub(crate) fn finish_shell_cancellation(&mut self, streamed_output: bool, foreground: bool) {
+        let running = self.running_shell_command.take();
+        let was_running = running.is_some();
+        let background = running
+            .as_ref()
+            .is_some_and(|running| running.disposition == ShellCommandDisposition::Background);
         self.pending_shell_request = None;
         self.shell_quit_prefix = false;
         let cancellation_message_visible = matches!(
             self.minibuffer.message.as_deref(),
             Some("Shell command cancelled" | "Shell command cancellation escalated")
         );
-        if self.minibuffer.prompt().is_none() && (was_running || cancellation_message_visible) {
-            self.minibuffer.set_message("Shell command cancelled");
+        if was_running || cancellation_message_visible {
+            if background {
+                self.minibuffer.log_message("Shell command cancelled");
+            } else if self.minibuffer.prompt().is_none() {
+                self.minibuffer.set_message("Shell command cancelled");
+            }
         }
         if streamed_output {
             let _ = self.append_shell_process_status("cancelled");
-            if self.document().is_shell_output()
+            if foreground
+                && self.document().is_shell_output()
                 && let Some(viewport) = self.shell_output_return.take()
                 && self.buffers.document(viewport.buffer).is_some()
             {
@@ -1221,6 +1243,13 @@ impl Editor {
     }
 
     fn cancel_running_shell_command(&mut self, message: &str, request: ShellCancellationRequest) {
+        if let Some(running) = self.running_shell_command.as_mut()
+            && running.disposition == ShellCommandDisposition::Background
+        {
+            self.shell_cancel_request = Some(request);
+            self.minibuffer.set_message(message);
+            return;
+        }
         self.running_shell_command = None;
         self.pending_shell_request = None;
         self.shell_cancel_request = Some(request);
@@ -3318,6 +3347,32 @@ impl Editor {
     ) -> Result<CommandOutcome> {
         self.start_shell_command(context.argument)?;
         Ok(CommandOutcome::StartedPrompt)
+    }
+
+    pub(crate) fn command_async_shell_command(
+        &mut self,
+        context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        if self.start_async_shell_command(context.argument)? {
+            Ok(CommandOutcome::StartedPrompt)
+        } else {
+            Ok(CommandOutcome::Continue)
+        }
+    }
+
+    pub(crate) fn command_interrupt_shell_command(
+        &mut self,
+        _context: CommandContext,
+    ) -> Result<CommandOutcome> {
+        if self.running_shell_command.is_none() {
+            self.minibuffer.set_error("no shell command is running");
+        } else {
+            self.cancel_running_shell_command(
+                "Shell command cancelled",
+                ShellCancellationRequest::Interrupt,
+            );
+        }
+        Ok(CommandOutcome::Continue)
     }
 
     pub(crate) fn command_shell_command_on_region(
@@ -6463,6 +6518,9 @@ impl Editor {
     }
 
     fn start_shell_command(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_no_shell_command_running() {
+            return Ok(());
+        }
         let action = if argument.is_some() {
             if !self.ensure_buffer_editable() {
                 return Ok(());
@@ -6477,6 +6535,7 @@ impl Editor {
         self.shell_command_prompt = Some(ShellCommandPromptState {
             action,
             stdin: String::new(),
+            disposition: ShellCommandDisposition::Foreground,
         });
         self.minibuffer
             .start_prompt(PromptKind::ShellCommand, "Shell command: ");
@@ -6484,6 +6543,9 @@ impl Editor {
     }
 
     fn start_shell_command_on_region(&mut self, argument: Option<i32>) -> Result<()> {
+        if !self.ensure_no_shell_command_running() {
+            return Ok(());
+        }
         let Some(range) = self.active_region_range() else {
             self.minibuffer.set_error("no active region");
             return Ok(());
@@ -6500,10 +6562,42 @@ impl Editor {
         } else {
             ShellCommandAction::Display
         };
-        self.shell_command_prompt = Some(ShellCommandPromptState { action, stdin });
+        self.shell_command_prompt = Some(ShellCommandPromptState {
+            action,
+            stdin,
+            disposition: ShellCommandDisposition::Foreground,
+        });
         self.minibuffer
             .start_prompt(PromptKind::ShellCommand, "Shell command on region: ");
         Ok(())
+    }
+
+    fn start_async_shell_command(&mut self, argument: Option<i32>) -> Result<bool> {
+        if !self.ensure_no_shell_command_running() {
+            return Ok(false);
+        }
+        if argument.is_some() {
+            self.minibuffer
+                .set_error("async-shell-command does not accept a prefix argument");
+            return Ok(false);
+        }
+        self.shell_command_prompt = Some(ShellCommandPromptState {
+            action: ShellCommandAction::Display,
+            stdin: String::new(),
+            disposition: ShellCommandDisposition::Background,
+        });
+        self.minibuffer
+            .start_prompt(PromptKind::ShellCommand, "Async shell command: ");
+        Ok(true)
+    }
+
+    fn ensure_no_shell_command_running(&mut self) -> bool {
+        if self.running_shell_command.is_some() {
+            self.minibuffer
+                .set_error("a shell command is already running");
+            return false;
+        }
+        true
     }
 
     fn submit_shell_command(&mut self, command: &str) -> Result<EditorOutcome> {
@@ -6528,18 +6622,29 @@ impl Editor {
             action: state.action,
             streaming_output,
             streamed_output_bytes: 0,
+            disposition: state.disposition,
         });
         self.pending_shell_request = Some(PendingShellRequest {
             command: command.to_owned(),
             stdin: state.stdin,
             current_dir,
             stream_output: streaming_output,
+            foreground: state.disposition == ShellCommandDisposition::Foreground,
         });
         if streaming_output {
-            self.open_shell_output_buffer("");
+            if state.disposition == ShellCommandDisposition::Foreground {
+                self.open_shell_output_buffer("");
+            } else {
+                self.buffers.open_shell_output("");
+            }
         }
         self.shell_quit_prefix = false;
-        self.show_shell_command_running_message();
+        if state.disposition == ShellCommandDisposition::Foreground {
+            self.show_shell_command_running_message();
+        } else {
+            self.minibuffer
+                .set_message(BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE);
+        }
         Ok(EditorOutcome::Continue)
     }
 
@@ -6559,7 +6664,12 @@ impl Editor {
                 if running.streaming_output {
                     self.append_shell_process_status("failed")?;
                 }
-                self.minibuffer.set_error(format_shell_command_error(error));
+                let message = format_shell_command_error(error);
+                if running.disposition == ShellCommandDisposition::Background {
+                    self.minibuffer.log_error(message);
+                } else {
+                    self.minibuffer.set_error(message);
+                }
                 return Ok(());
             }
         };
@@ -6569,6 +6679,7 @@ impl Editor {
                 running.action,
                 running.streaming_output,
                 running.streamed_output_bytes,
+                running.disposition,
                 output,
             );
         }
@@ -6578,10 +6689,15 @@ impl Editor {
                 "exited with code {}",
                 format_shell_status(output.status_code)
             ))?;
-            self.minibuffer.set_error(format!(
+            let message = format!(
                 "Shell command failed with code {}",
                 format_shell_status(output.status_code)
-            ));
+            );
+            if running.disposition == ShellCommandDisposition::Background {
+                self.minibuffer.log_error(message);
+            } else {
+                self.minibuffer.set_error(message);
+            }
             return Ok(());
         }
         let text = format_shell_command_output(&running.command, &output);
@@ -6599,15 +6715,20 @@ impl Editor {
         action: ShellCommandAction,
         streaming_output: bool,
         streamed_output_bytes: usize,
+        disposition: ShellCommandDisposition,
         output: ShellCommandOutput,
     ) -> Result<()> {
         match action {
             ShellCommandAction::Display => {
                 if streaming_output {
                     self.append_shell_process_status("finished")?;
-                    self.minibuffer.set_message(format!(
-                        "Shell command completed ({streamed_output_bytes} bytes)"
-                    ));
+                    let message =
+                        format!("Shell command completed ({streamed_output_bytes} bytes)");
+                    if disposition == ShellCommandDisposition::Background {
+                        self.minibuffer.log_message(message);
+                    } else {
+                        self.minibuffer.set_message(message);
+                    }
                 } else {
                     let text = format_shell_command_output("", &output);
                     self.open_shell_output_buffer(text);
@@ -21168,7 +21289,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         editor
             .handle_key(KeyEvent::Ctrl('g'))
             .expect("C-g should request cancellation");
-        editor.finish_shell_cancellation(true);
+        editor.finish_shell_cancellation(true, true);
 
         assert_eq!(editor.current_buffer_id(), edited_buffer);
         assert_eq!(editor.document().buffer().serialize(), "alpha");
@@ -21177,6 +21298,272 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("output buffer should remain after cancellation");
         assert_eq!(output.buffer().serialize(), "partial\nProcess cancelled\n");
         assert!(!output.is_dirty());
+    }
+
+    #[test]
+    fn background_shell_allows_editing_and_completion_keeps_focus() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "alpha")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        let edited_buffer = editor.current_buffer_id();
+
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        assert_eq!(
+            editor
+                .minibuffer()
+                .prompt()
+                .map(|prompt| prompt.label.as_str()),
+            Some("Async shell command: ")
+        );
+        submit_prompt_text(&mut editor, "printf background");
+        let request = editor
+            .take_pending_shell_request()
+            .expect("background command should create a request");
+        assert!(!request.foreground);
+        assert!(request.stream_output);
+        assert!(!editor.shell_command_running());
+        assert_eq!(editor.current_buffer_id(), edited_buffer);
+
+        editor
+            .handle_key(KeyEvent::Text("Z".to_owned()))
+            .expect("normal editing should continue");
+        editor
+            .append_shell_command_output("background")
+            .expect("background output should append");
+        editor
+            .execute_command_by_name("goto-line")
+            .expect("unrelated prompt should start");
+        editor
+            .handle_key(KeyEvent::Text("12".to_owned()))
+            .expect("prompt input should update");
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("background completion should be handled");
+
+        assert_eq!(editor.current_buffer_id(), edited_buffer);
+        assert_eq!(editor.document().buffer().serialize(), "Zalpha");
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::GotoLine)
+        );
+        assert_eq!(editor.minibuffer().prompt_input(), Some("12"));
+        let output = editor
+            .buffers
+            .find_by_kind(DocumentKind::ShellOutput)
+            .and_then(|id| editor.document_for_buffer(id))
+            .expect("background output buffer should exist");
+        assert_eq!(
+            output.buffer().serialize(),
+            "background\nProcess finished\n"
+        );
+    }
+
+    #[test]
+    fn background_shell_uses_explicit_interrupt_and_rejects_second_job() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("background command should create a request");
+
+        editor
+            .handle_key(KeyEvent::Ctrl('g'))
+            .expect("ordinary C-g should remain an editor key");
+        assert_eq!(editor.take_shell_cancel_request(), None);
+        assert!(editor.running_shell_command.is_some());
+
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("second shell command should be rejected");
+        assert!(editor.minibuffer().prompt().is_none());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: a shell command is already running")
+        );
+
+        editor
+            .execute_command_by_name("interrupt-shell-command")
+            .expect("interrupt command should run");
+        assert_eq!(
+            editor.take_shell_cancel_request(),
+            Some(ShellCancellationRequest::Interrupt)
+        );
+        assert!(editor.running_shell_command.is_some());
+        editor
+            .execute_command_by_name("interrupt-shell-command")
+            .expect("second interrupt should request escalation");
+        assert_eq!(
+            editor.take_shell_cancel_request(),
+            Some(ShellCancellationRequest::Interrupt)
+        );
+    }
+
+    #[test]
+    fn async_shell_command_rejects_prefix_arguments() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("prefix should start");
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("prefixed M-& should be rejected");
+
+        assert!(editor.minibuffer().prompt().is_none());
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some("Error: async-shell-command does not accept a prefix argument")
+        );
+        assert!(editor.running_shell_command.is_none());
+    }
+
+    #[test]
+    fn background_cancellation_does_not_consume_foreground_return_viewport() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Meta('!'))
+            .expect("M-! should prompt");
+        submit_prompt_text(&mut editor, "printf foreground");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("foreground command should create a request");
+        editor
+            .append_shell_command_output("foreground")
+            .expect("foreground output should append");
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("foreground completion should succeed");
+        assert!(editor.shell_output_return.is_some());
+
+        editor
+            .switch_to_buffer("*scratch*")
+            .expect("origin should be selected");
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("background command should create a request");
+        editor
+            .switch_to_buffer("*Shell Command Output*")
+            .expect("process buffer should be selected");
+
+        editor
+            .execute_command_by_name("interrupt-shell-command")
+            .expect("background interrupt should be requested");
+        editor.finish_shell_cancellation(true, false);
+
+        assert_eq!(editor.current_buffer_name(), "*Shell Command Output*");
+        assert!(editor.shell_output_return.is_some());
+        assert!(
+            editor
+                .document()
+                .buffer()
+                .serialize()
+                .contains("Process cancelled")
+        );
+    }
+
+    #[test]
+    fn background_shell_keeps_auto_save_and_auto_revert_active() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        fs::write(&path, "old\n").expect("fixture should be written");
+        let mut editor = Editor::with_config(
+            Document::open(&path).expect("document should open"),
+            Config {
+                auto_save: true,
+                auto_save_interval: 1,
+                auto_save_timeout_seconds: 0,
+                ..Config::default()
+            },
+        );
+        editor
+            .execute_command_by_name("auto-revert-mode")
+            .expect("auto-revert should enable");
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        submit_prompt_text(&mut editor, "sleep 10");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("background command should create a request");
+
+        editor
+            .handle_key(KeyEvent::Text("Z".to_owned()))
+            .expect("background editing should auto-save");
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("auto-save should read"),
+            "Zold\n"
+        );
+
+        editor.document_mut().mark_clean();
+        fs::write(&path, "reloaded\n").expect("changed fixture should be written");
+        assert!(editor.poll_auto_revert().expect("auto-revert should poll"));
+        assert_eq!(editor.document().buffer().serialize(), "reloaded\n");
+    }
+
+    #[test]
+    fn background_completion_preserves_dirty_quit_prompt() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "dirty")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        submit_prompt_text(&mut editor, "printf complete");
+        let _request = editor
+            .take_pending_shell_request()
+            .expect("background command should create a request");
+        editor
+            .handle_key(KeyEvent::Ctrl('x'))
+            .expect("C-x should start quit sequence");
+        assert_eq!(
+            editor
+                .handle_key(KeyEvent::Ctrl('c'))
+                .expect("dirty quit should prompt"),
+            EditorOutcome::Continue
+        );
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::QuitDirtyBuffers)
+        );
+
+        editor
+            .append_shell_command_output("complete")
+            .expect("background output should append");
+        editor
+            .complete_shell_command(Ok(ShellCommandOutput {
+                stdout: String::new(),
+                stderr: String::new(),
+                status_code: Some(0),
+            }))
+            .expect("background completion should succeed");
+
+        assert_eq!(
+            editor.minibuffer().prompt_kind(),
+            Some(PromptKind::QuitDirtyBuffers)
+        );
     }
 
     #[test]

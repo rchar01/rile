@@ -64,7 +64,24 @@ pub struct PromptState {
 
 impl MinibufferState {
     pub fn set_message(&mut self, message: impl Into<String>) {
-        let message = bounded_message(message.into());
+        let message = self.retain_message(message.into());
+        self.message = Some(message);
+        self.prompt = None;
+    }
+
+    pub fn log_message(&mut self, message: impl Into<String>) {
+        let message = self.retain_message(message.into());
+        if self.prompt.is_none() {
+            self.message = Some(message);
+        }
+    }
+
+    pub fn log_error(&mut self, message: impl Into<String>) {
+        self.log_message(format!("Error: {}", message.into()));
+    }
+
+    fn retain_message(&mut self, message: String) -> String {
+        let message = bounded_message(message);
         self.message_history_bytes += message.len();
         self.messages.push_back(message.clone().into_boxed_str());
         while self.messages.len() > MAX_MESSAGE_HISTORY_ENTRIES
@@ -77,8 +94,7 @@ impl MinibufferState {
             self.message_history_bytes -= removed.len();
         }
         self.message_history_revision = self.message_history_revision.wrapping_add(1);
-        self.message = Some(message);
-        self.prompt = None;
+        message
     }
 
     pub fn set_error(&mut self, message: impl Into<String>) {
@@ -312,6 +328,29 @@ mod tests {
         );
         assert_eq!(minibuffer.prompt_kind(), Some(PromptKind::ExtendedCommand));
         assert_eq!(minibuffer.prompt_input(), Some("save-buffer"));
+    }
+
+    #[test]
+    fn logged_messages_preserve_active_prompt() {
+        let mut minibuffer = MinibufferState::default();
+        minibuffer.start_prompt(PromptKind::ExtendedCommand, "M-x ");
+        minibuffer.insert_prompt_text("save-buffer");
+
+        minibuffer.log_message("background complete");
+        minibuffer.log_error("background failed");
+
+        assert_eq!(minibuffer.prompt_kind(), Some(PromptKind::ExtendedCommand));
+        assert_eq!(minibuffer.prompt_input(), Some("save-buffer"));
+        assert_eq!(
+            minibuffer.display_text().as_deref(),
+            Some("M-x save-buffer")
+        );
+        assert!(minibuffer.messages_text().contains("background complete"));
+        assert!(
+            minibuffer
+                .messages_text()
+                .contains("Error: background failed")
+        );
     }
 
     #[test]

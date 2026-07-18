@@ -71,8 +71,8 @@ SPDX-License-Identifier: GPL-3.0-or-later
 - `src/render/` centralizes face spans and priority merging used by region, search, query-replace, syntax, mode-line, and minibuffer rendering.
 - `src/window.rs` manages split layout and per-window viewport state; terminal drawing must keep point visible in the selected window.
 - `src/shell.rs` owns bounded nonblocking shell jobs and the shared child reaper;
-  `TerminalSession` polls and cancels jobs while `Editor` retains only logical
-  foreground command targets.
+  `TerminalSession` owns one physical foreground or background job while
+  `Editor` retains logical disposition, completion policy, and mutation targets.
 
 ## Documentation And History
 

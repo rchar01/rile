@@ -106,6 +106,12 @@ replacement targets unchanged. PTY regressions send a 2 MiB region through
 command with `C-g C-g`, observe output before process exit, and confirm normal
 editing resumes afterward.
 
+Background-shell tests verify `M-&` keeps editing, auto-save, auto-revert, active
+prompts, dirty-quit prompts, buffer selection, and foreground return viewports
+independent from process events. PTY coverage streams output without stealing
+focus, cancels through process-buffer `C-c C-c`, and verifies clean quit stops
+the owned process group.
+
 Buffer-manager tests verify generated special buffers use document-kind identity
 and cannot replace normal files with colliding names. Terminal and PTY regressions
 open a normal file named `*Messages*`, exercise redraw and `C-h e`, restore the

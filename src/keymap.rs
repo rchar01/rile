@@ -419,6 +419,7 @@ pub fn default_bindings() -> Vec<KeyBinding> {
         ),
         KeyBinding::new([KeyEvent::Meta('%')], QueryReplace),
         KeyBinding::new([KeyEvent::CtrlMeta('%')], QueryReplaceRegexp),
+        KeyBinding::new([KeyEvent::Meta('&')], AsyncShellCommand),
         KeyBinding::new([KeyEvent::Meta('!')], ShellCommand),
         KeyBinding::new([KeyEvent::Meta('|')], ShellCommandOnRegion),
         KeyBinding::new([KeyEvent::Meta('w')], CopyRegionAsKill),
@@ -658,10 +659,13 @@ pub fn shell_output_keymap() -> KeyMap {
     KeyMap::named(
         KeyMapId::SpecialBuffer,
         "shell-output-mode-map",
-        [KeyBinding::new(
-            [KeyEvent::Text("q".to_owned())],
-            QuitShellOutputWindow,
-        )],
+        [
+            KeyBinding::new([KeyEvent::Text("q".to_owned())], QuitShellOutputWindow),
+            KeyBinding::new(
+                [KeyEvent::Ctrl('c'), KeyEvent::Ctrl('c')],
+                InterruptShellCommand,
+            ),
+        ],
     )
 }
 
@@ -847,6 +851,10 @@ mod tests {
         assert_eq!(
             keymap.resolve(&[KeyEvent::CtrlMeta('%')]),
             KeyResolution::Command(QueryReplaceRegexp)
+        );
+        assert_eq!(
+            keymap.resolve(&[KeyEvent::Meta('&')]),
+            KeyResolution::Command(AsyncShellCommand)
         );
         assert_eq!(
             keymap.resolve(&[KeyEvent::Meta('!')]),
@@ -1365,6 +1373,14 @@ mod tests {
         assert_eq!(
             shell_output_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),
             KeyResolution::Command(QuitShellOutputWindow)
+        );
+        assert_eq!(
+            shell_output_keymap().resolve(&[KeyEvent::Ctrl('c')]),
+            KeyResolution::Prefix
+        );
+        assert_eq!(
+            shell_output_keymap().resolve(&[KeyEvent::Ctrl('c'), KeyEvent::Ctrl('c')]),
+            KeyResolution::Command(InterruptShellCommand)
         );
         assert_eq!(
             buffer_list_keymap().resolve(&[KeyEvent::Text("q".to_owned())]),

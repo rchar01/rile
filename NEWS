@@ -50,6 +50,12 @@ Security fixes:
    transcripts remain visible after cancellation or failure, while insertion
    and replacement commands remain atomic.
 
+* `M-&` now runs one display-only shell command while normal editing, auto-save,
+  and auto-revert continue. Background output does not steal focus, completion
+  notifications do not replace active prompts, and `M-x interrupt-shell-command`
+  or process-buffer `C-c C-c` cancels the active job. Rile still permits one
+  physical shell job at a time.
+
 
 * Noteworthy changes in release 0.9.1 (2026-07-15)
 

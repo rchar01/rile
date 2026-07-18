@@ -3,7 +3,7 @@
 
 mod support;
 
-use std::time::Duration;
+use std::{fs, thread, time::Duration};
 
 use anyhow::Result;
 
@@ -77,6 +77,108 @@ fn foreground_shell_streams_output_before_completion() -> Result<()> {
     rile.wait_for_screen_contains("Process finished")?;
 
     rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn background_shell_allows_editing_without_stealing_focus() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-&", keys::meta('&'))?;
+    rile.assert_screen_contains("Async shell command:")?;
+    rile.send(
+        "background shell command",
+        b"printf background-start; sleep 0.5; printf background-end >&2",
+    )?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("Shell command running in background")?;
+
+    rile.send("normal editing during background command", b"Z")?;
+    rile.wait_for_screen_contains("Zalpha")?;
+    rile.wait_for_screen_contains("Shell command completed")?;
+    rile.assert_screen_contains("Zalpha")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("shell output buffer", b"*Shell Command Output*")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("background-start")?;
+    rile.assert_screen_contains("background-end")?;
+    rile.assert_screen_contains("Process finished")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn background_shell_cancels_from_process_buffer() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-&", keys::meta('&'))?;
+    rile.send(
+        "background cancellation command",
+        b"printf partial; trap '' 2; while :; do :; done",
+    )?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("Shell command running in background")?;
+    rile.send("normal editing during background command", b"Z")?;
+    rile.wait_for_screen_contains("Zalpha")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("shell output buffer", b"*Shell Command Output*")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("partial")?;
+    let interrupt = [keys::control('c'), keys::control('c')].concat();
+    rile.send("C-c C-c", &interrupt)?;
+    rile.send("C-c C-c escalation", interrupt)?;
+    rile.wait_for_screen_contains("Process cancelled")?;
+
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("b", b"b")?;
+    rile.send("RET", keys::ENTER)?;
+    rile.wait_for_screen_contains("Zalpha")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn quitting_cleans_up_background_shell_process_group() -> Result<()> {
+    let directory = tempfile::tempdir()?;
+    let file = directory.path().join("notes.txt");
+    let ready = directory.path().join("ready");
+    let survived = directory.path().join("survived");
+    fs::write(&file, "alpha\n")?;
+    let mut rile = RilePty::spawn(&file, 12, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("M-&", keys::meta('&'))?;
+    rile.send(
+        "background cleanup command",
+        b"printf ready > ready; sleep 1; printf survived > survived",
+    )?;
+    rile.send("RET", keys::ENTER)?;
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while !ready.exists() && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        ready.exists(),
+        "background command should start before quit"
+    );
+
+    rile.quit()?;
+    thread::sleep(Duration::from_millis(1100));
+    assert!(
+        !survived.exists(),
+        "quit should terminate the background process group"
+    );
     Ok(())
 }
 

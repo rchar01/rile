@@ -320,7 +320,7 @@ fn default_modes() -> Vec<ModeSpec> {
             id: ModeId::ShellOutput,
             name: "shell-output-mode",
             summary: "Shell output mode",
-            doc: "Special buffer mode for command output produced by shell-command operations.",
+            doc: "Special buffer mode for shell command output. Press C-c C-c to interrupt the active command.",
             kind: ModeKind::Special,
             keymap: Some("shell-output-mode-map"),
         }),

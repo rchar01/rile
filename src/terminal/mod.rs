@@ -295,6 +295,7 @@ struct TerminalSession<R, W: Write> {
     frame_options: FrameOptions,
     last_size: Option<TerminalSize>,
     shell_job: Option<ShellJob>,
+    shell_job_foreground: bool,
     shell_input_suppression: bool,
     shell_c_g_escalation: bool,
 }
@@ -328,6 +329,7 @@ where
             },
             last_size: None,
             shell_job: None,
+            shell_job_foreground: false,
             shell_input_suppression: false,
             shell_c_g_escalation: false,
         })
@@ -366,7 +368,7 @@ where
                 }
             } else {
                 let shell_changed = self.finish_shell_input_quiet_period(&mut editor)?;
-                let redraw = if self.shell_job.is_some() || editor.shell_command_running() {
+                let redraw = if self.shell_job_foreground || editor.shell_command_running() {
                     true
                 } else {
                     shell_changed || editor.poll_auto_revert()?
@@ -401,6 +403,7 @@ where
             return Ok(false);
         }
         if !self.shell_c_g_escalation
+            || !self.shell_job_foreground
             || editor.minibuffer().prompt().is_some()
             || !self.shell_job.as_ref().is_some_and(ShellJob::is_cancelling)
         {
@@ -428,10 +431,15 @@ where
         if let Some(request) = editor.take_shell_cancel_request() {
             match request {
                 ShellCancellationRequest::Interrupt => {
-                    self.shell_c_g_escalation = if let Some(job) = self.shell_job.as_mut() {
+                    self.shell_c_g_escalation = if self.shell_job_foreground
+                        && let Some(job) = self.shell_job.as_mut()
+                    {
                         job.request_cancel();
                         job.is_cancelling()
                     } else {
+                        if let Some(job) = self.shell_job.as_mut() {
+                            job.request_cancel();
+                        }
                         false
                     };
                 }
@@ -449,7 +457,7 @@ where
         };
         if self.shell_job.is_some() {
             editor.reject_shell_command_start(
-                "cannot start a shell command while the previous command is still cancelling",
+                "cannot start a shell command while another command is active",
             );
             return Ok(());
         }
@@ -463,7 +471,8 @@ where
             Ok(job) => {
                 self.shell_c_g_escalation = false;
                 self.shell_job = Some(job);
-                self.shell_input_suppression = true;
+                self.shell_job_foreground = request.foreground;
+                self.shell_input_suppression = request.foreground;
             }
             Err(error) => editor.complete_shell_command(Err(error))?,
         }
@@ -480,6 +489,7 @@ where
             ShellJobPoll::Cancelled => (true, true),
         };
         let streamed_output = job.streams_output();
+        let foreground = self.shell_job_foreground;
         let output_changed = editor.append_shell_command_output(&job.take_streamed_output())?;
         if !terminal || !allow_completion {
             return Ok(output_changed);
@@ -487,12 +497,13 @@ where
 
         self.shell_c_g_escalation = false;
         self.shell_input_suppression = false;
+        self.shell_job_foreground = false;
         let job = self
             .shell_job
             .take()
             .expect("terminal shell poll should retain the job");
         if cancelled {
-            editor.finish_shell_cancellation(streamed_output);
+            editor.finish_shell_cancellation(streamed_output, foreground);
         } else {
             editor.complete_shell_command(job.into_result())?;
         }
@@ -2118,6 +2129,7 @@ mod tests {
                 frame_options: FrameOptions::default(),
                 last_size: None,
                 shell_job: None,
+                shell_job_foreground: false,
                 shell_input_suppression: false,
                 shell_c_g_escalation: false,
             },
@@ -2136,6 +2148,53 @@ mod tests {
         editor
             .handle_key(KeyEvent::Special(SpecialKey::Enter))
             .expect("shell command should submit");
+    }
+
+    fn submit_background_shell_command(editor: &mut Editor, command: &str) {
+        editor
+            .handle_key(KeyEvent::Meta('&'))
+            .expect("M-& should prompt");
+        editor
+            .handle_key(KeyEvent::Text(command.to_owned()))
+            .expect("shell command should be entered");
+        editor
+            .handle_key(KeyEvent::Special(SpecialKey::Enter))
+            .expect("shell command should submit");
+    }
+
+    #[test]
+    fn background_shell_keeps_input_dispatch_and_focus_active() {
+        let (mut session, _input_peer, _output_peer) = shell_test_session();
+        let mut editor = Editor::new(Document::scratch());
+        submit_background_shell_command(&mut editor, "printf background; sleep 0.2");
+        session
+            .process_shell_requests(&mut editor)
+            .expect("background shell job should start");
+
+        assert!(session.shell_job.is_some());
+        assert!(!session.shell_job_foreground);
+        assert!(!session.shell_input_suppression);
+        editor
+            .handle_key(KeyEvent::Text("Z".to_owned()))
+            .expect("normal editing should continue");
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while session.shell_job.is_some() && Instant::now() < deadline {
+            session
+                .poll_shell_job(&mut editor, true)
+                .expect("background shell polling should succeed");
+            thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(session.shell_job.is_none(), "background job should finish");
+        assert_eq!(editor.current_buffer_name(), "*scratch*");
+        assert_eq!(editor.document().buffer().serialize(), "Z");
+        let output = editor
+            .document_for_buffer(BufferId(1))
+            .map(|document| document.buffer().serialize())
+            .expect("background output buffer should exist");
+        assert!(output.contains("background"));
+        assert!(output.contains("Process finished"));
     }
 
     #[test]
