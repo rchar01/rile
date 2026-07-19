@@ -58,6 +58,7 @@ use search_history::SearchHistoryStore;
 const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_ARGUMENT_GENERATED_BYTES: usize = 1024 * 1024;
 const MAX_ARGUMENT_REPEAT_STEPS: usize = 4_096;
+const MAX_KEYBOARD_MACRO_EVENTS: usize = 4_096;
 const SHELL_COMMAND_RUNNING_MESSAGE: &str = "Running shell command... (C-g to cancel)";
 const BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE: &str =
     "Shell command running in background (M-x interrupt-shell-command to cancel)";
@@ -105,6 +106,7 @@ pub struct Editor {
     recording_keyboard_macro: Option<Vec<KeyEvent>>,
     last_keyboard_macro: Option<Vec<KeyEvent>>,
     replaying_keyboard_macro: bool,
+    keyboard_macro_budget: Option<KeyboardMacroBudget>,
     universal_argument: Option<UniversalArgumentState>,
     search: Option<SearchState>,
     user_highlights: HashMap<BufferId, Vec<UserHighlight>>,
@@ -381,6 +383,23 @@ impl UniversalArgumentState {
             -self.value
         } else {
             self.value
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct KeyboardMacroBudget {
+    remaining_events: usize,
+    remaining_repeat_steps: usize,
+    exhausted: bool,
+}
+
+impl KeyboardMacroBudget {
+    fn new() -> Self {
+        Self {
+            remaining_events: MAX_KEYBOARD_MACRO_EVENTS,
+            remaining_repeat_steps: MAX_ARGUMENT_REPEAT_STEPS,
+            exhausted: false,
         }
     }
 }
@@ -728,6 +747,7 @@ impl Editor {
             recording_keyboard_macro: None,
             last_keyboard_macro: None,
             replaying_keyboard_macro: false,
+            keyboard_macro_budget: None,
             universal_argument: None,
             search: None,
             user_highlights: HashMap::new(),
@@ -2552,7 +2572,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(context.argument, Self::move_backward, Self::move_forward)?;
+        self.repeat_signed_motion(context.argument, Self::move_backward, Self::move_forward)?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2568,7 +2588,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_paragraph_backward,
             Self::move_paragraph_forward,
@@ -2592,7 +2612,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_word_backward,
             Self::move_word_forward,
@@ -2700,7 +2720,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_edit(
             context.argument,
             Self::delete_backward_char,
             Self::delete_char,
@@ -2720,7 +2740,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_edit(
             context.argument,
             Self::delete_char,
             Self::delete_backward_char,
@@ -2925,7 +2945,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(context.argument, Self::move_forward, Self::move_backward)?;
+        self.repeat_signed_motion(context.argument, Self::move_forward, Self::move_backward)?;
         Ok(CommandOutcome::Continue)
     }
 
@@ -2933,7 +2953,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_word_forward,
             Self::move_word_backward,
@@ -2945,7 +2965,7 @@ impl Editor {
         &mut self,
         context: CommandContext,
     ) -> Result<CommandOutcome> {
-        self.repeat_signed(
+        self.repeat_signed_motion(
             context.argument,
             Self::move_paragraph_forward,
             Self::move_paragraph_backward,
@@ -3618,10 +3638,15 @@ impl Editor {
         if !self.ensure_buffer_editable() {
             return Ok(());
         }
-        if argument.is_some()
-            && checked_generated_bytes(text.len(), count, MAX_ARGUMENT_GENERATED_BYTES).is_none()
-        {
+        let Some(generated_bytes) = text.len().checked_mul(count) else {
             self.set_argument_generated_bytes_error();
+            return Ok(());
+        };
+        if argument.is_some() && generated_bytes > MAX_ARGUMENT_GENERATED_BYTES {
+            self.set_argument_generated_bytes_error();
+            return Ok(());
+        }
+        if argument.is_some() && !self.reserve_keyboard_macro_repeat_steps(count) {
             return Ok(());
         }
         self.insert_text(&text.repeat(count), group_with_previous)
@@ -3635,6 +3660,9 @@ impl Editor {
         let count = positive_argument_count(argument);
         if count > MAX_ARGUMENT_REPEAT_STEPS {
             self.set_argument_repeat_error();
+            return Ok(());
+        }
+        if !self.reserve_keyboard_macro_repeat_steps(count) {
             return Ok(());
         }
         for _ in 0..count {
@@ -3658,10 +3686,12 @@ impl Editor {
     fn repeat_positive_kill(
         &mut self,
         argument: Option<i32>,
-        action: fn(&mut Self) -> Result<()>,
+        action: fn(&mut Self) -> Result<bool>,
     ) -> Result<()> {
         for _ in 0..positive_argument_count(argument) {
-            action(self)?;
+            if !self.consume_keyboard_macro_repeat_step() || !action(self)? {
+                break;
+            }
             if self.kill_recorded_this_command {
                 self.last_command_was_kill = true;
             }
@@ -3669,17 +3699,19 @@ impl Editor {
         Ok(())
     }
 
-    fn repeat_signed(
+    fn repeat_signed_edit(
         &mut self,
         argument: Option<i32>,
-        positive: fn(&mut Self) -> Result<()>,
-        negative: fn(&mut Self) -> Result<()>,
+        positive: fn(&mut Self) -> Result<bool>,
+        negative: fn(&mut Self) -> Result<bool>,
     ) -> Result<()> {
         let argument = argument.unwrap_or(1);
         let count = argument.unsigned_abs() as usize;
         let action = if argument >= 0 { positive } else { negative };
         for _ in 0..count {
-            action(self)?;
+            if !self.consume_keyboard_macro_repeat_step() || !action(self)? {
+                break;
+            }
         }
         Ok(())
     }
@@ -3694,6 +3726,9 @@ impl Editor {
         let count = argument.unsigned_abs() as usize;
         let action = if argument >= 0 { positive } else { negative };
         for _ in 0..count {
+            if !self.consume_keyboard_macro_repeat_step() {
+                break;
+            }
             let previous = self.cursor;
             action(self)?;
             if self.cursor == previous {
@@ -3706,19 +3741,64 @@ impl Editor {
     fn repeat_signed_kill(
         &mut self,
         argument: Option<i32>,
-        positive: fn(&mut Self) -> Result<()>,
-        negative: fn(&mut Self) -> Result<()>,
+        positive: fn(&mut Self) -> Result<bool>,
+        negative: fn(&mut Self) -> Result<bool>,
     ) -> Result<()> {
         let argument = argument.unwrap_or(1);
         let count = argument.unsigned_abs() as usize;
         let action = if argument >= 0 { positive } else { negative };
         for _ in 0..count {
-            action(self)?;
+            if !self.consume_keyboard_macro_repeat_step() || !action(self)? {
+                break;
+            }
             if self.kill_recorded_this_command {
                 self.last_command_was_kill = true;
             }
         }
         Ok(())
+    }
+
+    fn consume_keyboard_macro_event(&mut self) -> bool {
+        let Some(budget) = &mut self.keyboard_macro_budget else {
+            return true;
+        };
+        if budget.remaining_events > 0 {
+            budget.remaining_events -= 1;
+            return true;
+        }
+        budget.exhausted = true;
+        self.minibuffer.set_error(format!(
+            "Keyboard macro exceeds the {MAX_KEYBOARD_MACRO_EVENTS}-event limit"
+        ));
+        false
+    }
+
+    fn reserve_keyboard_macro_repeat_steps(&mut self, steps: usize) -> bool {
+        let Some(budget) = &mut self.keyboard_macro_budget else {
+            return true;
+        };
+        if steps <= budget.remaining_repeat_steps {
+            budget.remaining_repeat_steps -= steps;
+            return true;
+        }
+        budget.exhausted = true;
+        self.minibuffer
+            .set_error("Keyboard macro exceeded its repeat-step budget");
+        false
+    }
+
+    fn consume_keyboard_macro_repeat_step(&mut self) -> bool {
+        self.reserve_keyboard_macro_repeat_steps(1)
+    }
+
+    fn keyboard_macro_budget_exhausted(&self) -> bool {
+        self.keyboard_macro_budget
+            .is_some_and(|budget| budget.exhausted)
+    }
+
+    fn keyboard_macro_repeat_steps_available(&self) -> Option<usize> {
+        self.keyboard_macro_budget
+            .map(|budget| budget.remaining_repeat_steps)
     }
 
     fn move_line_by_argument(&mut self, argument: Option<i32>, direction: isize) -> Result<()> {
@@ -3871,6 +3951,14 @@ impl Editor {
     }
 
     fn call_last_keyboard_macro(&mut self, argument: Option<i32>) -> Result<EditorOutcome> {
+        self.call_last_keyboard_macro_with_budget(argument, KeyboardMacroBudget::new())
+    }
+
+    fn call_last_keyboard_macro_with_budget(
+        &mut self,
+        argument: Option<i32>,
+        budget: KeyboardMacroBudget,
+    ) -> Result<EditorOutcome> {
         if self.recording_keyboard_macro.is_some() {
             self.trim_current_command_from_keyboard_macro();
             self.minibuffer
@@ -3883,7 +3971,7 @@ impl Editor {
             return Ok(EditorOutcome::Continue);
         }
 
-        let Some(keys) = self.last_keyboard_macro.clone() else {
+        let Some(keys) = self.last_keyboard_macro.as_ref() else {
             self.minibuffer.set_error("No keyboard macro defined");
             return Ok(EditorOutcome::Continue);
         };
@@ -3894,23 +3982,46 @@ impl Editor {
                 .set_message("Keyboard macro repeated 0 times");
             return Ok(EditorOutcome::Continue);
         }
+        let event_count = keys.len().checked_mul(repeat_count);
+        let event_limit = budget.remaining_events;
+        if event_count.is_none_or(|event_count| event_count > event_limit) {
+            self.minibuffer.set_error(format!(
+                "Keyboard macro exceeds the {event_limit}-event limit"
+            ));
+            return Ok(EditorOutcome::Continue);
+        }
+        let keys = keys.clone();
 
         self.replaying_keyboard_macro = true;
+        self.keyboard_macro_budget = Some(budget);
         let replay_result: Result<EditorOutcome> = (|| {
             for _ in 0..repeat_count {
                 for key in &keys {
+                    if !self.consume_keyboard_macro_event() {
+                        return Ok(EditorOutcome::Continue);
+                    }
                     let outcome = self.handle_key(key.clone())?;
                     if outcome == EditorOutcome::Quit {
                         return Ok(EditorOutcome::Quit);
+                    }
+                    if self.keyboard_macro_budget_exhausted() {
+                        return Ok(EditorOutcome::Continue);
                     }
                 }
             }
             Ok(EditorOutcome::Continue)
         })();
         self.replaying_keyboard_macro = false;
+        let budget_exhausted = self
+            .keyboard_macro_budget
+            .take()
+            .is_some_and(|budget| budget.exhausted);
 
         if replay_result? == EditorOutcome::Quit {
             return Ok(EditorOutcome::Quit);
+        }
+        if budget_exhausted {
+            return Ok(EditorOutcome::Continue);
         }
 
         self.minibuffer
@@ -4301,7 +4412,20 @@ impl Editor {
         }
         self.clear_insert_group();
 
-        let range = self.word_case_range(argument.unwrap_or(1))?;
+        let available_steps = self.keyboard_macro_repeat_steps_available();
+        let Some((range, traversal_steps)) =
+            self.word_case_range_with_steps(argument.unwrap_or(1), available_steps)?
+        else {
+            self.reserve_keyboard_macro_repeat_steps(
+                available_steps
+                    .expect("unbounded traversal cannot exhaust a macro budget")
+                    .saturating_add(1),
+            );
+            return Ok(());
+        };
+        if !self.reserve_keyboard_macro_repeat_steps(traversal_steps) {
+            return Ok(());
+        }
         if range.start == range.end {
             return Ok(());
         }
@@ -4323,25 +4447,46 @@ impl Editor {
         Ok(())
     }
 
-    fn word_case_range(&self, argument: i32) -> Result<TextRange> {
+    fn word_case_range_with_steps(
+        &self,
+        argument: i32,
+        max_steps: Option<usize>,
+    ) -> Result<Option<(TextRange, usize)>> {
         let count = argument.unsigned_abs() as usize;
         if count == 0 {
-            return Ok(TextRange::new(self.cursor, self.cursor));
+            return Ok(Some((TextRange::new(self.cursor, self.cursor), 0)));
         }
 
         let buffer = self.document().buffer();
+        let mut traversal_steps = 0;
         if argument >= 0 {
             let mut end = self.cursor;
             for _ in 0..count {
-                end = buffer.move_word_forward(end)?;
+                let next = buffer.move_word_forward(end)?;
+                if next == end {
+                    break;
+                }
+                if max_steps.is_some_and(|max_steps| traversal_steps == max_steps) {
+                    return Ok(None);
+                }
+                end = next;
+                traversal_steps += 1;
             }
-            Ok(TextRange::new(self.cursor, end))
+            Ok(Some((TextRange::new(self.cursor, end), traversal_steps)))
         } else {
             let mut start = self.cursor;
             for _ in 0..count {
-                start = buffer.move_word_backward(start)?;
+                let next = buffer.move_word_backward(start)?;
+                if next == start {
+                    break;
+                }
+                if max_steps.is_some_and(|max_steps| traversal_steps == max_steps) {
+                    return Ok(None);
+                }
+                start = next;
+                traversal_steps += 1;
             }
-            Ok(TextRange::new(start, self.cursor))
+            Ok(Some((TextRange::new(start, self.cursor), traversal_steps)))
         }
     }
 
@@ -4570,6 +4715,20 @@ impl Editor {
             return Ok(());
         }
 
+        if let Some(available_steps) = self.keyboard_macro_repeat_steps_available() {
+            let Some(line) = self.document().buffer().line(self.cursor.line) else {
+                return Ok(());
+            };
+            let traversal_steps = transpose_chars_effective_steps(
+                line,
+                self.cursor,
+                argument,
+                available_steps.saturating_add(1),
+            );
+            if !self.reserve_keyboard_macro_repeat_steps(traversal_steps) {
+                return Ok(());
+            }
+        }
         let Some(line) = self.document().buffer().line(self.cursor.line) else {
             return Ok(());
         };
@@ -4611,11 +4770,30 @@ impl Editor {
                 .set_error("zero-argument transpose-words is not supported");
             return Ok(());
         }
-
+        let count = argument.unsigned_abs() as usize;
+        if count > MAX_ARGUMENT_REPEAT_STEPS {
+            self.set_argument_repeat_error();
+            return Ok(());
+        }
         let cursor_before = self.cursor;
+        if checked_additional_repeat_bytes(
+            self.document().buffer().serialized_len(),
+            count,
+            MAX_ARGUMENT_GENERATED_BYTES,
+        )
+        .is_none()
+        {
+            self.minibuffer.set_error(format!(
+                "Numeric argument adds more than {MAX_ARGUMENT_GENERATED_BYTES} bytes of transpose work"
+            ));
+            return Ok(());
+        }
+        if !self.reserve_keyboard_macro_repeat_steps(count) {
+            return Ok(());
+        }
         let mut replacement = self.document().buffer().serialize();
         let mut cursor = position_to_absolute(self.document().buffer(), self.cursor)?;
-        for _ in 0..argument.unsigned_abs() {
+        for _ in 0..count {
             let Some((next_text, next_cursor)) =
                 transpose_words_once(&replacement, cursor, argument)
             else {
@@ -4750,9 +4928,9 @@ impl Editor {
         Ok(true)
     }
 
-    fn delete_backward_char(&mut self) -> Result<()> {
+    fn delete_backward_char(&mut self) -> Result<bool> {
         if !self.ensure_buffer_editable() {
-            return Ok(());
+            return Ok(false);
         }
         self.clear_insert_group();
         let start = self
@@ -4760,7 +4938,7 @@ impl Editor {
             .buffer()
             .move_grapheme_backward(self.cursor)?;
         if start == self.cursor {
-            return Ok(());
+            return Ok(false);
         }
         let cursor = self.cursor;
         let range = TextRange::new(start, cursor);
@@ -4770,12 +4948,12 @@ impl Editor {
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
-        Ok(())
+        Ok(true)
     }
 
-    fn delete_char(&mut self) -> Result<()> {
+    fn delete_char(&mut self) -> Result<bool> {
         if !self.ensure_buffer_editable() {
-            return Ok(());
+            return Ok(false);
         }
         self.clear_insert_group();
         let end = self
@@ -4783,7 +4961,7 @@ impl Editor {
             .buffer()
             .move_grapheme_forward(self.cursor)?;
         if end == self.cursor {
-            return Ok(());
+            return Ok(false);
         }
         let cursor = self.cursor;
         let range = TextRange::new(cursor, end);
@@ -4792,7 +4970,7 @@ impl Editor {
         self.goal_display_column = None;
         self.deactivate_region();
         self.sync_current_window();
-        Ok(())
+        Ok(true)
     }
 
     fn delete_horizontal_space(&mut self, backward_only: bool) -> Result<()> {
@@ -5751,21 +5929,21 @@ impl Editor {
         Ok(())
     }
 
-    fn kill_line(&mut self) -> Result<()> {
+    fn kill_line(&mut self) -> Result<bool> {
         if !self.ensure_buffer_editable() {
-            return Ok(());
+            return Ok(false);
         }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let Some(line) = self.document().buffer().line(self.cursor.line) else {
-            return Ok(());
+            return Ok(false);
         };
         let end = if self.cursor.byte < line.len() {
             Position::new(self.cursor.line, line.len())
         } else if self.cursor.line + 1 < self.document().buffer().line_count() {
             Position::new(self.cursor.line + 1, 0)
         } else {
-            return Ok(());
+            return Ok(false);
         };
         let range = TextRange::new(self.cursor, end);
         let text = self.document_mut().buffer_mut().delete_range(range)?;
@@ -5775,18 +5953,18 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed line");
-        Ok(())
+        Ok(true)
     }
 
-    fn kill_word(&mut self) -> Result<()> {
+    fn kill_word(&mut self) -> Result<bool> {
         if !self.ensure_buffer_editable() {
-            return Ok(());
+            return Ok(false);
         }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let end = self.document().buffer().move_word_forward(self.cursor)?;
         if end == self.cursor {
-            return Ok(());
+            return Ok(false);
         }
 
         let range = TextRange::new(self.cursor, end);
@@ -5797,18 +5975,18 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed word");
-        Ok(())
+        Ok(true)
     }
 
-    fn backward_kill_word(&mut self) -> Result<()> {
+    fn backward_kill_word(&mut self) -> Result<bool> {
         if !self.ensure_buffer_editable() {
-            return Ok(());
+            return Ok(false);
         }
         self.clear_insert_group();
         let cursor_before = self.cursor;
         let start = self.document().buffer().move_word_backward(self.cursor)?;
         if start == self.cursor {
-            return Ok(());
+            return Ok(false);
         }
 
         let range = TextRange::new(start, self.cursor);
@@ -5820,7 +5998,7 @@ impl Editor {
         self.deactivate_region();
         self.sync_current_window();
         self.minibuffer.set_message("Killed word");
-        Ok(())
+        Ok(true)
     }
 
     fn open_line(&mut self) -> Result<()> {
@@ -9337,6 +9515,39 @@ fn transpose_chars_edit(line: &str, position: Position, argument: i32) -> Option
     }
 }
 
+fn transpose_chars_effective_steps(
+    line: &str,
+    position: Position,
+    argument: i32,
+    detection_limit: usize,
+) -> usize {
+    if !line.is_char_boundary(position.byte) {
+        return 0;
+    }
+    let requested = argument.unsigned_abs() as usize;
+    if argument > 0 {
+        if line[..position.byte].graphemes(true).next().is_none() {
+            return 0;
+        }
+        let following = line[position.byte..]
+            .graphemes(true)
+            .take(detection_limit)
+            .count();
+        if following == 0 {
+            usize::from(argument == 1)
+        } else {
+            requested.min(following)
+        }
+    } else {
+        let preceding = line[..position.byte]
+            .graphemes(true)
+            .rev()
+            .take(detection_limit.saturating_add(1))
+            .count();
+        requested.min(preceding.saturating_sub(1))
+    }
+}
+
 fn transpose_grapheme_range(
     line: &str,
     line_index: usize,
@@ -9427,6 +9638,10 @@ fn checked_generated_bytes(text_bytes: usize, count: usize, limit: usize) -> Opt
     text_bytes
         .checked_mul(count)
         .filter(|generated_bytes| *generated_bytes <= limit)
+}
+
+fn checked_additional_repeat_bytes(item_bytes: usize, count: usize, limit: usize) -> Option<usize> {
+    checked_generated_bytes(item_bytes, count.saturating_sub(1), limit)
 }
 
 fn case_transform_text(text: &str, transform: CaseTransform) -> String {
@@ -10076,10 +10291,12 @@ mod tests {
     };
     use super::{
         AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
-        Editor, EditorOutcome, EditorPatternMatch, KillEntry, MAX_ARGUMENT_GENERATED_BYTES,
-        MAX_ARGUMENT_REPEAT_STEPS, SHELL_COMMAND_RUNNING_MESSAGE, SearchDirection,
-        ShellCancellationRequest, checked_generated_bytes, file_prompt_base_input,
+        Editor, EditorOutcome, EditorPatternMatch, KeyboardMacroBudget, KillEntry,
+        MAX_ARGUMENT_GENERATED_BYTES, MAX_ARGUMENT_REPEAT_STEPS, MAX_KEYBOARD_MACRO_EVENTS,
+        SHELL_COMMAND_RUNNING_MESSAGE, SearchDirection, ShellCancellationRequest,
+        checked_additional_repeat_bytes, checked_generated_bytes, file_prompt_base_input,
         format_rectangle_number, format_shell_command_error, highlight_phrase_regexp,
+        transpose_chars_effective_steps,
     };
     use crate::RileError;
     use crate::buffer::undo::UndoRecord;
@@ -17109,6 +17326,179 @@ M-g g           goto-line                      Go to line or line:column\n"
         assert_eq!(checked_generated_bytes(2, 4, 8), Some(8));
         assert_eq!(checked_generated_bytes(2, 5, 8), None);
         assert_eq!(checked_generated_bytes(usize::MAX, 2, usize::MAX), None);
+        assert_eq!(checked_additional_repeat_bytes(8, 1, 8), Some(0));
+        assert_eq!(checked_additional_repeat_bytes(4, 3, 8), Some(8));
+        assert_eq!(checked_additional_repeat_bytes(4, 4, 8), None);
+    }
+
+    #[test]
+    fn transpose_char_step_detection_stops_at_its_bound() {
+        assert_eq!(
+            transpose_chars_effective_steps("abcdef", Position::new(0, 6), i32::MIN, 1),
+            1
+        );
+        assert_eq!(
+            transpose_chars_effective_steps("abcdef", Position::new(0, 1), i32::MAX, 2),
+            2
+        );
+    }
+
+    #[test]
+    fn saturated_argument_stops_motion_and_deletion_at_buffer_edges() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .repeat_signed_motion(
+                Some(i32::MAX),
+                Editor::move_word_forward,
+                Editor::move_word_backward,
+            )
+            .expect("saturated movement should stop at the edge");
+        assert_eq!(editor.cursor(), Position::new(0, 7));
+
+        editor
+            .repeat_signed_edit(
+                Some(i32::MIN),
+                Editor::delete_char,
+                Editor::delete_backward_char,
+            )
+            .expect("saturated deletion should stop when text is exhausted");
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+    }
+
+    #[test]
+    fn saturated_kill_argument_stops_and_preserves_one_yank() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one\ntwo")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+
+        editor
+            .command_kill_line(CommandContext {
+                argument: Some(i32::MAX),
+                invoked_by: Invocation::Test,
+            })
+            .expect("saturated kill should stop at the end");
+        assert_eq!(editor.document().buffer().serialize(), "");
+
+        editor
+            .execute_command_by_name("yank")
+            .expect("one yank should restore the coalesced kill");
+        assert_eq!(editor.document().buffer().serialize(), "one\ntwo");
+    }
+
+    #[test]
+    fn saturated_word_case_range_stops_at_buffer_edges() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        let editor = Editor::new(document);
+
+        assert_eq!(
+            editor
+                .word_case_range_with_steps(i32::MAX, None)
+                .expect("forward range should stop")
+                .expect("unbounded traversal should complete")
+                .0,
+            TextRange::new(Position::new(0, 0), Position::new(0, 7))
+        );
+        assert_eq!(
+            editor
+                .word_case_range_with_steps(i32::MIN, None)
+                .expect("backward range should stop")
+                .expect("unbounded traversal should complete")
+                .0,
+            TextRange::new(Position::new(0, 0), Position::new(0, 0))
+        );
+    }
+
+    #[test]
+    fn saturated_word_case_charges_only_reachable_macro_steps() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one")
+            .expect("fixture should insert");
+        let mut editor = Editor::new(document);
+        editor.keyboard_macro_budget = Some(KeyboardMacroBudget {
+            remaining_events: 1,
+            remaining_repeat_steps: 1,
+            exhausted: false,
+        });
+
+        editor
+            .case_word(Some(i32::MAX), super::CaseTransform::Upper)
+            .expect("finite case conversion should fit the macro budget");
+
+        assert_eq!(editor.document().buffer().serialize(), "ONE");
+        assert!(!editor.keyboard_macro_budget_exhausted());
+        assert_eq!(
+            editor
+                .keyboard_macro_budget
+                .expect("budget should remain active")
+                .remaining_repeat_steps,
+            0
+        );
+    }
+
+    #[test]
+    fn word_case_rejects_before_traversing_past_macro_budget() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+        editor.keyboard_macro_budget = Some(KeyboardMacroBudget {
+            remaining_events: 1,
+            remaining_repeat_steps: 1,
+            exhausted: false,
+        });
+
+        editor
+            .case_word(Some(i32::MAX), super::CaseTransform::Upper)
+            .expect("over-budget case conversion should be rejected");
+
+        assert_eq!(editor.document().buffer().serialize(), "one two");
+        assert!(!editor.document().is_dirty());
+        assert!(editor.keyboard_macro_budget_exhausted());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Keyboard macro exceeded its repeat-step budget")
+        );
+    }
+
+    #[test]
+    fn transpose_words_rejects_oversized_argument_atomically() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "one two")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+
+        editor
+            .transpose_words(Some((MAX_ARGUMENT_REPEAT_STEPS + 1) as i32))
+            .expect("oversized transpose should be rejected");
+
+        assert_eq!(editor.document().buffer().serialize(), "one two");
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Numeric argument exceeds the 4096-step repeat limit")
+        );
     }
 
     #[test]
@@ -17242,6 +17632,8 @@ M-g g           goto-line                      Go to line or line:column\n"
             .handle_key(KeyEvent::Ctrl('x'))
             .expect("prefix should start");
         assert!(editor.handle_key(KeyEvent::Text("e".to_owned())).is_err());
+        assert!(!editor.replaying_keyboard_macro);
+        assert!(editor.keyboard_macro_budget.is_none());
 
         editor.cursor = Position::new(0, 0);
         editor
@@ -17253,6 +17645,7 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert!(editor.recording_keyboard_macro.is_some());
         assert!(!editor.replaying_keyboard_macro);
+        assert!(editor.keyboard_macro_budget.is_none());
     }
 
     #[test]
@@ -17340,6 +17733,81 @@ M-g g           goto-line                      Go to line or line:column\n"
             ">one\n>two\n>three\n"
         );
         assert_eq!(editor.cursor(), Position::new(3, 0));
+    }
+
+    #[test]
+    fn keyboard_macro_rejects_oversized_event_count_atomically() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.last_keyboard_macro = Some(vec![KeyEvent::Text("x".to_owned())]);
+
+        editor
+            .call_last_keyboard_macro(Some((MAX_KEYBOARD_MACRO_EVENTS + 1) as i32))
+            .expect("oversized replay should be rejected");
+
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(!editor.replaying_keyboard_macro);
+        assert!(editor.keyboard_macro_budget.is_none());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Keyboard macro exceeds the 4096-event limit")
+        );
+    }
+
+    #[test]
+    fn keyboard_macro_repeat_step_budget_is_cumulative() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.last_keyboard_macro = Some(vec![
+            KeyEvent::Ctrl('u'),
+            KeyEvent::Text("2".to_owned()),
+            KeyEvent::Ctrl('o'),
+            KeyEvent::Ctrl('u'),
+            KeyEvent::Text("2".to_owned()),
+            KeyEvent::Ctrl('o'),
+        ]);
+        let budget = KeyboardMacroBudget {
+            remaining_events: 6,
+            remaining_repeat_steps: 3,
+            exhausted: false,
+        };
+
+        editor
+            .call_last_keyboard_macro_with_budget(None, budget)
+            .expect("replay should stop before an oversized repeated edit");
+
+        assert_eq!(editor.document().buffer().serialize(), "\n\n");
+        assert!(editor.document().is_dirty());
+        assert!(!editor.replaying_keyboard_macro);
+        assert!(editor.keyboard_macro_budget.is_none());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Keyboard macro exceeded its repeat-step budget")
+        );
+    }
+
+    #[test]
+    fn keyboard_macro_numeric_insert_uses_repeat_step_budget() {
+        let mut editor = Editor::new(Document::scratch());
+        editor.last_keyboard_macro = Some(vec![
+            KeyEvent::Ctrl('u'),
+            KeyEvent::Text("3".to_owned()),
+            KeyEvent::Text("x".to_owned()),
+        ]);
+        let budget = KeyboardMacroBudget {
+            remaining_events: 3,
+            remaining_repeat_steps: 2,
+            exhausted: false,
+        };
+
+        editor
+            .call_last_keyboard_macro_with_budget(None, budget)
+            .expect("numeric insertion should respect the replay budget");
+
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Keyboard macro exceeded its repeat-step budget")
+        );
     }
 
     #[test]
