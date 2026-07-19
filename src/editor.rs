@@ -56,6 +56,8 @@ use search::{
 use search_history::SearchHistoryStore;
 
 const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
+const MAX_ARGUMENT_GENERATED_BYTES: usize = 1024 * 1024;
+const MAX_ARGUMENT_REPEAT_STEPS: usize = 4_096;
 const SHELL_COMMAND_RUNNING_MESSAGE: &str = "Running shell command... (C-g to cancel)";
 const BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE: &str =
     "Shell command running in background (M-x interrupt-shell-command to cancel)";
@@ -3613,6 +3615,15 @@ impl Editor {
         if count == 0 {
             return Ok(());
         }
+        if !self.ensure_buffer_editable() {
+            return Ok(());
+        }
+        if argument.is_some()
+            && checked_generated_bytes(text.len(), count, MAX_ARGUMENT_GENERATED_BYTES).is_none()
+        {
+            self.set_argument_generated_bytes_error();
+            return Ok(());
+        }
         self.insert_text(&text.repeat(count), group_with_previous)
     }
 
@@ -3621,10 +3632,27 @@ impl Editor {
         argument: Option<i32>,
         action: fn(&mut Self) -> Result<()>,
     ) -> Result<()> {
-        for _ in 0..positive_argument_count(argument) {
+        let count = positive_argument_count(argument);
+        if count > MAX_ARGUMENT_REPEAT_STEPS {
+            self.set_argument_repeat_error();
+            return Ok(());
+        }
+        for _ in 0..count {
             action(self)?;
         }
         Ok(())
+    }
+
+    fn set_argument_generated_bytes_error(&mut self) {
+        self.minibuffer.set_error(format!(
+            "Numeric argument would generate more than {MAX_ARGUMENT_GENERATED_BYTES} bytes"
+        ));
+    }
+
+    fn set_argument_repeat_error(&mut self) {
+        self.minibuffer.set_error(format!(
+            "Numeric argument exceeds the {MAX_ARGUMENT_REPEAT_STEPS}-step repeat limit"
+        ));
     }
 
     fn repeat_positive_kill(
@@ -4806,6 +4834,10 @@ impl Editor {
 
         let count = argument.unwrap_or(1);
         let replacement_count = count.unsigned_abs() as usize;
+        if checked_generated_bytes(1, replacement_count, MAX_ARGUMENT_GENERATED_BYTES).is_none() {
+            self.set_argument_generated_bytes_error();
+            return Ok(());
+        }
         let include_newlines = count < 0;
         let text = self.document().buffer().serialize();
         let cursor_absolute = position_to_absolute(self.document().buffer(), self.cursor)?;
@@ -9391,6 +9423,12 @@ fn positive_argument_count(argument: Option<i32>) -> usize {
     argument.unwrap_or(1).max(0) as usize
 }
 
+fn checked_generated_bytes(text_bytes: usize, count: usize, limit: usize) -> Option<usize> {
+    text_bytes
+        .checked_mul(count)
+        .filter(|generated_bytes| *generated_bytes <= limit)
+}
+
 fn case_transform_text(text: &str, transform: CaseTransform) -> String {
     match transform {
         CaseTransform::Lower => text.chars().flat_map(char::to_lowercase).collect(),
@@ -10038,9 +10076,10 @@ mod tests {
     };
     use super::{
         AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
-        Editor, EditorOutcome, EditorPatternMatch, KillEntry, SHELL_COMMAND_RUNNING_MESSAGE,
-        SearchDirection, ShellCancellationRequest, file_prompt_base_input, format_rectangle_number,
-        format_shell_command_error, highlight_phrase_regexp,
+        Editor, EditorOutcome, EditorPatternMatch, KillEntry, MAX_ARGUMENT_GENERATED_BYTES,
+        MAX_ARGUMENT_REPEAT_STEPS, SHELL_COMMAND_RUNNING_MESSAGE, SearchDirection,
+        ShellCancellationRequest, checked_generated_bytes, file_prompt_base_input,
+        format_rectangle_number, format_shell_command_error, highlight_phrase_regexp,
     };
     use crate::RileError;
     use crate::buffer::undo::UndoRecord;
@@ -17008,6 +17047,71 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn universal_argument_rejects_oversized_generated_text_atomically() {
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Ctrl('u'))
+            .expect("C-u should start argument");
+        for digit in (MAX_ARGUMENT_GENERATED_BYTES + 1).to_string().chars() {
+            editor
+                .handle_key(KeyEvent::Text(digit.to_string()))
+                .expect("digit should update argument");
+        }
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("oversized insertion should be rejected without failing dispatch");
+
+        assert_eq!(editor.document().buffer().serialize(), "");
+        assert_eq!(editor.cursor(), Position::new(0, 0));
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Numeric argument would generate more than 1048576 bytes")
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("x".to_owned()))
+            .expect("editing should continue after rejection");
+        editor
+            .undo()
+            .expect("ordinary insertion should be undoable");
+        assert_eq!(editor.document().buffer().serialize(), "");
+    }
+
+    #[test]
+    fn universal_argument_rejects_oversized_growth_repeat_atomically() {
+        for key in [KeyEvent::Ctrl('o'), KeyEvent::Ctrl('j')] {
+            let mut editor = Editor::new(Document::scratch());
+            editor
+                .handle_key(KeyEvent::Ctrl('u'))
+                .expect("C-u should start argument");
+            for digit in (MAX_ARGUMENT_REPEAT_STEPS + 1).to_string().chars() {
+                editor
+                    .handle_key(KeyEvent::Text(digit.to_string()))
+                    .expect("digit should update argument");
+            }
+            editor
+                .handle_key(key)
+                .expect("oversized repeat should be rejected without failing dispatch");
+
+            assert_eq!(editor.document().buffer().serialize(), "");
+            assert_eq!(editor.cursor(), Position::new(0, 0));
+            assert!(!editor.document().is_dirty());
+            assert_eq!(
+                editor.minibuffer.message.as_deref(),
+                Some("Error: Numeric argument exceeds the 4096-step repeat limit")
+            );
+        }
+    }
+
+    #[test]
+    fn generated_byte_check_covers_boundaries_and_overflow() {
+        assert_eq!(checked_generated_bytes(2, 4, 8), Some(8));
+        assert_eq!(checked_generated_bytes(2, 5, 8), None);
+        assert_eq!(checked_generated_bytes(usize::MAX, 2, usize::MAX), None);
+    }
+
+    #[test]
     fn universal_argument_does_not_leak_after_prompt_cancel() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -19429,6 +19533,30 @@ M-g g           goto-line                      Go to line or line:column\n"
             .just_one_space(Some(0))
             .expect("zero just-one-space should delete spaces");
         assert_eq!(editor.document().buffer().serialize(), "alphabeta");
+    }
+
+    #[test]
+    fn just_one_space_rejects_oversized_replacement_atomically() {
+        let mut document = Document::scratch();
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "a   b")
+            .expect("fixture should insert");
+        document.buffer_mut().mark_clean();
+        let mut editor = Editor::new(document);
+        editor.cursor = Position::new(0, 2);
+
+        editor
+            .just_one_space(Some((MAX_ARGUMENT_GENERATED_BYTES + 1) as i32))
+            .expect("oversized replacement should be rejected");
+
+        assert_eq!(editor.document().buffer().serialize(), "a   b");
+        assert_eq!(editor.cursor(), Position::new(0, 2));
+        assert!(!editor.document().is_dirty());
+        assert_eq!(
+            editor.minibuffer.message.as_deref(),
+            Some("Error: Numeric argument would generate more than 1048576 bytes")
+        );
     }
 
     #[test]
