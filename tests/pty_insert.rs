@@ -116,6 +116,35 @@ fn universal_argument_repeats_visible_movement_and_insert() -> Result<()> {
 }
 
 #[test]
+fn oversized_universal_argument_remains_responsive_and_rejects_growth() -> Result<()> {
+    let file = fixtures::named_temp_file("abc\n")?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("abc")?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("saturated count", b"9999999999")?;
+    rile.send("C-f", keys::control('f'))?;
+    rile.assert_cursor(1, 0)?;
+
+    rile.send("M-<", keys::meta('<'))?;
+    rile.send("C-u", keys::control('u'))?;
+    rile.send("oversized insertion count", b"9999999999")?;
+    rile.send("x", b"x")?;
+    rile.wait_for_screen_contains(
+        "Error: Numeric argument would generate more than 1048576 bytes",
+    )?;
+    rile.assert_screen_contains("abc")?;
+    rile.assert_status_contains("modified:false")?;
+
+    rile.send("ordinary insertion after rejection", b"y")?;
+    rile.wait_for_screen_contains("yabc")?;
+    rile.assert_cursor(0, 1)?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn case_conversion_commands_update_visible_buffer() -> Result<()> {
     let file = fixtures::named_temp_file("alpha BETA\nMiXeD region\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;
