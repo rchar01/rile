@@ -595,7 +595,8 @@ Messages: no success message is required for the normal edit.
 
 Rile implementation: implements an unbound `M-x` subset before `cycle-spacing`:
 no-argument one-space collapse, positive numeric arguments for horizontal space,
-and negative numeric arguments that also collapse newlines.
+and negative numeric arguments that also collapse newlines. Rile rejects a
+numeric replacement larger than 1 MiB before mutation.
 
 Evidence: GNU Emacs `describe-function` output for `just-one-space`; current GNU
 Emacs key binding for `M-SPC` resolves to `cycle-spacing`; `M-x just-one-space`
@@ -776,7 +777,9 @@ Rile implementation: implements a small compatible subset using Rile's documente
 word boundaries: no-prefix behavior, positive and negative repeat counts,
 punctuation preservation between swapped words, point placement, read-only checks,
 and one undo entry per command. It defers zero-argument mark-based behavior and
-exact Emacs syntax-table edge cases.
+exact Emacs syntax-table edge cases. Rile rejects counts above 4,096 and
+arguments that add more than 1 MiB of full-buffer transpose work before
+mutation.
 
 Evidence: GNU Emacs manual, Transposing Text, `M-t`; GNU Emacs
 `describe-function` output for `transpose-words`; local batch probes for

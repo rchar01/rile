@@ -7,6 +7,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* Numeric arguments can no longer turn a short terminal input sequence into a
+  multi-gigabyte allocation or billions of synchronous editor iterations.
+  Argument-driven insertion and spacing are limited to 1 MiB, repeated growth
+  and word transposition are limited to 4,096 steps, and keyboard
+  macro replay is limited to 4,096 events and cumulative repeat steps. Finite
+  movement, deletion, killing, and word-case operations stop at buffer edges.
+  Oversized individual edits are rejected before mutation. If a cumulative
+  macro budget is exhausted, earlier replay edits remain and later input stays
+  responsive.
+
 * Terminal input decoding now bounds incomplete numeric CSI sequences. A
   terminal or PTY peer can no longer make Rile retain and repeatedly rescan an
   unbounded digit or parameter stream without sending a sequence terminator.

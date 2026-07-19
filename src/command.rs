@@ -452,7 +452,9 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         UndoRedo => "Redo a change that was just undone.",
         UncommentRegion => "Remove line comment markers from the active region.",
         UnhighlightRegexp => "Remove a persistent highlight pattern from the current buffer.",
-        UniversalArgument => "Set or extend the numeric argument for the next command.",
+        UniversalArgument => {
+            "Set or extend a resource-bounded numeric argument for the next command."
+        }
         UpcaseRegion => "Convert the active region to upper case.",
         UpcaseWord => "Convert the following word or words to upper case.",
         ViewEchoAreaMessages => "Open the read-only message history buffer.",
@@ -1342,7 +1344,7 @@ pub fn default_commands() -> Vec<CommandSpec> {
         .with_handler(crate::editor::Editor::command_uncomment_region),
         CommandSpec::new(
             "universal-argument",
-            "Set a numeric argument for the next command",
+            "Set a resource-bounded numeric argument for the next command",
             true,
             UniversalArgument,
         )

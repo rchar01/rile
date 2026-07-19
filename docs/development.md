@@ -146,6 +146,10 @@ Milestone 10 adds region, kill/yank, and undo:
 - `C-u` and `universal-argument` supply a numeric argument to the next
   repeatable command, including self-insert, line/character/word movement,
   character deletion, word kills, `C-k`, `C-j`, and `C-o`;
+- argument-driven insertion and spacing reject more than 1 MiB of generated
+  text before allocation or mutation; repeated growth and expensive transpose
+  work reject counts above 4,096, while finite movement, deletion, killing, and
+  word-case traversal stop at actual buffer boundaries;
 - `C-k` and `kill-line` delete to end of line or delete the line break at end of line;
 - `C-j` and `newline-and-indent` insert a newline and leave point at the start
   of the new line in the current plain-text mode;
@@ -290,7 +294,9 @@ the grapheme boundaries needed to reach point and the target, uses constant
 auxiliary metadata, limits replacement and undo strings to the affected range,
 and bounds saturated numeric arguments by actual line progress. Newline-free
 buffer insertion mutates the stored line directly rather than cloning unrelated
-text around the insertion point.
+text around the insertion point. Word transposition rejects more than 4,096
+steps or more than 1 MiB of additional full-buffer transpose work before
+serializing the buffer.
 
 Post-Milestone 14 case-conversion polish adds `downcase-word` on `M-l`,
 `upcase-word` on `M-u`, `capitalize-word` on `M-c`, `downcase-region` on
@@ -304,13 +310,15 @@ Post-Milestone 14 whitespace cleanup polish adds `delete-horizontal-space` on
 `M-\`, `delete-blank-lines` on `C-x C-o`, `delete-trailing-whitespace` as an
 unbound `M-x` command, and `just-one-space` as an unbound `M-x` command.
 Horizontal cleanup deletes ASCII spaces and tabs around point, or only before
-point with a prefix argument. `just-one-space` leaves a requested number of spaces
-around point, and negative arguments also collapse newlines. Blank-line cleanup
-uses Rile's space/tab-only blank-line definition, collapses blank runs to one
-blank line, deletes isolated blank lines, and deletes following blank lines after
-a nonblank line. Trailing cleanup deletes ASCII spaces and tabs at physical line
-ends across the whole buffer or within active-region bounds. These commands
-respect read-only buffers and record one undo entry for each command result.
+point with a prefix argument. `just-one-space` leaves a requested number of
+spaces around point, and negative arguments also collapse newlines. It rejects a
+replacement larger than 1 MiB before constructing or applying it. Blank-line
+cleanup uses Rile's space/tab-only blank-line definition, collapses blank runs
+to one blank line, deletes isolated blank lines, and deletes following blank
+lines after a nonblank line. Trailing cleanup deletes ASCII spaces and tabs at
+physical line ends across the whole buffer or within active-region bounds.
+These commands respect read-only buffers and record one undo entry for each
+command result.
 
 Post-Milestone 14 file polish adds `write-file` on `C-x C-w`, prompting with
 `Write file: `, saving the current buffer to the entered path, and making that
@@ -508,7 +516,10 @@ starts, trims the terminating `C-x )`, and replays the saved keys through normal
 editor key handling so prompt input and command dispatch behave like typed input.
 Macro replay skips recording, rejects recursive or nested macro execution, and
 honors `C-u` repeat counts before `C-x e`. Emacs-style `C-u 0 C-x e` repeat until
-error behavior is deferred; Rile currently treats zero as zero executions.
+error behavior is deferred; Rile currently treats zero as zero executions. One
+replay is limited to 4,096 dispatched key events and 4,096 cumulative numeric
+repeat steps. Oversized event counts are rejected before cloning the recorded
+macro, and budget exhaustion clears replay state without ending the editor.
 
 Post-Milestone 14 rectangle polish adds `C-x SPC` / `rectangle-mark-mode`.
 Rectangle mark mode stores a rectangular active region in display columns and

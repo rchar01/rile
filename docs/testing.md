@@ -53,6 +53,16 @@ Sentence movement unit tests cover UTF-8 byte positions, formfeed paragraph
 separators, retained CRLF behavior, and saturated numeric arguments that must
 stop at buffer edges. PTY coverage exercises the default `M-a` and `M-e` paths.
 
+Universal-argument security tests inject saturated signed counts only into paths
+that stop at finite buffer boundaries. Small synthetic values cover checked byte
+arithmetic and cumulative keyboard-macro repeat-step exhaustion; the production
+4,096-event limit is tested directly before replay. Tests also cover atomic
+single-command rejection and cleanup after replay errors. The PTY regression
+enters a saturating decimal argument through real input, verifies movement
+completes, confirms oversized insertion is rejected before mutation, and then
+performs an ordinary edit. Tests must not attempt the allocation or iteration
+count that originally exposed the availability issue.
+
 Paragraph filling unit tests verify that edits and undo records contain only the
 affected paragraph range, including multi-paragraph undo and redo, no-op fills,
 large collections of short words, retained carriage returns, and UTF-8 cursor

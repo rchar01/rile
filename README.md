@@ -75,11 +75,16 @@ Basic editor keys:
 - Printable UTF-8 text inserts at point.
 - `C-q` quotes the next key, inserting printable text, Tab, or Enter literally.
 - `C-u` supplies a numeric argument for the next repeatable command; repeated
-  `C-u` multiplies by four, and digits enter an explicit count.
+  `C-u` multiplies by four, and digits enter an explicit count. Argument-driven
+  insertion and spacing may generate at most 1 MiB per command. Repeated growth
+  and word-transposition operations are limited to 4,096 steps; rejected
+  commands leave the buffer unchanged. Finite movement, deletion, killing, and
+  word-case commands stop when they reach a buffer edge.
 - `C-x (` starts recording a keyboard macro, `C-x )` ends it, and `C-x e`
   replays the latest macro. `C-u` before `C-x e` repeats macro execution. F3
   starts recording and F4 ends recording or replays the latest macro when the
-  terminal sends common function-key escape sequences.
+  terminal sends common function-key escape sequences. One replay may dispatch
+  at most 4,096 key events and 4,096 cumulative numeric repeat steps.
 - Backspace deletes before point; `C-d`/Delete deletes at point.
 - `M-d` kills the next word; `M-Backspace` kills the previous word.
 - `M-l`, `M-u`, and `M-c` downcase, upcase, and capitalize words. `C-x C-l`

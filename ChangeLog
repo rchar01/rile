@@ -1,3 +1,38 @@
+2026-07-19  Robert Charusta  <rch-public@posteo.net>
+
+	Bound universal-argument resource use.
+
+	* src/editor.rs (MAX_ARGUMENT_GENERATED_BYTES,
+	MAX_ARGUMENT_REPEAT_STEPS, MAX_KEYBOARD_MACRO_EVENTS): New limits.
+	(KeyboardMacroBudget): Track replay events and cumulative repeat work.
+	(Editor::insert_text_with_argument, Editor::repeat_positive,
+	Editor::just_one_space): Reject oversized generated edits and growth
+	repeats before mutation.
+	(Editor::repeat_signed_edit, Editor::repeat_signed_motion,
+	Editor::repeat_positive_kill, Editor::repeat_signed_kill): Stop finite
+	repeats when editing or point movement reaches a buffer edge.
+	(Editor::call_last_keyboard_macro_with_budget): Reject oversized replay
+	before cloning and enforce cumulative repeat work with cleanup on every
+	terminal path.
+	(Editor::word_case_range_with_steps,
+	transpose_chars_effective_steps): Bound traversal by actual progress and
+	the active macro budget.
+	(Editor::transpose_words): Check repeat and additional full-buffer work
+	before serialization or mutation.
+	(checked_generated_bytes, checked_additional_repeat_bytes): New checked
+	resource helpers.
+	(tests): Cover exact byte arithmetic, atomic rejection, saturated
+	movement, deletion, killing and case traversal, transpose work, and macro
+	event, repeat, and cleanup limits.
+	* tests/pty_insert.rs
+	(oversized_universal_argument_remains_responsive_and_rejects_growth): New
+	real-input regression for saturated movement, allocation rejection, and
+	subsequent editing.
+	* src/command.rs: Describe numeric arguments as resource-bounded.
+	* README.md, NEWS, docs/development.md, docs/testing.md,
+	docs/emacs-function-reference.md: Document limits, boundary behavior,
+	security coverage, and deliberate extreme-count divergence.
+
 2026-07-18  Robert Charusta  <rch-public@posteo.net>
 
 	Add display-only background shell commands.
