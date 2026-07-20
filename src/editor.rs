@@ -7365,7 +7365,7 @@ impl Editor {
                     .document_mut()
                     .buffer_mut()
                     .insert(cursor_before, &text)?;
-                self.record_insert(cursor_before, self.cursor, &text, false);
+                self.push_insert_record(cursor_before, self.cursor, text, false);
                 self.goal_display_column = None;
                 self.deactivate_region();
                 self.sync_current_window();
@@ -8504,17 +8504,31 @@ impl Editor {
             self.refresh_visible_buffer_list();
             return;
         }
+        self.push_insert_record(start, end, text.to_owned(), group_with_previous);
+    }
+
+    fn push_insert_record(
+        &mut self,
+        start: Position,
+        end: Position,
+        text: String,
+        group_with_previous: bool,
+    ) {
+        if text.is_empty() {
+            return;
+        }
+        let grouping_insert = group_with_previous && !text.contains('\n');
         self.undo_stack.push(UndoEntry {
             buffer: self.current_buffer,
             record: UndoRecord::Insert {
                 range: TextRange::new(start, end),
-                text: text.to_owned(),
+                text,
                 cursor_before: start,
                 cursor_after: end,
             },
             kind: UndoEntryKind::Edit,
         });
-        self.grouping_insert = group_with_previous && !text.contains('\n');
+        self.grouping_insert = grouping_insert;
         self.refresh_visible_buffer_list();
     }
 
@@ -10306,7 +10320,7 @@ mod tests {
         CompletionConfig, CompletionMatching, CompletionSession, CompletionStyle,
     };
     use crate::config::{Config, ThemeName};
-    use crate::file::{Document, DocumentKind};
+    use crate::file::{Document, DocumentKind, MAX_INSERT_FILE_NEWLINES};
     use crate::input::{KeyEvent, SpecialKey};
     use crate::keymap::{KeyBinding, KeyMap, KeyMapId, KeyMapStack};
     use crate::minibuffer::PromptKind;
@@ -16724,6 +16738,37 @@ M-g g           goto-line                      Go to line or line:column\n"
                 .message
                 .as_deref()
                 .is_some_and(|message| message.contains("not valid UTF-8"))
+        );
+    }
+
+    #[test]
+    fn insert_file_rejects_newline_dense_input_without_modifying_editor_state() {
+        let directory = TestDir::new();
+        let source = directory.path().join("newline-dense.txt");
+        fs::write(&source, "\n".repeat(MAX_INSERT_FILE_NEWLINES + 1))
+            .expect("newline-dense source file should be written");
+        let mut editor = Editor::new(Document::scratch());
+        editor
+            .handle_key(KeyEvent::Text("safe".to_owned()))
+            .expect("initial text should insert");
+        let cursor_before = editor.cursor();
+        let dirty_before = editor.document().is_dirty();
+        let undo_depth_before = editor.undo_stack.len();
+
+        editor
+            .insert_file(source.to_str().expect("path should be utf-8"))
+            .expect("oversized input should be reported");
+
+        assert_eq!(editor.document().buffer().serialize(), "safe");
+        assert_eq!(editor.cursor(), cursor_before);
+        assert_eq!(editor.document().is_dirty(), dirty_before);
+        assert_eq!(editor.undo_stack.len(), undo_depth_before);
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("100000-line-break limit"))
         );
     }
 

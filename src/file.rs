@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use std::fs::{self, Metadata, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
@@ -11,6 +11,9 @@ use crate::buffer::Buffer;
 use crate::{Result, RileError};
 
 static SAVE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+pub(crate) const MAX_INSERT_FILE_BYTES: usize = 8 * 1024 * 1024;
+pub(crate) const MAX_INSERT_FILE_NEWLINES: usize = 100_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentKind {
@@ -535,7 +538,38 @@ Rile is free software under GPL-3.0-or-later.\n",
 
 pub fn read_text_file(path: impl AsRef<Path>) -> Result<String> {
     let path = path.as_ref();
-    decode_text_file_bytes(path, fs::read(path)?)
+    read_text_file_with_limits(
+        path,
+        fs::File::open(path)?,
+        MAX_INSERT_FILE_BYTES,
+        MAX_INSERT_FILE_NEWLINES,
+    )
+}
+
+fn read_text_file_with_limits(
+    path: &Path,
+    reader: impl Read,
+    byte_limit: usize,
+    newline_limit: usize,
+) -> Result<String> {
+    let read_limit = byte_limit
+        .checked_add(1)
+        .ok_or_else(|| RileError::InvalidInput("insert-file byte limit is too large".to_owned()))?;
+    let mut bytes = Vec::new();
+    reader.take(read_limit as u64).read_to_end(&mut bytes)?;
+    if bytes.len() > byte_limit {
+        return Err(RileError::InvalidInput(format!(
+            "insert-file input exceeded the {byte_limit}-byte limit: {}",
+            path.display()
+        )));
+    }
+    if bytes.iter().filter(|byte| **byte == b'\n').count() > newline_limit {
+        return Err(RileError::InvalidInput(format!(
+            "insert-file input exceeded the {newline_limit}-line-break limit: {}",
+            path.display()
+        )));
+    }
+    decode_text_file_bytes(path, bytes)
 }
 
 fn file_stamp_from_path(path: &Path) -> Result<Option<FileStamp>> {
@@ -777,13 +811,29 @@ fn sync_parent_directory(path: &Path) {
 #[cfg(test)]
 mod tests {
     use std::fs;
+    use std::io::{self, Cursor, Read};
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    use super::{Document, DocumentKind, SAVE_COUNTER, backup_path, safe_write, temporary_path};
+    use super::{
+        Document, DocumentKind, SAVE_COUNTER, backup_path, read_text_file_with_limits, safe_write,
+        temporary_path,
+    };
     use crate::buffer::Position;
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    struct RepeatingReader {
+        bytes_read: usize,
+    }
+
+    impl Read for RepeatingReader {
+        fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+            buffer.fill(b'a');
+            self.bytes_read += buffer.len();
+            Ok(buffer.len())
+        }
+    }
 
     struct TestDir {
         path: PathBuf,
@@ -807,6 +857,56 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+
+    #[test]
+    fn bounded_text_read_accepts_exact_byte_limit() {
+        let path = Path::new("source.txt");
+
+        let text = read_text_file_with_limits(path, Cursor::new("é".as_bytes()), 2, 0)
+            .expect("complete UTF-8 at the byte limit should be accepted");
+
+        assert_eq!(text, "é");
+    }
+
+    #[test]
+    fn bounded_text_read_rejects_input_above_limit_before_decoding() {
+        let path = Path::new("source.txt");
+
+        let error = read_text_file_with_limits(path, Cursor::new([0xff, b'a']), 1, 0)
+            .expect_err("input above the byte limit should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "invalid input: insert-file input exceeded the 1-byte limit: source.txt"
+        );
+    }
+
+    #[test]
+    fn bounded_text_read_stops_non_terminating_reader_after_detection_byte() {
+        let path = Path::new("source.txt");
+        let mut reader = RepeatingReader { bytes_read: 0 };
+
+        let error = read_text_file_with_limits(path, &mut reader, 5, 0)
+            .expect_err("non-terminating input should exceed the limit");
+
+        assert!(error.to_string().contains("exceeded the 5-byte limit"));
+        assert_eq!(reader.bytes_read, 6);
+    }
+
+    #[test]
+    fn bounded_text_read_rejects_excessive_line_breaks() {
+        let path = Path::new("source.txt");
+        let accepted = read_text_file_with_limits(path, Cursor::new(b"a\nb\n"), 4, 2)
+            .expect("input at the line-break limit should be accepted");
+        assert_eq!(accepted, "a\nb\n");
+
+        let error = read_text_file_with_limits(path, Cursor::new(b"\n\n"), 2, 1)
+            .expect_err("newline-dense input should exceed the limit");
+        assert_eq!(
+            error.to_string(),
+            "invalid input: insert-file input exceeded the 1-line-break limit: source.txt"
+        );
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 mod support;
 
-use std::fs;
+use std::{fs, time::Duration};
 
 use anyhow::{Context, Result};
 
@@ -290,6 +290,33 @@ fn insert_file_inserts_contents_at_point() -> Result<()> {
     if rile.snapshot_text().contains("inserted line") {
         anyhow::bail!("undo did not remove inserted file\n{}", rile.screen_dump());
     }
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
+fn insert_file_rejects_oversized_input_and_remains_responsive() -> Result<()> {
+    const OVERSIZED_INSERT_BYTES: u64 = 8 * 1024 * 1024 + 1;
+
+    let directory = tempfile::tempdir()?;
+    let start = directory.path().join("start.txt");
+    let source = directory.path().join("oversized.txt");
+    fs::write(&start, "before\n")?;
+    fs::File::create(&source)?.set_len(OVERSIZED_INSERT_BYTES)?;
+    let mut rile = RilePty::spawn(&start, 12, 100)?;
+
+    rile.wait_for_screen_contains("before")?;
+    rile.send("C-x", keys::control('x'))?;
+    rile.send("i", b"i")?;
+    rile.assert_screen_contains("Insert file:")?;
+    rile.send("oversized file", b"oversized.txt")?;
+    rile.send("Enter", keys::ENTER)?;
+
+    rile.wait_for_screen_contains_for("8388608-byte limit", Duration::from_secs(5))?;
+    rile.assert_status_contains("modified:false")?;
+    rile.send("post-rejection edit", b"safe ")?;
+    rile.wait_for_screen_contains("safe before")?;
 
     rile.quit()?;
     Ok(())
