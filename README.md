@@ -157,7 +157,8 @@ Basic editor keys:
   Directory candidates descend after Tab, exact input, explicit selection, or a
   typed directory prefix.
 - `C-x i` prompts for a file path with completion and inserts its contents;
-  Enter accepts the selected existing path.
+  Enter accepts the selected existing path. One insertion accepts at most 8 MiB
+  and 100,000 LF line breaks; oversized input leaves the buffer unchanged.
 - `C-x C-r` prompts for a file path with completion and opens it read-only;
   Enter accepts the selected existing path.
 - `C-x C-q` toggles whether the current normal buffer is read-only.

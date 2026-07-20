@@ -7,6 +7,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* `C-x i` now reads at most 8 MiB plus one detection byte and accepts at most
+  100,000 LF line breaks per inserted file. Oversized or newline-dense input is
+  rejected before buffer mutation or undo recording, preventing a selected
+  local file from exhausting editor memory. Successful non-empty insertion also
+  moves the read text into undo storage instead of making another full payload
+  copy.
+
 * Numeric arguments can no longer turn a short terminal input sequence into a
   multi-gigabyte allocation or billions of synchronous editor iterations.
   Argument-driven insertion and spacing are limited to 1 MiB, repeated growth

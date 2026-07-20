@@ -201,6 +201,15 @@ it does not treat those lossy prompt paths as round-trippable filesystem names.
 Narrow control-escape clipping remains a terminal unit test because its exact
 viewport boundary is more deterministic below the PTY layer.
 
+Insert-file resource tests use small injected reader limits to cover exact byte
+and LF line-break boundaries, size-error precedence over UTF-8 decoding, and a
+non-terminating reader stopped after one detection byte. Editor coverage
+verifies that newline-dense rejection preserves text, point, modified state, and
+undo depth. The PTY regression uses a sparse file one byte above the production
+8 MiB limit, checks rejection through `C-x i`, and performs a subsequent edit;
+tests must not reproduce the original allocation-exhaustion payload under a
+memory limit.
+
 ## Fixtures
 
 Visual and PTY fixtures live under `fixtures/visual/`. Keep them as UTF-8 text with LF line endings.

@@ -382,7 +382,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         IncrementalSearchForward => "Start forward incremental search from point.",
         IncrementalSearchRegexpBackward => "Start backward regexp incremental search from point.",
         IncrementalSearchRegexpForward => "Start forward regexp incremental search from point.",
-        InsertFile => "Prompt for a file path and insert its contents at point.",
+        InsertFile => "Insert up to 8 MiB and 100,000 LF line breaks from a prompted file.",
         InsertRegister => "Insert the text, rectangle, or number stored in a register.",
         IncrementRegister => "Add the numeric argument to a prompted number register.",
         InterruptShellCommand => "Interrupt the active shell command process group.",

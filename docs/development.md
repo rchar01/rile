@@ -443,11 +443,16 @@ not written to the terminal as control sequences.
 
 Post-Milestone 14 file polish also adds `C-x i` / `insert-file`, prompting
 with `Insert file: ` and using the shared file-completion and relative-path
-resolution path. Inserted files use the same UTF-8 and binary-file validation
-as file opening, insert at point, mark the current buffer dirty, and record an
-undo entry. Empty input reports `Error: missing file name` to match Rile's
-existing file prompts, even though base Emacs defaults empty `insert-file` input
-to the current file.
+resolution path. Inserted files use the same UTF-8 and binary-file validation as
+file opening, but their dedicated reader reads at most 8 MiB plus one
+detection byte and accepts at most 100,000 LF line breaks. Limit failures occur
+before decoding, buffer mutation, or undo recording. Successful non-empty input
+inserts at point, marks the current buffer dirty, and moves the read string into
+one undo entry without another full payload copy. These limits do not apply to
+ordinary file opening. Empty prompt input reports `Error: missing file name` to
+match Rile's existing file prompts, even though base Emacs defaults empty
+`insert-file` input to the current file. An accepted empty file does not change
+the buffer or create an undo entry.
 
 Post-Milestone 14 file-state polish adds `revert-buffer` on `C-x C-v` and
 `not-modified` as an unbound `M-x` command. Revert reloads file-backed normal

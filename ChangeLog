@@ -1,3 +1,26 @@
+2026-07-20  Robert Charusta  <rch-public@posteo.net>
+
+	Bound insert-file memory use.
+
+	* src/file.rs (MAX_INSERT_FILE_BYTES, MAX_INSERT_FILE_NEWLINES): New
+	per-command limits.
+	(read_text_file, read_text_file_with_limits): Stop streaming after one
+	detection byte and reject byte or LF line-break excess before decoding.
+	(tests): Cover exact limits, error precedence, newline density, and a
+	non-terminating reader.
+	* src/editor.rs (Editor::insert_file): Move accepted text into undo
+	storage after insertion.
+	(Editor::record_insert, Editor::push_insert_record): Separate grouped
+	borrowed insertion from owned undo recording.
+	(tests): Verify newline-dense rejection preserves editor and undo state.
+	* tests/pty_save.rs
+	(insert_file_rejects_oversized_input_and_remains_responsive): New
+	real-input rejection and recovery regression.
+	* src/command.rs (default_doc_for_command): Describe insert-file resource
+	limits.
+	* README.md, NEWS, docs/development.md, docs/testing.md: Document limits,
+	atomic rejection, ownership behavior, and safe regression strategy.
+
 2026-07-19  Robert Charusta  <rch-public@posteo.net>
 
 	Bound universal-argument resource use.
