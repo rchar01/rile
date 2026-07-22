@@ -1869,6 +1869,61 @@ mod tests {
     }
 
     #[test]
+    fn successful_backup_survives_failed_source_write_and_retry() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+        let temporary_paths = (0..256)
+            .map(|counter| {
+                directory.path().join(format!(
+                    ".save.txt.rile-tmp-{}-{counter}",
+                    std::process::id()
+                ))
+            })
+            .collect::<Vec<_>>();
+        for temporary in &temporary_paths {
+            fs::write(temporary, "collision").expect("collision should be written");
+        }
+        SAVE_COUNTER.store(0, Ordering::Relaxed);
+
+        let error = document
+            .save()
+            .expect_err("source temporary collisions should fail the save");
+
+        assert!(error.to_string().contains("I/O error"));
+        assert_eq!(fs::read_to_string(&path).expect("file should read"), "old");
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+        assert!(document.is_dirty());
+
+        for temporary in temporary_paths {
+            fs::remove_file(temporary).expect("collision should be removed");
+        }
+        document
+            .save()
+            .expect("retry should save without replacing backup");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old new"
+        );
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+        assert!(!document.is_dirty());
+    }
+
+    #[test]
     fn save_as_new_path_gets_a_new_backup_cycle() {
         let directory = TestDir::new();
         let first = directory.path().join("first.txt");
