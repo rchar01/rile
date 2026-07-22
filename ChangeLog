@@ -1,5 +1,24 @@
 2026-07-22  Robert Charusta  <rch-public@posteo.net>
 
+	Avoid quadratic decoration-span merging.
+
+	* src/render/mod.rs (merge_spans): Replace per-boundary full-span scans
+	with an ordered event sweep that preserves priority and input-order ties.
+	(later_span_wins_when_face_priorities_match,
+	ordered_merge_matches_reference_for_generated_overlaps): New tests.
+	(reference_merge_spans): New test helper.
+	* src/editor.rs (dense_syntax_line_preserves_all_keyword_spans): Exercise
+	the default Rust syntax path with 20,000 keyword spans.
+	* tools/perf/bench.py (prepare_fixtures, write_syntax_line, build_cases):
+	Add open and redraw smoke cases for a keyword-dense Rust line.
+	* README.md, NEWS, docs/architecture.md, docs/development.md,
+	docs/testing.md, docs/performance.md: Document responsive span merging,
+	security coverage, performance smoke testing, and residual full-line work.
+	* plans/syntax-rendering-follow-ups.md: Track optional range-aware
+	decoration and caching work.
+
+2026-07-22  Robert Charusta  <rch-public@posteo.net>
+
 	Prevent save backups from disclosing file contents.
 
 	* src/file.rs (Document::write_to_path): Capture final-path metadata,

@@ -173,7 +173,7 @@ Milestone 12 cleans up the face and decoration architecture:
 - `render::Face` now defines stable priority values for overlapping spans;
 - `render::Span` has shared construction and validation helpers;
 - `render::DecorationProvider` remains the common line-decoration interface;
-- `render::collect_spans_for_line`, `merge_spans`, and `clip_spans` centralize decoration collection, priority merging, and viewport clipping;
+- `render::collect_spans_for_line`, `merge_spans`, and `clip_spans` centralize decoration collection, ordered `O(s log s)` priority merging, and viewport clipping;
 - region, incremental-search, and query-replace highlights are implemented as editor decoration providers instead of one ad hoc span builder;
 - terminal rendering applies mode-line, minibuffer, warning, and error faces through the same face-to-ANSI path;
 - tests cover provider collection, UTF-8 boundary rejection, span priority splitting, clipping, and fixed-width faced terminal output.
@@ -668,7 +668,8 @@ column through the viewport end plus 256 characters of slack, preserving
 ordinary combining text while bounding pathological zero-width runs. Budget
 exhaustion uses the normal right-edge marker. This bounds plain-text redraw work
 near line start; active syntax, search, and persistent highlights may still scan
-a complete source line before terminal projection.
+a complete source line before terminal projection. Their spans merge with an
+ordered boundary sweep, avoiding per-boundary scans of the complete span list.
 
 ## Line Ending Policy
 

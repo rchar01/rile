@@ -95,6 +95,13 @@ budget-exhaustion regression verifies a right marker replaces trailing
 zero-width characters without exceeding the viewport. Existing PTY scrolling
 tests cover visible horizontal markers and cursor placement.
 
+Decoration-merge unit tests compare the ordered sweep with the previous simple
+algorithm across deterministic generated overlaps, including invalid spans and
+equal-priority input-order ties. An editor regression opens a Rust buffer with
+20,000 keywords and verifies all generated spans survive collection and merging.
+These tests avoid wall-clock thresholds; the optional performance suite supplies
+runtime smoke evidence for the complete open and redraw path.
+
 Shell-job unit tests use small injected output budgets and deadlines to cover the
 exact combined-output boundary, infinite producers, UTF-8 byte boundaries,
 silent-command timeout, ordinary descendant cleanup, early stdin closure, and
@@ -163,9 +170,9 @@ Optional visual demos live under `demos/*.tape`. They run Rile through VHS and w
 
 Optional performance smoke tests run through `make perf-smoke`. They compare
 Rile, GNU Emacs, GNU Zile, kg, and Debian `vi` on generated large-file and
-long-line fixtures, including explicit redraw-at-column-zero timing. They write
-ignored timing evidence under `artifacts/perf/` and are documented in
-`docs/performance.md`.
+long-line fixtures, including explicit redraw-at-column-zero timing for both
+plain text and keyword-dense Rust syntax. They write ignored timing evidence
+under `artifacts/perf/` and are documented in `docs/performance.md`.
 
 ## Metadata And Help Tests
 

@@ -184,10 +184,11 @@ truncation marker. Syntax, search, and persistent-highlight providers still
 prepare source spans before terminal projection and may inspect the complete
 logical line.
 
-Decorations are expressed as face spans. `src/render/` merges overlapping spans by
-priority and clips them to the visible byte range. This lets syntax, region,
-search, query-replace, mode-line, minibuffer, warning, and error styling share
-one rendering path.
+Decorations are expressed as face spans. `src/render/` merges overlapping spans
+with an ordered boundary sweep keyed by face priority and provider order, then
+clips them to the visible byte range. Merging `s` spans takes `O(s log s)` time
+and `O(s)` auxiliary memory. This lets syntax, region, search, query-replace,
+mode-line, minibuffer, warning, and error styling share one rendering path.
 
 ## Minibuffer And Completion
 

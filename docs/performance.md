@@ -28,6 +28,7 @@ The default suite runs three repetitions of these cases:
 - open a single-line file with a 100,000-column line;
 - redraw at column zero on that 100,000-column line;
 - move to the end of that 100,000-column line;
+- open and redraw a 100,000-column Rust line with repeated keywords;
 - send a burst of page-down commands in a 100,000-line file.
 
 Run larger cases with:
@@ -66,4 +67,6 @@ an Emacs-like behavior reference.
 
 Interpret the results as local baseline evidence, not a stable benchmark suite.
 Use them to identify obvious regressions or decide whether deeper profiling is
-needed before changing the buffer storage model.
+needed before changing the buffer storage model. The plain-text long-line cases
+exercise viewport projection, while the Rust cases separately exercise syntax
+span generation and priority merging.

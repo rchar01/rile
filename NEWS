@@ -7,6 +7,12 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* Syntax, search, region, and persistent-highlight spans now merge with an
+  ordered boundary sweep instead of rescanning every span at every boundary.
+  Opening or redrawing a recognized source file with a keyword-dense long line
+  no longer triggers quadratic CPU work, while face priority and appearance
+  remain unchanged.
+
 * Save backups on Unix now use mode `0600`. All Unix save temporaries remain
   private while contents are written and receive destination permissions only
   afterward. Backup metadata and contents come from one no-follow file
