@@ -604,6 +604,7 @@ struct RunningShellCommand {
 struct SaveSomeBuffersState {
     pending: Vec<BufferId>,
     saved: usize,
+    cleanup_warnings: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6336,6 +6337,14 @@ impl Editor {
                 self.minibuffer
                     .set_message(format!("Wrote {}", self.document().display_name()));
             }
+            Err(RileError::SaveCommitted(error)) => {
+                self.remember_clean_undo_depth(buffer);
+                self.refresh_visible_buffer_list();
+                self.minibuffer.set_error(format!(
+                    "wrote {} but auto-save cleanup failed: {error}",
+                    self.document().display_name()
+                ));
+            }
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
         Ok(())
@@ -6361,7 +6370,11 @@ impl Editor {
             return EditorOutcome::Continue;
         }
 
-        self.save_some_buffers = Some(SaveSomeBuffersState { pending, saved: 0 });
+        self.save_some_buffers = Some(SaveSomeBuffersState {
+            pending,
+            saved: 0,
+            cleanup_warnings: 0,
+        });
         self.prompt_next_save_some_buffer()
     }
 
@@ -6372,9 +6385,10 @@ impl Editor {
                     return self.finish_save_some_buffers();
                 };
                 match self.save_buffer_by_id(buffer) {
-                    Ok(()) => {
+                    Ok(cleanup_warning) => {
                         if let Some(state) = &mut self.save_some_buffers {
                             state.saved += 1;
+                            state.cleanup_warnings += usize::from(cleanup_warning);
                         }
                         self.prompt_next_save_some_buffer()
                     }
@@ -6424,32 +6438,47 @@ impl Editor {
     }
 
     fn finish_save_some_buffers(&mut self) -> EditorOutcome {
-        let saved = self
+        let (saved, cleanup_warnings) = self
             .save_some_buffers
             .take()
-            .map(|state| state.saved)
+            .map(|state| (state.saved, state.cleanup_warnings))
             .unwrap_or_default();
         self.refresh_visible_buffer_list();
-        match saved {
-            0 => self.minibuffer.set_message("No buffers saved"),
-            1 => self.minibuffer.set_message("Saved 1 buffer"),
-            count => self
-                .minibuffer
-                .set_message(format!("Saved {count} buffers")),
+        if cleanup_warnings > 0 {
+            let suffix = if cleanup_warnings == 1 { "" } else { "s" };
+            self.minibuffer.set_error(format!(
+                "saved {saved} buffers with {cleanup_warnings} auto-save cleanup warning{suffix}"
+            ));
+        } else {
+            match saved {
+                0 => self.minibuffer.set_message("No buffers saved"),
+                1 => self.minibuffer.set_message("Saved 1 buffer"),
+                count => self
+                    .minibuffer
+                    .set_message(format!("Saved {count} buffers")),
+            }
         }
         EditorOutcome::Continue
     }
 
-    fn save_buffer_by_id(&mut self, buffer: BufferId) -> Result<()> {
+    fn save_buffer_by_id(&mut self, buffer: BufferId) -> Result<bool> {
         if buffer == self.current_buffer {
             self.clear_insert_group();
         }
         let Some(document) = self.buffers.document_mut(buffer) else {
-            return Ok(());
+            return Ok(false);
         };
-        document.save()?;
-        self.remember_clean_undo_depth(buffer);
-        Ok(())
+        match document.save() {
+            Ok(()) => {
+                self.remember_clean_undo_depth(buffer);
+                Ok(false)
+            }
+            Err(RileError::SaveCommitted(_)) => {
+                self.remember_clean_undo_depth(buffer);
+                Ok(true)
+            }
+            Err(error) => Err(error),
+        }
     }
 
     fn not_modified(&mut self) -> Result<()> {
@@ -7336,12 +7365,20 @@ impl Editor {
 
         let buffer = self.current_buffer;
         self.clear_insert_group();
-        match self.document_mut().save_as(path) {
+        match self.buffers.save_as(buffer, path) {
             Ok(()) => {
                 self.remember_clean_undo_depth(buffer);
                 self.refresh_visible_buffer_list();
                 self.minibuffer
                     .set_message(format!("Wrote {}", self.document().display_name()));
+            }
+            Err(RileError::SaveCommitted(error)) => {
+                self.remember_clean_undo_depth(buffer);
+                self.refresh_visible_buffer_list();
+                self.minibuffer.set_error(format!(
+                    "wrote {} but auto-save cleanup failed: {error}",
+                    self.document().display_name()
+                ));
             }
             Err(error) => self.minibuffer.set_error(format!("save failed: {error}")),
         }
@@ -16483,6 +16520,7 @@ M-g g           goto-line                      Go to line or line:column\n"
         submit_prompt_text(&mut editor, path.to_str().expect("path should be utf-8"));
 
         assert_eq!(editor.document().path(), Some(path.as_path()));
+        assert_eq!(editor.current_buffer_name(), "written.txt");
         assert!(!editor.document().is_dirty());
         assert_eq!(
             fs::read_to_string(&path).expect("file should read"),
@@ -16526,6 +16564,87 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn write_file_rejects_destination_visited_by_another_buffer() {
+        let directory = TestDir::new();
+        let first_path = directory.path().join("first.txt");
+        let second_path = directory.path().join("second.txt");
+        fs::write(&first_path, "first").expect("first fixture should write");
+        fs::write(&second_path, "second").expect("second fixture should write");
+        let mut editor = Editor::new(Document::open(&first_path).expect("first should open"));
+        editor
+            .buffers
+            .open_path(&second_path)
+            .expect("second buffer should open");
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("first buffer should become dirty");
+
+        editor
+            .write_file(second_path.to_str().expect("path should be utf-8"))
+            .expect("write-file failure should be reported");
+
+        assert_eq!(
+            editor.minibuffer().message.as_deref(),
+            Some(
+                format!(
+                    "Error: save failed: invalid input: file is already visited by buffer second.txt: {}",
+                    second_path.display()
+                )
+                .as_str()
+            )
+        );
+        assert_eq!(editor.document().path(), Some(first_path.as_path()));
+        assert!(editor.document().is_dirty());
+        assert_eq!(
+            fs::read_to_string(&second_path).expect("second reads"),
+            "second"
+        );
+    }
+
+    #[test]
+    fn write_file_cleanup_warning_finalizes_new_buffer_identity() {
+        let directory = TestDir::new();
+        let old_path = directory.path().join("old.txt");
+        let new_path = directory.path().join("new.txt");
+        let old_auto_save = directory.path().join("#old.txt#");
+        fs::write(&old_path, "old").expect("old fixture should write");
+        let mut editor = Editor::new(Document::open(&old_path).expect("old file should open"));
+        editor.document_mut().set_auto_save(true);
+        editor
+            .handle_key(KeyEvent::Text("!".to_owned()))
+            .expect("buffer should become dirty");
+        editor
+            .document_mut()
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        fs::remove_file(&old_auto_save).expect("auto-save should be removed");
+        fs::create_dir(&old_auto_save).expect("cleanup obstacle should create");
+
+        editor
+            .write_file(new_path.to_str().expect("path should be utf-8"))
+            .expect("cleanup warning should be reported");
+
+        assert_eq!(editor.document().path(), Some(new_path.as_path()));
+        assert_eq!(editor.current_buffer_name(), "new.txt");
+        assert!(!editor.document().is_dirty());
+        assert!(
+            editor
+                .minibuffer()
+                .message
+                .as_deref()
+                .is_some_and(|message| message.contains("auto-save cleanup failed"))
+        );
+
+        editor
+            .handle_key(KeyEvent::Text("?".to_owned()))
+            .expect("post-save edit should insert");
+        editor
+            .handle_key(KeyEvent::Ctrl('_'))
+            .expect("undo should return to committed save point");
+        assert!(!editor.document().is_dirty());
+    }
+
+    #[test]
     fn save_some_buffers_skip_breaks_typing_undo_group() {
         let directory = TestDir::new();
         let path = directory.path().join("save-some-skip.txt");
@@ -16557,6 +16676,65 @@ M-g g           goto-line                      Go to line or line:column\n"
             .expect("undo should not cross save-some-buffers prompt");
         assert_eq!(editor.document().buffer().serialize(), "!alpha");
         assert!(editor.document().is_dirty());
+    }
+
+    #[test]
+    fn save_some_buffers_continues_after_committed_cleanup_warning() {
+        let directory = TestDir::new();
+        let first_path = directory.path().join("first.txt");
+        let second_path = directory.path().join("second.txt");
+        let first_auto_save = directory.path().join("#first.txt#");
+        fs::write(&first_path, "first").expect("first fixture should write");
+        fs::write(&second_path, "second").expect("second fixture should write");
+        let mut editor = Editor::new(Document::open(&first_path).expect("first file should open"));
+        editor.document_mut().set_auto_save(true);
+        editor
+            .document_mut()
+            .buffer_mut()
+            .insert(Position::new(0, 0), "edited ")
+            .expect("first buffer should become dirty");
+        editor
+            .document_mut()
+            .auto_save_if_dirty()
+            .expect("first auto-save should write");
+        fs::remove_file(&first_auto_save).expect("first auto-save should be removed");
+        fs::create_dir(&first_auto_save).expect("cleanup obstacle should create");
+        editor
+            .open_file_path(second_path.to_str().expect("path should be utf-8"), false)
+            .expect("second file should open");
+        editor
+            .handle_key(KeyEvent::Text("edited ".to_owned()))
+            .expect("second buffer should become dirty");
+
+        editor.start_save_some_buffers();
+        assert!(
+            editor
+                .minibuffer()
+                .display_text()
+                .is_some_and(|text| text.contains("Save file first.txt?"))
+        );
+        editor.submit_save_some_buffers("yes");
+        assert!(
+            editor
+                .minibuffer()
+                .display_text()
+                .is_some_and(|text| text.contains("Save file second.txt?"))
+        );
+        editor.submit_save_some_buffers("yes");
+
+        assert_eq!(
+            fs::read_to_string(&first_path).expect("first file should read"),
+            "edited first"
+        );
+        assert_eq!(
+            fs::read_to_string(&second_path).expect("second file should read"),
+            "edited second"
+        );
+        assert!(
+            editor.minibuffer().message.as_deref().is_some_and(
+                |message| message.contains("saved 2 buffers with 1 auto-save cleanup warning")
+            )
+        );
     }
 
     #[test]

@@ -30,12 +30,43 @@ pub enum DocumentKind {
 struct FileStamp {
     modified: Option<SystemTime>,
     len: u64,
+    #[cfg(unix)]
+    dev: u64,
+    #[cfg(unix)]
+    ino: u64,
+    #[cfg(unix)]
+    mtime: i64,
+    #[cfg(unix)]
+    mtime_nsec: i64,
+    #[cfg(unix)]
+    ctime: i64,
+    #[cfg(unix)]
+    ctime_nsec: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum VisitedPathKey {
+    Saveable(PathBuf),
+    FinalSymlink(PathBuf),
+}
+
+#[derive(Debug, Clone, Copy)]
+enum SaveExpectation {
+    Unchecked,
+    Unchanged(Option<FileStamp>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct PendingAutoSaveCleanup {
+    path: PathBuf,
+    stamp: FileStamp,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Document {
     buffer: Buffer,
     path: Option<PathBuf>,
+    path_key: Option<VisitedPathKey>,
     name: Option<String>,
     kind: DocumentKind,
     read_only: bool,
@@ -46,7 +77,7 @@ pub struct Document {
     auto_save: bool,
     auto_save_directory: Option<PathBuf>,
     delete_auto_save_files: bool,
-    auto_save_written: bool,
+    pending_auto_save_cleanup: Vec<PendingAutoSaveCleanup>,
     file_stamp: Option<FileStamp>,
 }
 
@@ -76,6 +107,7 @@ impl Document {
         Self {
             buffer: Buffer::new(),
             path: None,
+            path_key: None,
             name: None,
             kind: DocumentKind::Normal,
             read_only: false,
@@ -86,7 +118,7 @@ impl Document {
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -100,6 +132,7 @@ C-s      Search       M-%      Query replace  M-x      Command\n\n\
 Rile is free software under GPL-3.0-or-later.\n",
             ),
             path: None,
+            path_key: None,
             name: Some("*Rile*".to_owned()),
             kind: DocumentKind::Welcome,
             read_only: false,
@@ -110,7 +143,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -119,6 +152,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         Self {
             buffer: Buffer::from_text(text.as_ref()),
             path: None,
+            path_key: None,
             name: Some("*Help*".to_owned()),
             kind: DocumentKind::Help,
             read_only: false,
@@ -129,7 +163,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -138,6 +172,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         Self {
             buffer: Buffer::from_text(text.as_ref()),
             path: None,
+            path_key: None,
             name: Some("*Completions*".to_owned()),
             kind: DocumentKind::Completions,
             read_only: false,
@@ -148,7 +183,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -157,6 +192,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         Self {
             buffer: Buffer::from_text(text.as_ref()),
             path: None,
+            path_key: None,
             name: Some("*Messages*".to_owned()),
             kind: DocumentKind::Messages,
             read_only: false,
@@ -167,7 +203,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -176,6 +212,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         Self {
             buffer: Buffer::from_text(text.as_ref()),
             path: None,
+            path_key: None,
             name: Some("*Buffer List*".to_owned()),
             kind: DocumentKind::BufferList,
             read_only: false,
@@ -186,7 +223,7 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
@@ -195,6 +232,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         Self {
             buffer: Buffer::from_text(text.as_ref()),
             path: None,
+            path_key: None,
             name: Some("*Shell Command Output*".to_owned()),
             kind: DocumentKind::ShellOutput,
             read_only: false,
@@ -205,20 +243,31 @@ Rile is free software under GPL-3.0-or-later.\n",
             auto_save: false,
             auto_save_directory: None,
             delete_auto_save_files: true,
-            auto_save_written: false,
+            pending_auto_save_cleanup: Vec::new(),
             file_stamp: None,
         }
     }
 
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        match fs::read(&path) {
-            Ok(bytes) => {
+        let path_key = visited_path_key(&path)?;
+        match fs::File::open(&path) {
+            Ok(mut file) => {
+                let before = FileStamp::from_metadata(&file.metadata()?);
+                let mut bytes = Vec::new();
+                file.read_to_end(&mut bytes)?;
+                let file_stamp = FileStamp::from_metadata(&file.metadata()?);
+                if file_stamp != before {
+                    return Err(RileError::InvalidInput(format!(
+                        "file changed while reading: {}",
+                        path.display()
+                    )));
+                }
                 let text = decode_text_file_bytes(&path, bytes)?;
-                let file_stamp = file_stamp_from_path(&path)?;
                 Ok(Self {
                     buffer: Buffer::from_text(&text),
                     path: Some(path),
+                    path_key: Some(path_key),
                     name: None,
                     kind: DocumentKind::Normal,
                     read_only: false,
@@ -229,13 +278,14 @@ Rile is free software under GPL-3.0-or-later.\n",
                     auto_save: false,
                     auto_save_directory: None,
                     delete_auto_save_files: true,
-                    auto_save_written: false,
-                    file_stamp,
+                    pending_auto_save_cleanup: Vec::new(),
+                    file_stamp: Some(file_stamp),
                 })
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self {
                 buffer: Buffer::new(),
                 path: Some(path),
+                path_key: Some(path_key),
                 name: None,
                 kind: DocumentKind::Normal,
                 read_only: false,
@@ -246,7 +296,7 @@ Rile is free software under GPL-3.0-or-later.\n",
                 auto_save: false,
                 auto_save_directory: None,
                 delete_auto_save_files: true,
-                auto_save_written: false,
+                pending_auto_save_cleanup: Vec::new(),
                 file_stamp: None,
             }),
             Err(error) => Err(error.into()),
@@ -263,6 +313,10 @@ Rile is free software under GPL-3.0-or-later.\n",
 
     pub fn path(&self) -> Option<&Path> {
         self.path.as_deref()
+    }
+
+    pub(crate) fn path_key(&self) -> Option<&VisitedPathKey> {
+        self.path_key.as_ref()
     }
 
     pub fn display_name(&self) -> String {
@@ -380,7 +434,20 @@ Rile is free software under GPL-3.0-or-later.\n",
         };
         let permissions = auto_save_permissions(visited_path, &path)?;
         safe_write_with_permissions(&path, self.buffer.serialize().as_bytes(), permissions)?;
-        self.auto_save_written = true;
+        let stamp = save_file_stamp_from_path(&path)?
+            .expect("successful auto-save should create a regular file");
+        if let Some(pending) = self
+            .pending_auto_save_cleanup
+            .iter_mut()
+            .find(|pending| pending.path == path)
+        {
+            pending.stamp = stamp;
+        } else {
+            self.pending_auto_save_cleanup.push(PendingAutoSaveCleanup {
+                path: path.clone(),
+                stamp,
+            });
+        }
         Ok(Some(path))
     }
 
@@ -429,7 +496,7 @@ Rile is free software under GPL-3.0-or-later.\n",
         }
         let path = self.path.as_ref().expect("path checked above");
         let current = file_stamp_from_path(path)?;
-        Ok(current.is_some() && current != self.file_stamp)
+        Ok(current != self.file_stamp)
     }
 
     pub fn save(&mut self) -> Result<()> {
@@ -441,8 +508,10 @@ Rile is free software under GPL-3.0-or-later.\n",
                 "cannot save unnamed buffer without a path".to_owned(),
             ));
         };
-        self.write_to_path(&path)?;
-        self.delete_current_session_auto_save_file(&path)?;
+        self.write_to_path(&path, self.file_stamp)?;
+        if let Err(error) = self.delete_current_session_auto_save_file() {
+            return Err(RileError::SaveCommitted(Box::new(error)));
+        }
         Ok(())
     }
 
@@ -451,19 +520,27 @@ Rile is free software under GPL-3.0-or-later.\n",
             return Err(RileError::InvalidInput("buffer is read-only".to_owned()));
         }
         let path = path.as_ref().to_path_buf();
+        let path_key = visited_path_key(&path)?;
+        let expected = if self.path_key.as_ref() == Some(&path_key) {
+            self.file_stamp
+        } else {
+            save_file_stamp_from_path(&path)?
+        };
         let previous_backup_written = self.backup_written;
-        if self.path.as_ref() != Some(&path) {
+        if self.path_key.as_ref() != Some(&path_key) {
             self.backup_written = false;
         }
-        if let Err(error) = self.write_to_path(&path) {
+        if let Err(error) = self.write_to_path(&path, expected) {
             self.backup_written = previous_backup_written;
             return Err(error);
         }
-        let cleanup_path = self.path.as_deref().unwrap_or(&path).to_path_buf();
-        self.delete_current_session_auto_save_file(&cleanup_path)?;
         self.path = Some(path);
+        self.path_key = Some(path_key);
         self.name = None;
         self.missing_on_open = false;
+        if let Err(error) = self.delete_current_session_auto_save_file() {
+            return Err(RileError::SaveCommitted(Box::new(error)));
+        }
         Ok(())
     }
 
@@ -484,10 +561,12 @@ Rile is free software under GPL-3.0-or-later.\n",
         let auto_save = self.auto_save;
         let auto_save_directory = self.auto_save_directory.clone();
         let delete_auto_save_files = self.delete_auto_save_files;
-        let auto_save_written = self.auto_save_written;
+        let pending_auto_save_cleanup = self.pending_auto_save_cleanup.clone();
         let mut reloaded = Self::open(&path)?;
-        if delete_auto_save_files && auto_save_written {
-            delete_file_if_exists(&auto_save_path(&path, auto_save_directory.as_deref()))?;
+        if delete_auto_save_files {
+            for pending in &pending_auto_save_cleanup {
+                delete_pending_auto_save_file(pending)?;
+            }
         }
         reloaded.read_only = read_only;
         reloaded.backup_on_save = backup_on_save;
@@ -495,7 +574,11 @@ Rile is free software under GPL-3.0-or-later.\n",
         reloaded.auto_save = auto_save;
         reloaded.auto_save_directory = auto_save_directory;
         reloaded.delete_auto_save_files = delete_auto_save_files;
-        reloaded.auto_save_written = auto_save_written && !delete_auto_save_files;
+        reloaded.pending_auto_save_cleanup = if delete_auto_save_files {
+            Vec::new()
+        } else {
+            pending_auto_save_cleanup
+        };
         *self = reloaded;
         Ok(())
     }
@@ -515,18 +598,20 @@ Rile is free software under GPL-3.0-or-later.\n",
         )
     }
 
-    fn write_to_path(&mut self, path: &Path) -> Result<()> {
+    fn write_to_path(&mut self, path: &Path, expected: Option<FileStamp>) -> Result<()> {
         let existing = existing_save_file_metadata(path)?;
+        ensure_expected_file_stamp(path, expected, existing.as_ref())?;
         if self.backup_on_save && !self.backup_written {
             if let Some(expected) = existing.as_ref() {
                 write_backup(path, self.backup_directory.as_deref(), expected)?;
             }
             self.backup_written = true;
         }
-        safe_write_with_permissions(
+        safe_write_with_permissions_expectation(
             path,
             self.buffer.serialize().as_bytes(),
             existing.map(|metadata| metadata.permissions()),
+            SaveExpectation::Unchanged(expected),
         )?;
         self.buffer.mark_clean();
         self.missing_on_open = false;
@@ -534,10 +619,20 @@ Rile is free software under GPL-3.0-or-later.\n",
         Ok(())
     }
 
-    fn delete_current_session_auto_save_file(&mut self, path: &Path) -> Result<()> {
-        if self.delete_auto_save_files && self.auto_save_written {
-            delete_file_if_exists(&auto_save_path(path, self.auto_save_directory.as_deref()))?;
-            self.auto_save_written = false;
+    fn delete_current_session_auto_save_file(&mut self) -> Result<()> {
+        if self.delete_auto_save_files {
+            let mut retained = Vec::new();
+            let mut first_error = None;
+            for pending in self.pending_auto_save_cleanup.drain(..) {
+                if let Err(error) = delete_pending_auto_save_file(&pending) {
+                    retained.push(pending);
+                    first_error.get_or_insert(error);
+                }
+            }
+            self.pending_auto_save_cleanup = retained;
+            if let Some(error) = first_error {
+                return Err(error);
+            }
         }
         Ok(())
     }
@@ -588,13 +683,89 @@ fn file_stamp_from_path(path: &Path) -> Result<Option<FileStamp>> {
     }
 }
 
+pub(crate) fn visited_path_key(path: &Path) -> Result<VisitedPathKey> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    match fs::symlink_metadata(&absolute) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            let parent = absolute.parent().unwrap_or_else(|| Path::new("."));
+            let mut key = fs::canonicalize(parent)?;
+            if let Some(file_name) = absolute.file_name() {
+                key.push(file_name);
+            }
+            Ok(VisitedPathKey::FinalSymlink(key))
+        }
+        Ok(_) => Ok(VisitedPathKey::Saveable(fs::canonicalize(&absolute)?)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let key = match (absolute.parent(), absolute.file_name()) {
+                (Some(parent), Some(file_name)) => match fs::canonicalize(parent) {
+                    Ok(mut parent) => {
+                        parent.push(file_name);
+                        parent
+                    }
+                    Err(parent_error) if parent_error.kind() == std::io::ErrorKind::NotFound => {
+                        absolute
+                    }
+                    Err(parent_error) => return Err(parent_error.into()),
+                },
+                _ => absolute,
+            };
+            Ok(VisitedPathKey::Saveable(key))
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
 impl FileStamp {
     fn from_metadata(metadata: &Metadata) -> Self {
+        #[cfg(unix)]
+        use std::os::unix::fs::MetadataExt;
+
         Self {
             modified: metadata.modified().ok(),
             len: metadata.len(),
+            #[cfg(unix)]
+            dev: metadata.dev(),
+            #[cfg(unix)]
+            ino: metadata.ino(),
+            #[cfg(unix)]
+            mtime: metadata.mtime(),
+            #[cfg(unix)]
+            mtime_nsec: metadata.mtime_nsec(),
+            #[cfg(unix)]
+            ctime: metadata.ctime(),
+            #[cfg(unix)]
+            ctime_nsec: metadata.ctime_nsec(),
         }
     }
+}
+
+fn save_file_stamp_from_path(path: &Path) -> Result<Option<FileStamp>> {
+    existing_save_file_metadata(path)
+        .map(|metadata| metadata.as_ref().map(FileStamp::from_metadata))
+}
+
+fn ensure_expected_file_stamp(
+    path: &Path,
+    expected: Option<FileStamp>,
+    actual: Option<&Metadata>,
+) -> Result<()> {
+    let actual = actual.map(FileStamp::from_metadata);
+    if actual == expected {
+        return Ok(());
+    }
+    Err(RileError::InvalidInput(format!(
+        "file changed on disk: {}",
+        path.display()
+    )))
+}
+
+fn ensure_save_path_unchanged(path: &Path, expected: Option<FileStamp>) -> Result<()> {
+    let actual = existing_save_file_metadata(path)?;
+    ensure_expected_file_stamp(path, expected, actual.as_ref())
 }
 
 fn decode_text_file_bytes(path: &Path, bytes: Vec<u8>) -> Result<String> {
@@ -621,7 +792,9 @@ pub fn safe_write(path: &Path, bytes: &[u8]) -> Result<()> {
 fn write_backup(path: &Path, backup_directory: Option<&Path>, expected: &Metadata) -> Result<()> {
     let source = open_backup_source(path)?;
     let (bytes, metadata) = read_backup_source(source)?;
-    if !same_file(expected, &metadata) {
+    if !same_file(expected, &metadata)
+        || FileStamp::from_metadata(expected) != FileStamp::from_metadata(&metadata)
+    {
         return Err(RileError::InvalidInput(format!(
             "file changed while creating backup: {}",
             path.display()
@@ -656,15 +829,21 @@ fn open_backup_source(path: &Path) -> Result<fs::File> {
 }
 
 fn read_backup_source(mut source: fs::File) -> Result<(Vec<u8>, Metadata)> {
-    let metadata = source.metadata()?;
-    if !metadata.is_file() {
+    let before = source.metadata()?;
+    if !before.is_file() {
         return Err(RileError::InvalidInput(
             "backup source is not a regular file".to_owned(),
         ));
     }
     let mut bytes = Vec::new();
     source.read_to_end(&mut bytes)?;
-    Ok((bytes, metadata))
+    let after = source.metadata()?;
+    if FileStamp::from_metadata(&before) != FileStamp::from_metadata(&after) {
+        return Err(RileError::InvalidInput(
+            "file changed while reading backup source".to_owned(),
+        ));
+    }
+    Ok((bytes, after))
 }
 
 #[cfg(unix)]
@@ -780,10 +959,30 @@ fn delete_file_if_exists(path: &Path) -> Result<()> {
     }
 }
 
+fn delete_pending_auto_save_file(pending: &PendingAutoSaveCleanup) -> Result<()> {
+    match save_file_stamp_from_path(&pending.path)? {
+        None => Ok(()),
+        Some(actual) if actual == pending.stamp => delete_file_if_exists(&pending.path),
+        Some(_) => Err(RileError::InvalidInput(format!(
+            "auto-save file changed on disk: {}",
+            pending.path.display()
+        ))),
+    }
+}
+
 fn safe_write_with_permissions(
     path: &Path,
     bytes: &[u8],
     permissions: Option<fs::Permissions>,
+) -> Result<()> {
+    safe_write_with_permissions_expectation(path, bytes, permissions, SaveExpectation::Unchecked)
+}
+
+fn safe_write_with_permissions_expectation(
+    path: &Path,
+    bytes: &[u8],
+    permissions: Option<fs::Permissions>,
+    expectation: SaveExpectation,
 ) -> Result<()> {
     let (temporary, mut file) = create_temporary_file(path, permissions.as_ref())?;
     let result = (|| -> Result<()> {
@@ -804,6 +1003,9 @@ fn safe_write_with_permissions(
         }
         file.sync_all()?;
         drop(file);
+        if let SaveExpectation::Unchanged(expected) = expectation {
+            ensure_save_path_unchanged(path, expected)?;
+        }
         fs::rename(&temporary, path)?;
         sync_parent_directory(path);
         Ok(())
@@ -1153,6 +1355,111 @@ mod tests {
     }
 
     #[test]
+    fn save_rejects_external_change_and_preserves_recovery_files() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        let auto_save = directory.path().join("#save.txt#");
+        fs::write(&path, "original").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 8), " edited")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should succeed");
+        fs::write(&path, "external replacement").expect("file should change externally");
+
+        let error = document
+            .save()
+            .expect_err("externally changed file should not be overwritten");
+
+        assert!(error.to_string().contains("file changed on disk"));
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "external replacement"
+        );
+        assert!(!backup.exists());
+        assert!(auto_save.exists());
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn save_rejects_deleted_visited_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        fs::write(&path, "original").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 8), " edited")
+            .expect("insert should succeed");
+        fs::remove_file(&path).expect("file should be removed externally");
+
+        let error = document
+            .save()
+            .expect_err("deleted visited file should not be recreated silently");
+
+        assert!(error.to_string().contains("file changed on disk"));
+        assert!(!path.exists());
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn save_rejects_unexpected_creation_of_missing_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let mut document = Document::open(&path).expect("missing file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 0), "buffer contents")
+            .expect("insert should succeed");
+        fs::write(&path, "external contents").expect("file should be created externally");
+
+        let error = document
+            .save()
+            .expect_err("unexpected file should not be overwritten");
+
+        assert!(error.to_string().contains("file changed on disk"));
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "external contents"
+        );
+        assert!(document.is_dirty());
+        assert!(document.missing_on_open());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_rejects_same_length_inode_replacement() {
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let replacement = directory.path().join("replacement.txt");
+        fs::write(&path, "original").expect("file should be written");
+        fs::write(&replacement, "external").expect("replacement should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 8), " edited")
+            .expect("insert should succeed");
+        fs::rename(&replacement, &path).expect("replacement should replace visited path");
+
+        let error = document
+            .save()
+            .expect_err("replacement inode should not be overwritten");
+
+        assert!(error.to_string().contains("file changed on disk"));
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "external"
+        );
+        assert!(document.is_dirty());
+    }
+
+    #[test]
     fn save_writes_backup_when_enabled() {
         let directory = TestDir::new();
         let path = directory.path().join("save.txt");
@@ -1197,6 +1504,41 @@ mod tests {
             .insert(Position::new(0, 9), " second")
             .expect("second insert should succeed");
         document.save().expect("second save should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "old first second"
+        );
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+    }
+
+    #[test]
+    fn save_as_same_file_alias_preserves_backup_cycle() {
+        let directory = TestDir::new();
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).expect("nested directory should create");
+        let path = directory.path().join("save.txt");
+        let alias = nested.join("..").join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " first")
+            .expect("first insert should succeed");
+        document.save().expect("first save should succeed");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 9), " second")
+            .expect("second insert should succeed");
+
+        document
+            .save_as(&alias)
+            .expect("same-file alias save should succeed");
 
         assert_eq!(
             fs::read_to_string(&path).expect("file should read"),
@@ -1683,6 +2025,148 @@ mod tests {
 
         assert!(!old_auto_save.exists());
         assert_eq!(document.path(), Some(new_path.as_path()));
+    }
+
+    #[test]
+    fn save_as_same_file_alias_preserves_stale_disk_check() {
+        let directory = TestDir::new();
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).expect("nested directory should create");
+        let path = directory.path().join("notes.txt");
+        let alias = nested.join("..").join("notes.txt");
+        fs::write(&path, "original").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 8), " edited")
+            .expect("insert should succeed");
+        fs::write(&path, "external replacement").expect("file should change externally");
+
+        let error = document
+            .save_as(&alias)
+            .expect_err("same-file alias should retain the visited stamp");
+
+        assert!(error.to_string().contains("file changed on disk"));
+        assert_eq!(document.path(), Some(path.as_path()));
+        assert_eq!(
+            fs::read_to_string(&path).expect("file should read"),
+            "external replacement"
+        );
+        assert!(document.is_dirty());
+    }
+
+    #[test]
+    fn save_as_cleanup_failure_keeps_new_document_identity() {
+        let directory = TestDir::new();
+        let old_path = directory.path().join("old.txt");
+        let new_path = directory.path().join("new.txt");
+        let old_auto_save = directory.path().join("#old.txt#");
+        let new_auto_save = directory.path().join("#new.txt#");
+        fs::write(&old_path, "old").expect("old file should be written");
+        let mut document = Document::open(&old_path).expect("old file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        fs::remove_file(&old_auto_save).expect("auto-save file should be removed");
+        fs::create_dir(&old_auto_save).expect("cleanup obstacle should create");
+
+        let error = document
+            .save_as(&new_path)
+            .expect_err("auto-save cleanup should fail");
+
+        assert!(matches!(error, crate::RileError::SaveCommitted(_)));
+        assert_eq!(document.path(), Some(new_path.as_path()));
+        assert_eq!(
+            fs::read_to_string(&new_path).expect("new file should read"),
+            "old new"
+        );
+        assert!(!document.is_dirty());
+
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 7), " again")
+            .expect("second insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("new-path auto-save should write");
+        assert!(new_auto_save.exists());
+        fs::remove_dir(&old_auto_save).expect("cleanup obstacle should be removed");
+        document.save().expect("new identity should save normally");
+        assert_eq!(
+            fs::read_to_string(&new_path).expect("new file should read"),
+            "old new again"
+        );
+        assert!(!old_auto_save.exists());
+        assert!(!new_auto_save.exists());
+    }
+
+    #[test]
+    fn save_as_preserves_destination_that_was_pending_auto_save() {
+        let directory = TestDir::new();
+        let old_path = directory.path().join("old.txt");
+        let auto_save = directory.path().join("#old.txt#");
+        fs::write(&old_path, "old").expect("old file should be written");
+        let mut document = Document::open(&old_path).expect("old file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+
+        let error = document
+            .save_as(&auto_save)
+            .expect_err("repurposed auto-save path should produce a cleanup warning");
+
+        assert!(matches!(error, crate::RileError::SaveCommitted(_)));
+        assert_eq!(document.path(), Some(auto_save.as_path()));
+        assert!(!document.is_dirty());
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("destination should remain"),
+            "old new"
+        );
+    }
+
+    #[test]
+    fn save_preserves_replaced_pending_auto_save_file() {
+        let directory = TestDir::new();
+        let path = directory.path().join("notes.txt");
+        let auto_save = directory.path().join("#notes.txt#");
+        let replacement = directory.path().join("replacement.txt");
+        fs::write(&path, "old").expect("file should be written");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_auto_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+        document
+            .auto_save_if_dirty()
+            .expect("auto-save should write");
+        fs::write(&replacement, "external recovery").expect("replacement should write");
+        fs::rename(&replacement, &auto_save).expect("auto-save should be replaced externally");
+
+        let error = document
+            .save()
+            .expect_err("changed auto-save should produce a cleanup warning");
+
+        assert!(matches!(error, crate::RileError::SaveCommitted(_)));
+        assert!(!document.is_dirty());
+        assert_eq!(
+            fs::read_to_string(&path).expect("visited file should read"),
+            "old new"
+        );
+        assert_eq!(
+            fs::read_to_string(&auto_save).expect("replacement should remain"),
+            "external recovery"
+        );
     }
 
     #[test]

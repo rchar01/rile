@@ -10,6 +10,7 @@ pub enum RileError {
     Io(std::io::Error),
     InvalidInput(String),
     InvalidPosition(String),
+    SaveCommitted(Box<RileError>),
     NotTerminal,
     TooManyFiles,
     UnsupportedArgument(String),
@@ -21,6 +22,9 @@ impl fmt::Display for RileError {
             Self::Io(error) => write!(f, "I/O error: {error}"),
             Self::InvalidInput(message) => write!(f, "invalid input: {message}"),
             Self::InvalidPosition(message) => write!(f, "invalid position: {message}"),
+            Self::SaveCommitted(error) => {
+                write!(f, "save committed but auto-save cleanup failed: {error}")
+            }
             Self::NotTerminal => write!(f, "editing requires an interactive terminal"),
             Self::TooManyFiles => write!(f, "expected at most one file argument"),
             Self::UnsupportedArgument(argument) => {
@@ -34,6 +38,7 @@ impl std::error::Error for RileError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Io(error) => Some(error),
+            Self::SaveCommitted(error) => Some(error.as_ref()),
             Self::InvalidInput(_)
             | Self::InvalidPosition(_)
             | Self::NotTerminal

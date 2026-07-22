@@ -35,6 +35,26 @@ fn save_buffer_writes_disk_contents_and_clears_dirty_state() -> Result<()> {
 }
 
 #[test]
+fn save_buffer_rejects_external_changes_and_remains_dirty() -> Result<()> {
+    let file = fixtures::named_temp_file("alpha\n")?;
+    let path = file.path().to_path_buf();
+    let mut rile = RilePty::spawn(&path, 12, 100)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("insert text", b"edited ")?;
+    rile.assert_status_contains("modified:true")?;
+    fs::write(&path, "external replacement\n")?;
+
+    rile.send("C-x C-s", keys::control_sequence("xs"))?;
+    rile.wait_for_screen_contains("file changed on disk")?;
+    rile.assert_status_contains("modified:true")?;
+    assert_eq!(fs::read_to_string(&path)?, "external replacement\n");
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn auto_save_writes_hash_file_from_loaded_config() -> Result<()> {
     let home = fixtures::temp_home()?;
     let config_dir = home.path().join(".config").join("rile");

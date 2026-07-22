@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use crate::buffer::BufferId;
-use crate::file::{Document, DocumentKind, DocumentSettings};
+use crate::file::{Document, DocumentKind, DocumentSettings, visited_path_key};
 use crate::{Result, RileError};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,10 +123,11 @@ impl BufferManager {
         read_only: bool,
     ) -> Result<OpenBufferResult> {
         let path = path.as_ref();
+        let path_key = visited_path_key(path)?;
         if let Some(entry) = self
             .entries
             .iter_mut()
-            .find(|entry| entry.document.path() == Some(path))
+            .find(|entry| document_matches_path_key(&entry.document, &path_key))
         {
             if read_only {
                 entry.document.set_read_only(true);
@@ -142,6 +143,32 @@ impl BufferManager {
         document.set_read_only(read_only);
         let id = self.push(document);
         Ok(OpenBufferResult { id, created: true })
+    }
+
+    pub fn save_as(&mut self, id: BufferId, path: impl AsRef<Path>) -> Result<()> {
+        let path = path.as_ref();
+        let path_key = visited_path_key(path)?;
+        if let Some(entry) = self
+            .entries
+            .iter()
+            .find(|entry| entry.id != id && document_matches_path_key(&entry.document, &path_key))
+        {
+            return Err(RileError::InvalidInput(format!(
+                "file is already visited by buffer {}: {}",
+                entry.name,
+                path.display()
+            )));
+        }
+        let Some(index) = self.entries.iter().position(|entry| entry.id == id) else {
+            return Err(RileError::InvalidInput(format!("no such buffer: {}", id.0)));
+        };
+
+        let result = self.entries[index].document.save_as(path);
+        if self.entries[index].document.path_key() == Some(&path_key) {
+            let name = self.unique_name(id, &self.entries[index].document);
+            self.entries[index].name = name;
+        }
+        result
     }
 
     pub fn open_help(&mut self, text: impl AsRef<str>) -> BufferId {
@@ -228,18 +255,33 @@ impl BufferManager {
             .and_then(Path::file_name)
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_else(|| document.display_name());
-        if !self.entries.iter().any(|entry| entry.name == base) {
+        if !self
+            .entries
+            .iter()
+            .any(|entry| entry.id != id && entry.name == base)
+        {
             return base;
         }
 
         let mut suffix = id.0;
         loop {
             let candidate = format!("{base}<{suffix}>");
-            if !self.entries.iter().any(|entry| entry.name == candidate) {
+            if !self
+                .entries
+                .iter()
+                .any(|entry| entry.id != id && entry.name == candidate)
+            {
                 return candidate;
             }
             suffix = suffix.checked_add(1).expect("buffer name suffix exhausted");
         }
+    }
+}
+
+fn document_matches_path_key(document: &Document, expected: &crate::file::VisitedPathKey) -> bool {
+    match document.path().map(visited_path_key) {
+        Some(Ok(current)) => &current == expected,
+        Some(Err(_)) | None => document.path_key() == Some(expected),
     }
 }
 
@@ -296,6 +338,202 @@ mod tests {
         assert_eq!(first.id, second.id);
         assert_eq!(manager.len(), 2);
         assert_eq!(manager.name(first.id), Some("notes.txt"));
+    }
+
+    #[test]
+    fn reuses_existing_and_missing_dot_dot_aliases() {
+        let directory = TestDir::new();
+        let nested = directory.path().join("nested");
+        fs::create_dir(&nested).expect("nested directory should create");
+        let existing = directory.path().join("existing.txt");
+        let existing_alias = nested.join("..").join("existing.txt");
+        let missing = directory.path().join("missing.txt");
+        let missing_alias = nested.join("..").join("missing.txt");
+        fs::write(&existing, "contents").expect("fixture should write");
+        let mut manager = BufferManager::new(Document::scratch());
+
+        let existing_buffer = manager
+            .open_path(&existing)
+            .expect("existing file should open");
+        let existing_reused = manager
+            .open_path(&existing_alias)
+            .expect("existing alias should open");
+        let missing_buffer = manager
+            .open_path(&missing)
+            .expect("missing file should open");
+        let missing_reused = manager
+            .open_path(&missing_alias)
+            .expect("missing alias should open");
+
+        assert_eq!(existing_reused.id, existing_buffer.id);
+        assert!(!existing_reused.created);
+        assert_eq!(missing_reused.id, missing_buffer.id);
+        assert!(!missing_reused.created);
+        assert_eq!(manager.len(), 3);
+    }
+
+    #[test]
+    fn rechecks_missing_path_identity_after_parent_creation() {
+        let directory = TestDir::new();
+        let future_parent = directory.path().join("future");
+        let alias = future_parent.join("..").join("notes.txt");
+        let direct = directory.path().join("notes.txt");
+        let mut manager = BufferManager::new(Document::scratch());
+        let opened = manager
+            .open_path(&alias)
+            .expect("missing alias should open");
+        fs::create_dir(&future_parent).expect("future parent should create");
+        fs::write(&direct, "external").expect("direct path should be created");
+
+        let reused = manager
+            .open_path(&direct)
+            .expect("newly resolvable direct path should open");
+
+        assert_eq!(reused.id, opened.id);
+        assert!(!reused.created);
+        assert_eq!(manager.len(), 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reuses_symlinked_parent_aliases_but_not_final_symlinks_or_hard_links() {
+        use std::fs::hard_link;
+        use std::os::unix::fs::symlink;
+
+        let directory = TestDir::new();
+        let real = directory.path().join("real");
+        let parent_alias = directory.path().join("parent-alias");
+        fs::create_dir(&real).expect("real directory should create");
+        symlink(&real, &parent_alias).expect("parent symlink should create");
+        let path = real.join("notes.txt");
+        let parent_alias_path = parent_alias.join("notes.txt");
+        let final_symlink = real.join("final-link.txt");
+        let hard_link_path = real.join("hard-link.txt");
+        fs::write(&path, "contents").expect("fixture should write");
+        symlink(&path, &final_symlink).expect("final symlink should create");
+        hard_link(&path, &hard_link_path).expect("hard link should create");
+        let mut manager = BufferManager::new(Document::scratch());
+
+        let original = manager.open_path(&path).expect("file should open");
+        let parent_reused = manager
+            .open_path(&parent_alias_path)
+            .expect("parent alias should open");
+        let final_opened = manager
+            .open_path(&final_symlink)
+            .expect("final symlink should open");
+        let hard_link_opened = manager
+            .open_path(&hard_link_path)
+            .expect("hard link should open");
+
+        assert_eq!(parent_reused.id, original.id);
+        assert!(!parent_reused.created);
+        assert_ne!(final_opened.id, original.id);
+        assert!(final_opened.created);
+        assert_ne!(hard_link_opened.id, original.id);
+        assert!(hard_link_opened.created);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn current_identity_replaces_stored_key_after_parent_symlink_repoint() {
+        use std::os::unix::fs::symlink;
+
+        let directory = TestDir::new();
+        let first_parent = directory.path().join("first");
+        let second_parent = directory.path().join("second");
+        let parent_alias = directory.path().join("parent-alias");
+        fs::create_dir(&first_parent).expect("first parent should create");
+        fs::create_dir(&second_parent).expect("second parent should create");
+        symlink(&first_parent, &parent_alias).expect("first parent alias should create");
+        let alias_path = parent_alias.join("notes.txt");
+        let first_path = first_parent.join("notes.txt");
+        let second_path = second_parent.join("notes.txt");
+        let mut manager = BufferManager::new(Document::scratch());
+        let alias_buffer = manager
+            .open_path(&alias_path)
+            .expect("missing alias should open");
+        fs::remove_file(&parent_alias).expect("old parent alias should be removed");
+        symlink(&second_parent, &parent_alias).expect("second parent alias should create");
+
+        let former_target = manager
+            .open_path(&first_path)
+            .expect("former target should open separately");
+        let current_target = manager
+            .open_path(&second_path)
+            .expect("current target should reuse alias buffer");
+
+        assert_ne!(former_target.id, alias_buffer.id);
+        assert!(former_target.created);
+        assert_eq!(current_target.id, alias_buffer.id);
+        assert!(!current_target.created);
+    }
+
+    #[test]
+    fn save_as_rejects_destinations_owned_by_other_buffers() {
+        let directory = TestDir::new();
+        let first_path = directory.path().join("first.txt");
+        let second_path = directory.path().join("second.txt");
+        fs::write(&first_path, "first").expect("first fixture should write");
+        fs::write(&second_path, "second").expect("second fixture should write");
+        let mut manager = BufferManager::new(Document::open(&first_path).expect("first opens"));
+        let first = manager.entries()[0].id();
+        let second = manager
+            .open_path(&second_path)
+            .expect("second file should open")
+            .id;
+        manager
+            .document_mut(first)
+            .expect("first document should exist")
+            .buffer_mut()
+            .insert(Position::new(0, 5), " edited")
+            .expect("first document should become dirty");
+
+        let error = manager
+            .save_as(first, &second_path)
+            .expect_err("owned destination should be rejected");
+
+        assert!(error.to_string().contains("already visited by buffer"));
+        assert_eq!(
+            manager
+                .document(first)
+                .expect("first document should exist")
+                .path(),
+            Some(first_path.as_path())
+        );
+        assert!(
+            manager
+                .document(first)
+                .expect("first document should exist")
+                .is_dirty()
+        );
+        assert_eq!(
+            fs::read_to_string(&second_path).expect("second reads"),
+            "second"
+        );
+        assert_eq!(manager.name(second), Some("second.txt"));
+    }
+
+    #[test]
+    fn save_as_updates_manager_owned_buffer_name() {
+        let directory = TestDir::new();
+        let old_path = directory.path().join("old.txt");
+        let new_path = directory.path().join("new.txt");
+        fs::write(&old_path, "old").expect("fixture should write");
+        let mut manager = BufferManager::new(Document::open(&old_path).expect("file opens"));
+        let buffer = manager.entries()[0].id();
+
+        manager
+            .save_as(buffer, &new_path)
+            .expect("save-as should succeed");
+
+        assert_eq!(manager.name(buffer), Some("new.txt"));
+        assert_eq!(
+            manager
+                .document(buffer)
+                .expect("document should exist")
+                .path(),
+            Some(new_path.as_path())
+        );
     }
 
     #[test]
