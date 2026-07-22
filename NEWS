@@ -7,6 +7,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* Save backups on Unix now use mode `0600`. All Unix save temporaries remain
+  private while contents are written and receive destination permissions only
+  afterward. Backup metadata and contents come from one no-follow file
+  descriptor, preventing source replacement from copying a different file.
+  Saves reject final symbolic links and other non-regular paths instead of
+  reading through or replacing them.
+
 * `C-x i` now reads at most 8 MiB plus one detection byte and accepts at most
   100,000 LF line breaks per inserted file. Oversized or newline-dense input is
   rejected before buffer mutation or undo recording, preventing a selected

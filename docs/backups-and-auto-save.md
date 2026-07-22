@@ -32,9 +32,10 @@ the safety file is written.
 ## Save Backups
 
 When `backup_on_save` is true, Rile writes one persistent backup per buffer
-visit before the first successful save of an existing file.  The backup contains
-the original file contents from before that save.  Later saves during the same
-visit do not replace that backup.
+visit before the first save attempt that successfully creates a backup.  The
+backup contains the original file contents from before that attempt.  Later
+saves during the same visit do not replace that backup, including a retry after
+the backup succeeded but the visited-file write failed.
 
 With an empty `backup_directory`, backups use the sibling Emacs-style name
 `file~`.  With a configured backup directory, Rile writes a mapped path-based
@@ -46,6 +47,17 @@ Backup creation is part of the save safety path.  If Rile cannot create the
 backup, the explicit save fails and the buffer remains dirty.  This keeps the
 original visited file unchanged when the configured backup policy cannot be
 honored.
+
+On Unix, every backup uses mode `0600`, regardless of the visited file's mode,
+parent-directory protections, configured backup directory, or an older backup's
+mode.  Rile opens an existing backup source without following a final symbolic
+link and reads its metadata and bytes from that one file descriptor.  This keeps
+the backup bound to the regular file checked at the start of the save.
+
+Files opened through a final symbolic link remain available for viewing, but
+Rile rejects attempts to save them whether or not backups are enabled.  The link
+and its target remain unchanged and the buffer remains dirty.  Existing final
+paths of other non-regular types, such as FIFOs, are rejected as well.
 
 `save_as` starts a new backup cycle for the new visited path.  A later save of
 that new path can create a new first-save backup for that file.

@@ -139,6 +139,17 @@ isolation and duplicate-error suppression. PTY coverage changes a watched file
 to binary contents and confirms the minibuffer reports the failure while the
 real editor remains interactive.
 
+Save-backup security tests verify that Unix backups use mode `0600` for private
+and public source modes, configured directories, and permissive pre-existing
+backups.  Unit tests reject final symbolic links with backups enabled or
+disabled, retain descriptor identity across pathname replacement, preserve
+destination-symlink targets, keep failed buffers dirty, and reject existing
+non-regular paths.  A retry regression forces the visited-file write to fail
+after backup creation, then verifies the completed backup survives a successful
+retry.  A config-loaded PTY regression saves through the real binary and checks
+both original backup contents and private mode without changing the process-wide
+umask.
+
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile`
 binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal
 output with `vt100`, and assert screen contents, cursor position, status text,

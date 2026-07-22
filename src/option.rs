@@ -248,7 +248,7 @@ fn default_options() -> Vec<OptionSpec> {
             id: OptionId::BackupOnSave,
             name: "backup_on_save",
             summary: "Backup on save",
-            doc: "Whether saving an existing file writes one persistent backup for each buffer visit.",
+            doc: "Whether saving an existing regular file writes one persistent backup for each buffer visit. Unix backups use mode 0600.",
             value_type: OptionType::Boolean,
             default: OptionValue::Boolean(false),
             valid_values: "true or false",

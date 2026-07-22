@@ -310,7 +310,11 @@ Backups are disabled by default.  When `backup_on_save` is true, saving an
 existing file first writes a persistent backup of the original contents.  With
 an empty `backup_directory`, backups live beside the file as `file~`; otherwise
 Rile writes path-based mapped backup names into the configured directory.  That
-directory is checked when a backup is written and must exist before saving.
+directory is checked when a backup is written and must exist before saving.  On
+Unix, backups use mode `0600`, independent of source mode, parent-directory
+access, or an older backup's mode.  Files opened through a final symbolic link
+can be viewed but not saved; a rejected save leaves the link, target, and dirty
+buffer unchanged.
 
 Auto-save is also disabled by default.  When `auto_save` is true, dirty
 file-visiting buffers write Emacs-style auto-save files without marking the

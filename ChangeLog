@@ -1,3 +1,29 @@
+2026-07-22  Robert Charusta  <rch-public@posteo.net>
+
+	Prevent save backups from disclosing file contents.
+
+	* src/file.rs (Document::write_to_path): Capture final-path metadata,
+	reject unsafe path types, and reuse captured permissions for replacement.
+	(write_backup, open_backup_source, read_backup_source): Read backup
+	metadata and bytes through one no-follow descriptor and reject source
+	replacement.
+	(same_file, backup_permissions, symbolic_link_save_error): New helpers.
+	(write_temporary_then_rename, existing_save_file_metadata): Reject final
+	symbolic links and non-regular destinations.
+	(safe_write_with_permissions, create_temporary_file): Keep Unix temporary
+	contents mode 0600 until final permissions are applied.
+	(tests): Cover private backup modes, configured and pre-existing backups,
+	source and destination replacement, symlink policy, non-regular files, and
+	dirty-state preservation.  Verify a completed backup survives source-write
+	failure and retry.
+	* tests/pty_save.rs
+	(backup_on_save_preserves_old_contents_privately): New config-loaded save
+	and private-mode regression.
+	* src/option.rs (default_options): Describe private persistent backups.
+	* README.md, NEWS, docs/development.md, docs/testing.md,
+	docs/backups-and-auto-save.md: Document private backups, save-path policy,
+	failure behavior, and security coverage.
+
 2026-07-20  Robert Charusta  <rch-public@posteo.net>
 
 	Bound insert-file memory use.

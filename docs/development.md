@@ -638,10 +638,14 @@ Milestone 15 hardening has started with binary-file detection: files containing
 NUL bytes are rejected before UTF-8 decoding so accidental binary opens fail
 with an explicit message.  Backups remain disabled by default.  The optional
 `backup_on_save = true` config setting writes one persistent backup per buffer
-visit before the first successful save of an existing file.  Empty
+visit before the first save attempt that successfully creates a backup.  Empty
 `backup_directory` uses a sibling `file~` backup; a configured backup directory
 uses mapped path-based names and is checked when the backup is written.  Backup
 creation failures block the save so the original file contents remain intact.
+On Unix, backup files use mode `0600`; source metadata and bytes are read from
+one descriptor opened without following a final symbolic link.  Once created,
+the backup is not replaced during that buffer visit even if the subsequent
+visited-file write fails.
 Auto-save is a separate default-off feature.  When `auto_save = true`, dirty
 file-visiting buffers write Emacs-style `#file#` auto-save files after the
 configured handled-key interval or idle timeout.  Auto-save writes do not mark
@@ -681,9 +685,13 @@ line-ending detection and conversion controls if needed.
 Saves use a same-directory temporary file followed by `rename`, then best-effort
 parent-directory sync.  This is intended to avoid partially written target files
 on common Unix filesystems.  Rile preserves existing file permissions across the
-replacement and retries stale temporary-name collisions before failing.
-Permission, directory, and missing-parent errors propagate as `I/O error` values
-and failed saves keep the buffer dirty.
+replacement and retries stale temporary-name collisions before failing.  Unix
+temporary files remain mode `0600` while contents are written and receive the
+destination mode only before rename.  Saves reject an existing final symbolic
+link or other non-regular path; files can still be opened through a symbolic
+link for viewing.  Permission and missing-parent errors propagate as `I/O error`
+values, policy rejections report `invalid input`, and failed saves keep the
+buffer dirty.
 
 ## Terminal Decision
 
