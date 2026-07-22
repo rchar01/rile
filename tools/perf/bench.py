@@ -96,6 +96,7 @@ def main():
 def prepare_fixtures(fixture_dir, level):
     write_many_lines(fixture_dir / "many-lines-50mb.txt", 500_000)
     write_long_line(fixture_dir / "long-line-100k.txt", 100_000)
+    write_syntax_line(fixture_dir / "syntax-line-100k.rs", 100_000)
     write_scroll_file(fixture_dir / "scroll-100k-lines.txt", 100_000)
     if level == "full":
         write_many_lines(fixture_dir / "many-lines-200mb.txt", 2_000_000)
@@ -118,6 +119,16 @@ def write_long_line(path, columns):
     start = "LONG_LINE_START "
     end = " LONG_LINE_END"
     middle = "x" * max(0, columns - len(start) - len(end))
+    path.write_text(f"{start}{middle}{end}\nshort tail\n", encoding="utf-8")
+
+
+def write_syntax_line(path, columns):
+    if path.exists() and path.stat().st_size >= columns:
+        return
+    start = "fn SYNTAX_LINE_START "
+    end = " SYNTAX_LINE_END"
+    remaining = max(0, columns - len(start) - len(end))
+    middle = ("fn " * ((remaining + 2) // 3))[:remaining]
     path.write_text(f"{start}{middle}{end}\nshort tail\n", encoding="utf-8")
 
 
@@ -161,6 +172,21 @@ def build_cases(fixture_dir, level):
             "operation": "end_of_line",
             "operation_wait": "LINE_END",
             "timeout": 20,
+        },
+        {
+            "name": "syntax-line-100k-open",
+            "file": fixture_dir / "syntax-line-100k.rs",
+            "wait": "SYNTAX_LINE_START",
+            "operation": None,
+            "timeout": 15,
+        },
+        {
+            "name": "syntax-line-100k-redraw",
+            "file": fixture_dir / "syntax-line-100k.rs",
+            "wait": "SYNTAX_LINE_START",
+            "operation": "redraw",
+            "operation_wait": "SYNTAX_LINE_START",
+            "timeout": 15,
         },
         {
             "name": "scroll-100k-lines-page-burst",
