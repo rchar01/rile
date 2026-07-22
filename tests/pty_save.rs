@@ -62,6 +62,35 @@ fn auto_save_writes_hash_file_from_loaded_config() -> Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn backup_on_save_preserves_old_contents_privately() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let home = fixtures::temp_home()?;
+    let config_dir = home.path().join(".config").join("rile");
+    fs::create_dir_all(&config_dir)?;
+    fs::write(config_dir.join("config.toml"), "backup_on_save = true\n")?;
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("notes.txt");
+    let backup = directory.path().join("notes.txt~");
+    fs::write(&path, "alpha\n")?;
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o644))?;
+    let mut rile = RilePty::spawn_with_loaded_config(&path, 12, 80, home)?;
+
+    rile.wait_for_screen_contains("alpha")?;
+    rile.send("insert text", b"saved ")?;
+    rile.send("C-x C-s", keys::control_sequence("xs"))?;
+    rile.wait_for_screen_contains("Wrote")?;
+
+    assert_eq!(fs::read_to_string(&path)?, "saved alpha\n");
+    assert_eq!(fs::read_to_string(&backup)?, "alpha\n");
+    assert_eq!(fs::metadata(&backup)?.permissions().mode() & 0o777, 0o600);
+
+    rile.quit()?;
+    Ok(())
+}
+
 #[test]
 fn write_file_saves_as_new_path_and_clears_dirty_state() -> Result<()> {
     let file = fixtures::named_temp_file("alpha\nbeta\n")?;

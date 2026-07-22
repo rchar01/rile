@@ -516,11 +516,18 @@ Rile is free software under GPL-3.0-or-later.\n",
     }
 
     fn write_to_path(&mut self, path: &Path) -> Result<()> {
+        let existing = existing_save_file_metadata(path)?;
         if self.backup_on_save && !self.backup_written {
-            write_backup(path, self.backup_directory.as_deref())?;
+            if let Some(expected) = existing.as_ref() {
+                write_backup(path, self.backup_directory.as_deref(), expected)?;
+            }
             self.backup_written = true;
         }
-        safe_write(path, self.buffer.serialize().as_bytes())?;
+        safe_write_with_permissions(
+            path,
+            self.buffer.serialize().as_bytes(),
+            existing.map(|metadata| metadata.permissions()),
+        )?;
         self.buffer.mark_clean();
         self.missing_on_open = false;
         self.file_stamp = file_stamp_from_path(path)?;
@@ -611,20 +618,77 @@ pub fn safe_write(path: &Path, bytes: &[u8]) -> Result<()> {
     write_temporary_then_rename(path, bytes)
 }
 
-fn write_backup(path: &Path, backup_directory: Option<&Path>) -> Result<()> {
-    match fs::metadata(path) {
-        Ok(metadata) if metadata.is_file() => {
-            let bytes = fs::read(path)?;
-            safe_write_with_permissions(
-                &backup_path(path, backup_directory),
-                &bytes,
-                Some(metadata.permissions()),
-            )
-        }
-        Ok(_) => Ok(()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error.into()),
+fn write_backup(path: &Path, backup_directory: Option<&Path>, expected: &Metadata) -> Result<()> {
+    let source = open_backup_source(path)?;
+    let (bytes, metadata) = read_backup_source(source)?;
+    if !same_file(expected, &metadata) {
+        return Err(RileError::InvalidInput(format!(
+            "file changed while creating backup: {}",
+            path.display()
+        )));
     }
+    safe_write_with_permissions(
+        &backup_path(path, backup_directory),
+        &bytes,
+        Some(backup_permissions(&metadata)),
+    )
+}
+
+fn open_backup_source(path: &Path) -> Result<fs::File> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    match options.open(path) {
+        Ok(file) => Ok(file),
+        Err(error) => {
+            #[cfg(unix)]
+            if error.raw_os_error() == Some(libc::ELOOP) {
+                return Err(symbolic_link_save_error(path));
+            }
+            Err(error.into())
+        }
+    }
+}
+
+fn read_backup_source(mut source: fs::File) -> Result<(Vec<u8>, Metadata)> {
+    let metadata = source.metadata()?;
+    if !metadata.is_file() {
+        return Err(RileError::InvalidInput(
+            "backup source is not a regular file".to_owned(),
+        ));
+    }
+    let mut bytes = Vec::new();
+    source.read_to_end(&mut bytes)?;
+    Ok((bytes, metadata))
+}
+
+#[cfg(unix)]
+fn same_file(expected: &Metadata, actual: &Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    expected.dev() == actual.dev() && expected.ino() == actual.ino()
+}
+
+#[cfg(not(unix))]
+fn same_file(_expected: &Metadata, _actual: &Metadata) -> bool {
+    true
+}
+
+#[cfg(unix)]
+fn backup_permissions(_source: &Metadata) -> fs::Permissions {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::Permissions::from_mode(0o600)
+}
+
+#[cfg(not(unix))]
+fn backup_permissions(source: &Metadata) -> fs::Permissions {
+    source.permissions()
 }
 
 fn backup_path(path: &Path, backup_directory: Option<&Path>) -> PathBuf {
@@ -684,8 +748,28 @@ fn mapped_path_name(path: &Path) -> String {
 }
 
 fn write_temporary_then_rename(path: &Path, bytes: &[u8]) -> Result<()> {
-    let permissions = existing_file_permissions(path)?;
+    let permissions = existing_save_file_metadata(path)?.map(|metadata| metadata.permissions());
     safe_write_with_permissions(path, bytes, permissions)
+}
+
+fn existing_save_file_metadata(path: &Path) -> Result<Option<Metadata>> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(symbolic_link_save_error(path)),
+        Ok(metadata) if metadata.is_file() => Ok(Some(metadata)),
+        Ok(_) => Err(RileError::InvalidInput(format!(
+            "refusing to replace non-regular file: {}",
+            path.display()
+        ))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn symbolic_link_save_error(path: &Path) -> RileError {
+    RileError::InvalidInput(format!(
+        "refusing to save through symbolic link: {}",
+        path.display()
+    ))
 }
 
 fn delete_file_if_exists(path: &Path) -> Result<()> {
@@ -703,6 +787,17 @@ fn safe_write_with_permissions(
 ) -> Result<()> {
     let (temporary, mut file) = create_temporary_file(path, permissions.as_ref())?;
     let result = (|| -> Result<()> {
+        #[cfg(unix)]
+        let permissions = {
+            use std::os::unix::fs::PermissionsExt;
+
+            let final_permissions = match permissions {
+                Some(permissions) => permissions,
+                None => file.metadata()?.permissions(),
+            };
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            Some(final_permissions)
+        };
         file.write_all(bytes)?;
         if let Some(permissions) = permissions {
             file.set_permissions(permissions)?;
@@ -764,10 +859,10 @@ fn create_temporary_file(
         let mut options = OpenOptions::new();
         options.write(true).create_new(true);
         #[cfg(unix)]
-        if let Some(permissions) = permissions {
-            use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
+        if permissions.is_some() {
+            use std::os::unix::fs::OpenOptionsExt;
 
-            options.mode(permissions.mode() & 0o7777);
+            options.mode(0o600);
         }
         match options.open(&temporary) {
             Ok(file) => return Ok((temporary, file)),
@@ -1111,6 +1206,176 @@ mod tests {
             fs::read_to_string(&backup).expect("backup should read"),
             "old"
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn backup_on_save_uses_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        for source_mode in [0o600, 0o644] {
+            let directory = TestDir::new();
+            let path = directory.path().join(format!("mode-{source_mode:o}.txt"));
+            let backup = directory.path().join(format!("mode-{source_mode:o}.txt~"));
+            fs::write(&path, "old").expect("file should be written");
+            fs::set_permissions(&path, fs::Permissions::from_mode(source_mode))
+                .expect("source permissions should be set");
+            fs::write(&backup, "stale").expect("old backup should be written");
+            fs::set_permissions(&backup, fs::Permissions::from_mode(0o666))
+                .expect("old backup permissions should be set");
+            let mut document = Document::open(&path).expect("file should open");
+            document.set_backup_on_save(true);
+            document
+                .buffer_mut()
+                .insert(Position::new(0, 3), " new")
+                .expect("insert should succeed");
+
+            document.save().expect("save should succeed");
+
+            assert_eq!(
+                fs::read_to_string(&backup).expect("backup should read"),
+                "old"
+            );
+            assert_eq!(
+                fs::metadata(&backup)
+                    .expect("backup metadata should read")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_rejects_symbolic_link_paths_and_keeps_buffer_dirty() {
+        use std::os::unix::fs::symlink;
+
+        for backup_on_save in [false, true] {
+            let directory = TestDir::new();
+            let target = directory.path().join("target.txt");
+            let path = directory.path().join("link.txt");
+            let backup = directory.path().join("link.txt~");
+            fs::write(&target, "secret").expect("target should be written");
+            symlink(&target, &path).expect("symbolic link should be created");
+            let mut document = Document::open(&path).expect("symbolic link should open");
+            document.set_backup_on_save(backup_on_save);
+            document
+                .buffer_mut()
+                .insert(Position::new(0, 6), " changed")
+                .expect("insert should succeed");
+
+            let error = document
+                .save()
+                .expect_err("saving through a symbolic link should fail");
+
+            assert!(
+                error
+                    .to_string()
+                    .contains("refusing to save through symbolic link")
+            );
+            assert!(
+                fs::symlink_metadata(&path)
+                    .expect("link metadata should read")
+                    .file_type()
+                    .is_symlink()
+            );
+            assert_eq!(
+                fs::read_to_string(&target).expect("target should read"),
+                "secret"
+            );
+            assert!(!backup.exists());
+            assert!(document.is_dirty());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn backup_replaces_destination_symlink_without_writing_its_target() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let directory = TestDir::new();
+        let path = directory.path().join("save.txt");
+        let backup = directory.path().join("save.txt~");
+        let sentinel = directory.path().join("sentinel.txt");
+        fs::write(&path, "old").expect("file should be written");
+        fs::write(&sentinel, "sentinel").expect("sentinel should be written");
+        symlink(&sentinel, &backup).expect("backup symlink should be created");
+        let mut document = Document::open(&path).expect("file should open");
+        document.set_backup_on_save(true);
+        document
+            .buffer_mut()
+            .insert(Position::new(0, 3), " new")
+            .expect("insert should succeed");
+
+        document.save().expect("save should succeed");
+
+        assert_eq!(
+            fs::read_to_string(&sentinel).expect("sentinel should read"),
+            "sentinel"
+        );
+        assert!(
+            !fs::symlink_metadata(&backup)
+                .expect("backup metadata should read")
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(
+            fs::read_to_string(&backup).expect("backup should read"),
+            "old"
+        );
+        assert_eq!(
+            fs::metadata(&backup)
+                .expect("backup metadata should read")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn opened_backup_source_retains_identity_after_path_replacement() {
+        use std::os::unix::fs::symlink;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("source.txt");
+        let replacement = directory.path().join("replacement.txt");
+        fs::write(&path, "original").expect("source should be written");
+        fs::write(&replacement, "replacement").expect("replacement should be written");
+        let expected = fs::symlink_metadata(&path).expect("source metadata should read");
+        let source = super::open_backup_source(&path).expect("backup source should open");
+        fs::remove_file(&path).expect("source path should be removed");
+        symlink(&replacement, &path).expect("replacement link should be created");
+
+        let (bytes, actual) = super::read_backup_source(source).expect("source should read");
+
+        assert_eq!(bytes, b"original");
+        assert!(super::same_file(&expected, &actual));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn backup_rejects_source_replacement_after_metadata_capture() {
+        let directory = TestDir::new();
+        let path = directory.path().join("source.txt");
+        let backup = directory.path().join("source.txt~");
+        fs::write(&path, "original").expect("source should be written");
+        let expected = fs::symlink_metadata(&path).expect("source metadata should read");
+        fs::remove_file(&path).expect("source should be removed");
+        fs::write(&path, "replacement").expect("replacement should be written");
+
+        let error = super::write_backup(&path, None, &expected)
+            .expect_err("replaced backup source should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("file changed while creating backup")
+        );
+        assert!(!backup.exists());
     }
 
     #[test]
@@ -1565,6 +1830,19 @@ mod tests {
             fs::read_to_string(&path).expect("file should read"),
             "old new"
         );
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            assert_eq!(
+                fs::metadata(&backup)
+                    .expect("backup metadata should read")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
     }
 
     #[test]
@@ -1687,7 +1965,11 @@ mod tests {
             .save_as(directory.path())
             .expect_err("saving over a directory should fail");
 
-        assert!(error.to_string().contains("I/O error"));
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to replace non-regular file")
+        );
         assert!(document.is_dirty());
         assert_eq!(document.path(), None);
     }
@@ -1761,12 +2043,12 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn temporary_file_uses_requested_permissions_before_writing() {
+    fn temporary_file_is_private_before_final_permissions_are_applied() {
         use std::os::unix::fs::PermissionsExt;
 
         let directory = TestDir::new();
         let path = directory.path().join("private.txt");
-        let permissions = fs::Permissions::from_mode(0o600);
+        let permissions = fs::Permissions::from_mode(0o644);
 
         let (temporary, file) = super::create_temporary_file(&path, Some(&permissions))
             .expect("temporary file should be created");
@@ -1781,6 +2063,36 @@ mod tests {
             0o600
         );
         fs::remove_file(temporary).expect("temporary file should be removed");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_write_rejects_existing_fifo() {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::FileTypeExt;
+
+        let directory = TestDir::new();
+        let path = directory.path().join("pipe");
+        let path_bytes =
+            CString::new(path.as_os_str().as_bytes()).expect("path should not contain NUL");
+        // SAFETY: path_bytes is a live NUL-terminated path and mode is valid.
+        let result = unsafe { libc::mkfifo(path_bytes.as_ptr(), 0o600) };
+        assert_eq!(result, 0, "FIFO should be created");
+
+        let error = safe_write(&path, b"secret").expect_err("FIFO replacement should fail");
+
+        assert!(
+            error
+                .to_string()
+                .contains("refusing to replace non-regular file")
+        );
+        assert!(
+            fs::symlink_metadata(&path)
+                .expect("FIFO metadata should read")
+                .file_type()
+                .is_fifo()
+        );
     }
 
     #[test]
