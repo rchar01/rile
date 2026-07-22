@@ -21207,6 +21207,34 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn dense_syntax_line_preserves_all_keyword_spans() {
+        let directory = TestDir::new();
+        let path = directory.path().join("dense.rs");
+        let keyword_count = 20_000;
+        let line = "fn ".repeat(keyword_count);
+        fs::write(&path, &line).expect("fixture should be written");
+        let editor = Editor::new(Document::open(&path).expect("document should open"));
+
+        let spans = editor.spans_for_line(0, &line);
+
+        assert_eq!(
+            editor.syntax_mode_for_buffer(editor.current_buffer_id()),
+            SyntaxMode::Rust
+        );
+        assert!(editor.syntax_enabled());
+        assert_eq!(spans.len(), keyword_count);
+        assert_eq!(spans.first(), Some(&Span::new(0, 2, Face::SyntaxKeyword)));
+        assert_eq!(
+            spans.last(),
+            Some(&Span::new(
+                line.len() - 3,
+                line.len() - 1,
+                Face::SyntaxKeyword
+            ))
+        );
+    }
+
+    #[test]
     fn highlight_regexp_adds_persistent_match_spans() {
         let mut editor = Editor::new(Document::scratch());
 
