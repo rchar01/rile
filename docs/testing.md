@@ -102,6 +102,15 @@ equal-priority input-order ties. An editor regression opens a Rust buffer with
 These tests avoid wall-clock thresholds; the optional performance suite supplies
 runtime smoke evidence for the complete open and redraw path.
 
+Search-pattern tests count emitted match-range steps on dense literal and regexp
+lines, proving enumeration stops at the requested limit instead of collecting
+and truncating all ranges. Editor tests cover the shared persistent-highlight
+budget, point lookup beyond the retained prefix, and preservation of a current
+match beyond the ordinary active-search prefix. A PTY regression searches
+backward near the end of a dense long line and confirms redraw and later input
+remain usable through the real terminal path. Tests intentionally avoid an
+allocation-exhaustion-scale fixture.
+
 Shell-job unit tests use small injected output budgets and deadlines to cover the
 exact combined-output boundary, infinite producers, UTF-8 byte boundaries,
 silent-command timeout, ordinary descendant cleanup, early stdin closure, and

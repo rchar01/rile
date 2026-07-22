@@ -7,6 +7,13 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* Active incremental search and persistent match highlighting now retain at
+  most 4,096 decoration spans per logical line. Match enumeration stops at the
+  rendering budget instead of allocating a range and span for every occurrence
+  in an attacker-controlled long line before merging. Search navigation and
+  replacement remain complete, and the current non-empty search match is
+  retained within the active-search budget.
+
 * File buffers now reuse canonical saveable path identities across relative,
   `..`, and symlinked-parent aliases. `write-file` refuses destinations already
   visited by another buffer. Ordinary saves reject files modified, replaced,

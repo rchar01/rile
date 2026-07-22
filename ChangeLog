@@ -1,5 +1,33 @@
 2026-07-22  Robert Charusta  <rch-public@posteo.net>
 
+	Bound match-highlight memory on dense logical lines.
+
+	* src/search_pattern.rs (SearchPattern::match_ranges_in_line_up_to,
+	SearchPattern::has_nonempty_match_in_line,
+	SearchPattern::match_contains_byte,
+	SearchPattern::visit_match_ranges_in_line): Add bounded and streaming match
+	range operations.
+	(RegexpPattern::visit_match_ranges, visit_literal_match_ranges): Stop range
+	emission when the consumer's budget is full.
+	(tests): Count emitted ranges and cover literal, regexp, zero-limit, and
+	point-lookup behavior.
+	* src/editor.rs (MAX_HIGHLIGHT_MATCHES_PER_LINE): New constant.
+	(UserHighlightDecorator::spans_for_line): Share one per-line span budget
+	across persistent highlights.
+	(SearchDecorator::spans_for_line): Bound active-search spans while retaining
+	the current non-empty match within the budget.
+	(user_highlight_contains_point): Check point membership without collecting
+	all ranges.
+	(tests): Cover active and persistent limits and current-match retention.
+	* tests/pty_search.rs (dense_long_line_search_redraw_remains_usable): New
+	regression.
+	* src/option.rs, README.md, NEWS, docs/architecture.md,
+	docs/development.md, docs/testing.md, plans/syntax-rendering-follow-ups.md:
+	Document match-span limits, user-visible behavior, tests, and remaining
+	full-line work.
+
+2026-07-22  Robert Charusta  <rch-public@posteo.net>
+
 	Prevent path aliases and stale buffers from overwriting newer file data.
 
 	* src/file.rs (FileStamp): Add Unix file identity and change metadata.

@@ -236,7 +236,7 @@ fn default_options() -> Vec<OptionSpec> {
             id: OptionId::SearchHighlighting,
             name: "search_highlighting",
             summary: "Search highlighting",
-            doc: "Whether active search matches are highlighted in the selected buffer.",
+            doc: "Whether active search matches are highlighted in the selected buffer. Rendering retains at most 4,096 matches per logical line, including the current non-empty match.",
             value_type: OptionType::Boolean,
             default: OptionValue::Boolean(true),
             valid_values: "true or false",

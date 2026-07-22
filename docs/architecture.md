@@ -180,13 +180,21 @@ as visible ASCII escapes. Only renderer-owned cursor, clearing, and face
 sequences use the raw ANSI path. Display-width, clipping, span, and cursor
 calculations account for the expanded control representation.
 
+Active search retains at most 4,096 match spans per logical line, including the
+current non-empty match. Persistent user highlights share a separate aggregate
+4,096-span budget per line. Match-range producers stop when these decoration
+budgets are full rather than materializing and then truncating every repeated
+match. Search navigation, replacement, and point-based highlight commands do
+not use the retained decoration prefix and remain complete.
+
 Normal buffer rows project source text directly into the horizontal viewport
 instead of expanding the complete logical line. Projection retains source-byte
 face boundaries, expands tabs and controls incrementally, and uses a bounded
 source-character budget. Exhausting that budget produces a conservative right
 truncation marker. Syntax, search, and persistent-highlight providers still
 prepare source spans before terminal projection and may inspect the complete
-logical line.
+logical line. Regexp matching also retains a character-slot vector proportional
+to the complete line, although its emitted decoration ranges are bounded.
 
 Decorations are expressed as face spans. `src/render/` merges overlapping spans
 with an ordered boundary sweep keyed by face priority and provider order, then

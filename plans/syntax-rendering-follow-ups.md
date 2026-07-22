@@ -25,10 +25,11 @@ after the quadratic span-merge vulnerability has been fixed.
 
 ## Remaining Risks
 
-- Syntax, active search, and persistent user highlights still inspect complete
-  logical lines before terminal viewport projection. The fixed path is no
-  longer quadratic, but repeated redraw remains linear or linearithmic in full
-  line and span count.
+- Syntax, active search, and persistent user highlights still run before
+  terminal viewport projection and may inspect complete logical lines. Active
+  and persistent match-span counts are now bounded, but sparse literal matching
+  and regexp character-slot construction remain proportional to full line
+  length.
 - Projecting visible spans still iterates the complete merged span vector.
 - Split windows displaying the same line recompute decorations independently.
 - Horizontal projection work grows with the requested starting column because
@@ -82,7 +83,8 @@ Validation gate:
 ## Non-Goals
 
 - Do not disable syntax highlighting or change its default.
-- Do not cap or silently drop valid visible spans.
+- Do not replace the current match-span security cap without an equivalent
+  bounded design that preserves all visible spans.
 - Do not slice a visible substring without carrying lexical prefix state.
 - Do not add caching before measurements show that range-aware rendering alone
   is insufficient.
@@ -97,4 +99,5 @@ Validation gate:
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-07-22 | Bound active and persistent match spans before viewport-aware decoration. | The cap closes the demonstrated match-count memory exhaustion with a small change while retaining the current non-empty match and complete search semantics. |
 | 2026-07-22 | Keep viewport-aware decoration as optional follow-up work. | The ordered sweep closes the demonstrated quadratic denial of service without changing visible highlighting; range-aware providers are broader and carry lexical-boundary risk. |

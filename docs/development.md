@@ -668,8 +668,15 @@ column through the viewport end plus 256 characters of slack, preserving
 ordinary combining text while bounding pathological zero-width runs. Budget
 exhaustion uses the normal right-edge marker. This bounds plain-text redraw work
 near line start; active syntax, search, and persistent highlights may still scan
-a complete source line before terminal projection. Their spans merge with an
-ordered boundary sweep, avoiding per-boundary scans of the complete span list.
+a complete source line before terminal projection. Active search emits at most
+4,096 match spans per logical line, including the current non-empty match, while
+all persistent match patterns share a separate 4,096-span budget. The range
+producers stop at the budget rather than collecting every match and truncating
+afterward. Search motion, replacement, and point-based highlight removal remain
+complete. Regexp matching still allocates character slots proportional to the
+complete logical line before emitting bounded ranges. Decoration spans merge
+with an ordered boundary sweep, avoiding per-boundary scans of the complete
+span list.
 
 ## Line Ending Policy
 
