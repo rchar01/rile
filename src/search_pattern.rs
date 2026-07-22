@@ -15,6 +15,7 @@ const MAX_GROUP_NESTING: usize = 64;
 #[cfg(test)]
 thread_local! {
     static VM_THREAD_STEPS: Cell<usize> = const { Cell::new(0) };
+    static MATCH_RANGE_STEPS: Cell<usize> = const { Cell::new(0) };
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -112,14 +113,51 @@ impl SearchPattern {
         }
     }
 
+    pub(crate) fn match_ranges_in_line_up_to(
+        &self,
+        line: &str,
+        maximum_ranges: usize,
+    ) -> Vec<(usize, usize)> {
+        if maximum_ranges == 0 {
+            return Vec::new();
+        }
+
+        let mut ranges = Vec::with_capacity(maximum_ranges.min(256));
+        self.visit_match_ranges_in_line(line, |start, end| {
+            ranges.push((start, end));
+            ranges.len() < maximum_ranges
+        });
+        ranges
+    }
+
+    #[cfg(test)]
     pub(crate) fn match_ranges_in_line(&self, line: &str) -> Vec<(usize, usize)> {
+        self.match_ranges_in_line_up_to(line, usize::MAX)
+    }
+
+    pub(crate) fn has_nonempty_match_in_line(&self, line: &str) -> bool {
+        !self.match_ranges_in_line_up_to(line, 1).is_empty()
+    }
+
+    pub(crate) fn match_contains_byte(&self, line: &str, byte: usize) -> bool {
+        let mut contains = false;
+        self.visit_match_ranges_in_line(line, |start, end| {
+            contains = start <= byte && byte < end;
+            !contains && start <= byte
+        });
+        contains
+    }
+
+    fn visit_match_ranges_in_line(&self, line: &str, visit: impl FnMut(usize, usize) -> bool) {
         match self.kind {
-            PatternKind::Literal => literal_match_ranges(line, &self.literal, self.case_sensitive),
+            PatternKind::Literal => {
+                visit_literal_match_ranges(line, &self.literal, self.case_sensitive, visit)
+            }
             PatternKind::Regexp => self
                 .regexp
                 .as_ref()
                 .expect("regexp kind should have compiled pattern")
-                .match_ranges(line),
+                .visit_match_ranges(line, visit),
         }
     }
 
@@ -322,19 +360,21 @@ impl RegexpPattern {
             })
     }
 
-    fn match_ranges(&self, line: &str) -> Vec<(usize, usize)> {
+    fn visit_match_ranges(&self, line: &str, mut visit: impl FnMut(usize, usize) -> bool) {
         let slots = char_slots(line);
-        let mut ranges = Vec::new();
         let mut start_slot = 0;
         while start_slot <= slots.len() {
             let Some(slot_match) = self.run_forward(&slots, start_slot) else {
                 break;
             };
             if slot_match.end_slot > slot_match.start_slot {
-                ranges.push((
+                count_match_range_step();
+                if !visit(
                     slot_byte(&slots, line.len(), slot_match.start_slot),
                     slot_byte(&slots, line.len(), slot_match.end_slot),
-                ));
+                ) {
+                    break;
+                }
                 start_slot = slot_match.end_slot;
             } else if slot_match.start_slot < slots.len() {
                 start_slot = slot_match.start_slot + 1;
@@ -342,7 +382,6 @@ impl RegexpPattern {
                 break;
             }
         }
-        ranges
     }
 
     fn run_forward(&self, slots: &[CharSlot], minimum_slot: usize) -> Option<SlotMatch> {
@@ -1153,6 +1192,21 @@ fn measured_vm_thread_steps<T>(operation: impl FnOnce() -> T) -> (T, usize) {
     (result, VM_THREAD_STEPS.get())
 }
 
+#[cfg(test)]
+fn count_match_range_step() {
+    MATCH_RANGE_STEPS.set(MATCH_RANGE_STEPS.get() + 1);
+}
+
+#[cfg(not(test))]
+fn count_match_range_step() {}
+
+#[cfg(test)]
+fn measured_match_range_steps<T>(operation: impl FnOnce() -> T) -> (T, usize) {
+    MATCH_RANGE_STEPS.set(0);
+    let result = operation();
+    (result, MATCH_RANGE_STEPS.get())
+}
+
 fn find_literal_forward_match(
     line: &str,
     literal: &str,
@@ -1192,16 +1246,29 @@ fn find_literal_backward(
         .last()
 }
 
-fn literal_match_ranges(line: &str, literal: &str, case_sensitive: bool) -> Vec<(usize, usize)> {
+fn visit_literal_match_ranges(
+    line: &str,
+    literal: &str,
+    case_sensitive: bool,
+    mut visit: impl FnMut(usize, usize) -> bool,
+) {
     if literal.is_empty() {
-        return line_boundaries(line).map(|byte| (byte, byte)).collect();
+        for byte in line_boundaries(line) {
+            count_match_range_step();
+            if !visit(byte, byte) {
+                break;
+            }
+        }
+        return;
     }
 
-    let mut ranges = Vec::new();
     let mut start = 0;
     while start <= line.len() {
         if let Some(end) = literal_match_end(line, literal, start, case_sensitive) {
-            ranges.push((start, end));
+            count_match_range_step();
+            if !visit(start, end) {
+                break;
+            }
             start = end;
         } else if let Some(next) = next_boundary_after(line, start) {
             start = next;
@@ -1209,7 +1276,6 @@ fn literal_match_ranges(line: &str, literal: &str, case_sensitive: bool) -> Vec<
             break;
         }
     }
-    ranges
 }
 
 fn literal_match_end(
@@ -1334,7 +1400,8 @@ fn start_slots_from_byte(
 mod tests {
     use super::{
         Atom, MAX_CAPTURES, MAX_GROUP_NESTING, MAX_PATTERN_CHARS, PatternKind, Piece, Quantifier,
-        RegexpPattern, SearchPattern, char_slots, measured_vm_thread_steps,
+        RegexpPattern, SearchPattern, char_slots, measured_match_range_steps,
+        measured_vm_thread_steps,
     };
 
     fn regexp(pattern: &str) -> SearchPattern {
@@ -1699,6 +1766,54 @@ mod tests {
             pattern.match_ranges_in_line("Foo foo FOO"),
             vec![(0, 3), (4, 7), (8, 11)]
         );
+    }
+
+    #[test]
+    fn literal_match_ranges_stop_at_requested_limit() {
+        let pattern = SearchPattern::compile(PatternKind::Literal, "a").expect("literal compiles");
+        let line = "a".repeat(10_000);
+
+        let (ranges, steps) =
+            measured_match_range_steps(|| pattern.match_ranges_in_line_up_to(&line, 32));
+
+        assert_eq!(ranges.len(), 32);
+        assert_eq!(ranges.first(), Some(&(0, 1)));
+        assert_eq!(ranges.last(), Some(&(31, 32)));
+        assert_eq!(steps, 32);
+    }
+
+    #[test]
+    fn regexp_match_ranges_stop_at_requested_limit() {
+        let pattern = regexp("a");
+        let line = "a".repeat(1_000);
+
+        let (ranges, steps) =
+            measured_match_range_steps(|| pattern.match_ranges_in_line_up_to(&line, 16));
+
+        assert_eq!(ranges.len(), 16);
+        assert_eq!(ranges.last(), Some(&(15, 16)));
+        assert_eq!(steps, 16);
+    }
+
+    #[test]
+    fn zero_match_range_limit_skips_matching() {
+        let pattern = regexp("a");
+
+        let (ranges, steps) =
+            measured_match_range_steps(|| pattern.match_ranges_in_line_up_to("aaaa", 0));
+
+        assert!(ranges.is_empty());
+        assert_eq!(steps, 0);
+    }
+
+    #[test]
+    fn point_lookup_does_not_depend_on_retained_highlight_ranges() {
+        let pattern = SearchPattern::compile(PatternKind::Literal, "a").expect("literal compiles");
+        let line = "a".repeat(10_000);
+
+        assert!(pattern.has_nonempty_match_in_line(&line));
+        assert!(pattern.match_contains_byte(&line, line.len() - 1));
+        assert!(!pattern.match_contains_byte(&line, line.len()));
     }
 
     #[test]

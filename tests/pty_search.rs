@@ -135,6 +135,26 @@ fn regexp_incremental_search_bounds_optional_chain_work() -> Result<()> {
 }
 
 #[test]
+fn dense_long_line_search_redraw_remains_usable() -> Result<()> {
+    let line = "a ".repeat(5_000);
+    let file = fixtures::named_temp_file(&format!("{line}\n"))?;
+    let mut rile = RilePty::spawn(file.path(), 12, 80)?;
+
+    rile.wait_for_screen_contains("a a a")?;
+    rile.send("C-e", keys::control('e'))?;
+    rile.send("C-r", keys::control('r'))?;
+    rile.send("a", b"a")?;
+    rile.wait_for_screen_contains("I-search backward: a")?;
+
+    rile.send("C-g", keys::control('g'))?;
+    rile.send("C-b", keys::control('b'))?;
+    rile.assert_status_contains("Ln 001")?;
+
+    rile.quit()?;
+    Ok(())
+}
+
+#[test]
 fn regexp_incremental_search_uses_smart_case() -> Result<()> {
     let file = fixtures::named_temp_file("Status\nstatus\n123 ABC\n")?;
     let mut rile = RilePty::spawn(file.path(), 12, 80)?;

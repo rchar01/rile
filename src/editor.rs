@@ -59,6 +59,7 @@ const AUTO_REVERT_RETRY_DELAY: Duration = Duration::from_secs(1);
 const MAX_ARGUMENT_GENERATED_BYTES: usize = 1024 * 1024;
 const MAX_ARGUMENT_REPEAT_STEPS: usize = 4_096;
 const MAX_KEYBOARD_MACRO_EVENTS: usize = 4_096;
+const MAX_HIGHLIGHT_MATCHES_PER_LINE: usize = 4_096;
 const SHELL_COMMAND_RUNNING_MESSAGE: &str = "Running shell command... (C-g to cancel)";
 const BACKGROUND_SHELL_COMMAND_RUNNING_MESSAGE: &str =
     "Shell command running in background (M-x interrupt-shell-command to cancel)";
@@ -9880,17 +9881,20 @@ impl DecorationProvider for UserHighlightDecorator<'_> {
         };
         let mut spans = Vec::new();
         for highlight in highlights {
+            let remaining = MAX_HIGHLIGHT_MATCHES_PER_LINE.saturating_sub(spans.len());
+            if remaining == 0 {
+                break;
+            }
             match highlight.kind {
                 UserHighlightKind::Match => spans.extend(
                     highlight
                         .pattern
-                        .match_ranges_in_line(line)
+                        .match_ranges_in_line_up_to(line, remaining)
                         .into_iter()
                         .map(|(start, end)| Span::new(start, end, highlight.face)),
                 ),
                 UserHighlightKind::Line => {
-                    if !line.is_empty() && !highlight.pattern.match_ranges_in_line(line).is_empty()
-                    {
+                    if !line.is_empty() && highlight.pattern.has_nonempty_match_in_line(line) {
                         spans.push(Span::new(0, line.len(), highlight.face));
                     }
                 }
@@ -9912,8 +9916,8 @@ impl DecorationProvider for SearchDecorator<'_> {
             return Vec::new();
         };
 
-        pattern
-            .match_ranges_in_line(line)
+        let mut spans = pattern
+            .match_ranges_in_line_up_to(line, MAX_HIGHLIGHT_MATCHES_PER_LINE)
             .into_iter()
             .map(|(start, end)| {
                 let face = if search.current
@@ -9927,7 +9931,25 @@ impl DecorationProvider for SearchDecorator<'_> {
                 };
                 Span::new(start, end, face)
             })
-            .collect()
+            .collect::<Vec<_>>();
+        if let Some(current) = search.current
+            && current.start.line == line_index
+            && current.end.line == line_index
+            && current.start.byte < current.end.byte
+            && !spans.iter().any(|span| {
+                span.start_byte == current.start.byte && span.end_byte == current.end.byte
+            })
+        {
+            if spans.len() == MAX_HIGHLIGHT_MATCHES_PER_LINE {
+                spans.pop();
+            }
+            spans.push(Span::new(
+                current.start.byte,
+                current.end.byte,
+                Face::CurrentSearchMatch,
+            ));
+        }
+        spans
     }
 }
 
@@ -10203,12 +10225,8 @@ fn highlight_face_by_name(name: &str) -> Option<&'static HighlightFaceSpec> {
 
 fn user_highlight_contains_point(highlight: &UserHighlight, line: &str, point: usize) -> bool {
     match highlight.kind {
-        UserHighlightKind::Line => !highlight.pattern.match_ranges_in_line(line).is_empty(),
-        UserHighlightKind::Match => highlight
-            .pattern
-            .match_ranges_in_line(line)
-            .into_iter()
-            .any(|(start, end)| start <= point && point < end),
+        UserHighlightKind::Line => highlight.pattern.has_nonempty_match_in_line(line),
+        UserHighlightKind::Match => highlight.pattern.match_contains_byte(line, point),
     }
 }
 
@@ -10343,11 +10361,12 @@ mod tests {
     use super::{
         AUTO_REVERT_RETRY_DELAY, AboutRileInfo, ActiveModes, AutoRevertFailure, BufferDescription,
         Editor, EditorOutcome, EditorPatternMatch, KeyboardMacroBudget, KillEntry,
-        MAX_ARGUMENT_GENERATED_BYTES, MAX_ARGUMENT_REPEAT_STEPS, MAX_KEYBOARD_MACRO_EVENTS,
-        SHELL_COMMAND_RUNNING_MESSAGE, SearchDirection, ShellCancellationRequest,
+        MAX_ARGUMENT_GENERATED_BYTES, MAX_ARGUMENT_REPEAT_STEPS, MAX_HIGHLIGHT_MATCHES_PER_LINE,
+        MAX_KEYBOARD_MACRO_EVENTS, SHELL_COMMAND_RUNNING_MESSAGE, SearchDecorator, SearchDirection,
+        SearchState, ShellCancellationRequest, UserHighlight, UserHighlightKind,
         checked_additional_repeat_bytes, checked_generated_bytes, file_prompt_base_input,
         format_rectangle_number, format_shell_command_error, highlight_phrase_regexp,
-        transpose_chars_effective_steps,
+        transpose_chars_effective_steps, user_highlight_contains_point,
     };
     use crate::RileError;
     use crate::buffer::undo::UndoRecord;
@@ -21432,6 +21451,56 @@ M-g g           goto-line                      Go to line or line:column\n"
     }
 
     #[test]
+    fn persistent_match_highlights_stop_at_per_line_limit() {
+        let pattern = SearchPattern::compile(PatternKind::Literal, "a").expect("literal compiles");
+        let highlight = UserHighlight {
+            original_input: "a".to_owned(),
+            pattern,
+            kind: UserHighlightKind::Match,
+            face: Face::UserHighlight,
+        };
+        let line = "a ".repeat(MAX_HIGHLIGHT_MATCHES_PER_LINE + 10);
+        let decorator = super::UserHighlightDecorator {
+            highlights: Some(std::slice::from_ref(&highlight)),
+        };
+
+        let spans = decorator.spans_for_line(0, &line);
+
+        assert_eq!(spans.len(), MAX_HIGHLIGHT_MATCHES_PER_LINE);
+        let point = line.len() - 2;
+        assert!(user_highlight_contains_point(&highlight, &line, point));
+    }
+
+    #[test]
+    fn persistent_highlights_share_one_per_line_limit() {
+        let highlights = [
+            UserHighlight {
+                original_input: "a".to_owned(),
+                pattern: SearchPattern::compile(PatternKind::Literal, "a")
+                    .expect("literal compiles"),
+                kind: UserHighlightKind::Match,
+                face: Face::UserHighlight,
+            },
+            UserHighlight {
+                original_input: "b".to_owned(),
+                pattern: SearchPattern::compile(PatternKind::Literal, "b")
+                    .expect("literal compiles"),
+                kind: UserHighlightKind::Match,
+                face: Face::UserHighlightBlue,
+            },
+        ];
+        let line = "a b ".repeat(MAX_HIGHLIGHT_MATCHES_PER_LINE + 10);
+        let decorator = super::UserHighlightDecorator {
+            highlights: Some(&highlights),
+        };
+
+        let spans = decorator.spans_for_line(0, &line);
+
+        assert_eq!(spans.len(), MAX_HIGHLIGHT_MATCHES_PER_LINE);
+        assert!(spans.iter().all(|span| span.face == Face::UserHighlight));
+    }
+
+    #[test]
     fn highlight_regexp_accepts_named_face() {
         let mut editor = Editor::new(Document::scratch());
 
@@ -21974,6 +22043,41 @@ M-g g           goto-line                      Go to line or line:column\n"
 
         assert_eq!(editor.cursor(), Position::new(0, "one ".len()));
         assert!(editor.spans_for_line(0, "one two").is_empty());
+    }
+
+    #[test]
+    fn incremental_search_keeps_current_match_beyond_highlight_limit() {
+        let line = "a ".repeat(MAX_HIGHLIGHT_MATCHES_PER_LINE + 10);
+        let current_start = line.len() - 2;
+        let search = SearchState {
+            kind: PatternKind::Literal,
+            direction: SearchDirection::Forward,
+            origin: Position::new(0, 0),
+            current: Some(TextRange::new(
+                Position::new(0, current_start),
+                Position::new(0, current_start + 1),
+            )),
+            pattern: Some(
+                SearchPattern::compile(PatternKind::Literal, "a").expect("literal compiles"),
+            ),
+            failed_direction: None,
+        };
+        let decorator = SearchDecorator {
+            enabled: true,
+            search: Some(&search),
+        };
+
+        let spans = decorator.spans_for_line(0, &line);
+
+        assert_eq!(spans.len(), MAX_HIGHLIGHT_MATCHES_PER_LINE);
+        assert_eq!(
+            spans.last(),
+            Some(&Span::new(
+                current_start,
+                current_start + 1,
+                Face::CurrentSearchMatch
+            ))
+        );
     }
 
     #[test]
