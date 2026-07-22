@@ -157,6 +157,19 @@ retry.  A config-loaded PTY regression saves through the real binary and checks
 both original backup contents and private mode without changing the process-wide
 umask.
 
+File-identity tests reuse existing and missing `..` aliases and Unix
+symlinked-parent aliases while keeping final symbolic links and hard-link names
+distinct. Transition tests repoint a parent symlink and create a formerly
+missing parent to ensure current identity supersedes stale keys. Save tests
+reject external modification, deletion, unexpected creation, and same-length
+inode replacement while retaining dirty state, backups, and recovery files.
+`write-file` tests reject destinations owned by another buffer and update the
+manager-owned name after successful retargeting. Auto-save cleanup tests bind
+pending deletion to exact file stamps, preserve replaced or repurposed paths,
+retry multiple pending paths, and continue `save-some-buffers` after a committed
+cleanup warning. PTY coverage confirms an externally changed file is preserved
+and the real editor remains dirty and responsive.
+
 PTY integration tests live under `tests/pty_*.rs`. They spawn the compiled `rile`
 binary in a pseudo-terminal with `expectrl`, send real key input, parse terminal
 output with `vt100`, and assert screen contents, cursor position, status text,

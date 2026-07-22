@@ -59,8 +59,9 @@ Rile rejects attempts to save them whether or not backups are enabled.  The link
 and its target remain unchanged and the buffer remains dirty.  Existing final
 paths of other non-regular types, such as FIFOs, are rejected as well.
 
-`save_as` starts a new backup cycle for the new visited path.  A later save of
-that new path can create a new first-save backup for that file.
+`save_as` starts a new backup cycle only when the destination has a different
+visited-path identity.  Retargeting through an alias of the same file preserves
+the one-backup-per-visit contract.
 
 ## Auto-Save Files
 
@@ -96,6 +97,13 @@ When `delete_auto_save_files` is true, successful explicit saves and successful
 reverts delete only auto-save files written by the current Rile session for that
 buffer.  Pre-existing auto-save files are preserved so Rile does not erase a
 possible recovery file from a previous crash or interrupted session.
+
+Cleanup records include the exact path and file stamp written by the session.
+If Rile observes that pathname was repurposed or replaced, it preserves the
+current file.  The visited-file write remains committed and clean, while the
+editor reports an auto-save cleanup warning and retains other pending cleanup
+records for later retries.  A narrow race remains if another process replaces
+the pathname between the identity check and deletion.
 
 Opening a file checks whether its corresponding auto-save file is strictly newer
 than the visited file.  If it is newer, Rile warns that the auto-save file can be

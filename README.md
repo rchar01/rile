@@ -306,6 +306,19 @@ completion_matching = "orderless" # "orderless", "prefix", or "substring"
 
 `fill_column` accepts integer values from 20 through 200.
 
+Rile identifies visited files independently of their displayed path spelling.
+Absolute, relative, `..`, and symlinked-parent aliases for the same saveable
+pathname reuse one buffer.  Final symbolic links remain distinct and
+view-only, while hard-link pathnames remain distinct because atomic replacement
+can make them diverge.  `write-file` refuses a destination visited by another
+buffer.  An ordinary save also refuses to overwrite a file that was modified,
+replaced, deleted, or unexpectedly created since it was opened or last saved;
+the buffer remains modified so its contents can be recovered or written
+elsewhere.  Unix file identity and change metadata provide the strongest
+detection; other targets currently use length and modification time.  A narrow
+race remains if another process changes the destination between Rile's final
+check and atomic rename.
+
 Backups are disabled by default.  When `backup_on_save` is true, saving an
 existing file first writes a persistent backup of the original contents.  With
 an empty `backup_directory`, backups live beside the file as `file~`; otherwise
@@ -325,7 +338,9 @@ visited file's permissions, and rewrites never make an existing recovery file
 more permissive.  Successful explicit saves delete auto-save files written by
 the current session when `delete_auto_save_files` is true; pre-existing recovery
 files are preserved.  Opening a file with a newer auto-save file warns so the
-auto-save file can be opened manually for recovery.
+auto-save file can be opened manually for recovery.  Cleanup is bound to the
+exact recovery file written by the session, so an observed repurposed or
+replaced path is preserved and reported as a post-save cleanup warning.
 
 Completion currently applies to `M-x` command names, `C-h f` command names,
 `C-h v` option names, `C-x C-f`, `C-x C-r`, and `C-x i` file names, and

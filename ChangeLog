@@ -1,5 +1,45 @@
 2026-07-22  Robert Charusta  <rch-public@posteo.net>
 
+	Prevent path aliases and stale buffers from overwriting newer file data.
+
+	* src/file.rs (FileStamp): Add Unix file identity and change metadata.
+	(VisitedPathKey, PendingAutoSaveCleanup, SaveExpectation): New types.
+	(Document::open): Read and stamp existing files through one descriptor.
+	(Document::save, Document::save_as, Document::write_to_path): Reject
+	unexpected disk state and preserve identity across same-file aliases.
+	(visited_path_key, ensure_expected_file_stamp,
+	ensure_save_path_unchanged): New helpers.
+	(read_backup_source): Reject content changes during backup reads.
+	(Document::auto_save_if_dirty,
+	Document::delete_current_session_auto_save_file,
+	delete_pending_auto_save_file): Track cleanup by exact path and stamp.
+	(tests): Cover modification, creation, deletion, replacement, alias backup
+	cycles, committed cleanup warnings, retries, and path repurposing.
+	* src/buffers.rs (BufferManager::open_path_with_options): Reuse current
+	visited-path identities.
+	(BufferManager::save_as): Reject destinations owned by another buffer and
+	update manager-owned names after committed retargeting.
+	(document_matches_path_key): New helper.
+	(tests): Cover existing, missing, parent-symlink, final-symlink, hard-link,
+	and identity-transition behavior.
+	* src/error.rs (RileError::SaveCommitted): Distinguish committed writes
+	from post-save cleanup failures.
+	* src/editor.rs (SaveSomeBuffersState, Editor::save_buffer,
+	Editor::save_buffer_by_id, Editor::write_file): Preserve clean state and
+	continue batch saves after cleanup warnings.
+	(tests): Cover write-file ownership, renamed buffers, cleanup warnings, and
+	batch continuation.
+	* tests/pty_save.rs
+	(save_buffer_rejects_external_changes_and_remains_dirty): New regression.
+	* src/command.rs, README.md, NEWS, docs/architecture.md,
+	docs/development.md, docs/testing.md, docs/backups-and-auto-save.md:
+	Document file identity, stale-save rejection, cleanup behavior, tests, and
+	accepted platform and rename-race limits.
+	* plans/file-identity-and-save-conflicts.md: Track optional stronger
+	platform identity, conditional replacement, and force-save work.
+
+2026-07-22  Robert Charusta  <rch-public@posteo.net>
+
 	Avoid quadratic decoration-span merging.
 
 	* src/render/mod.rs (merge_spans): Replace per-boundary full-span scans

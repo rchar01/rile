@@ -425,8 +425,8 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         RectangleNumberLines => "Insert formatted line numbers down the active rectangle.",
         Recenter => "Cycle point between center, top, and bottom of the selected window.",
         RevertBuffer => "Replace the current buffer contents with the visited file on disk.",
-        SaveBuffer => "Write the current file-backed buffer to disk.",
-        SaveSomeBuffers => "Offer to save each modified file-backed buffer.",
+        SaveBuffer => "Write the current file-backed buffer unless it changed on disk.",
+        SaveSomeBuffers => "Offer to safely save each modified file-backed buffer.",
         SaveBuffersKillTerminal => "Quit Rile, prompting before exit when buffers are modified.",
         SetMarkCommand => "Set mark at point and activate the region.",
         ShellCommand => "Prompt for a shell command and display or insert its output.",
@@ -459,7 +459,7 @@ const fn default_doc_for_command(command: CommandId) -> &'static str {
         UpcaseWord => "Convert the following word or words to upper case.",
         ViewEchoAreaMessages => "Open the read-only message history buffer.",
         WhatCursorPosition => "Show the current line, column, and buffer position.",
-        WriteFile => "Prompt for a path and write the current buffer there.",
+        WriteFile => "Prompt for a path not visited by another buffer and write there.",
         Yank => "Insert the latest kill-ring entry at point.",
         YankRectangle => "Insert the latest killed rectangle at point.",
         YankPop => "Replace the just-yanked text with an earlier kill-ring entry.",
@@ -1557,8 +1557,19 @@ mod tests {
             .expect("save-buffer should be registered");
 
         assert_eq!(command.summary, "Save current buffer");
-        assert_eq!(command.doc, "Write the current file-backed buffer to disk.");
+        assert_eq!(
+            command.doc,
+            "Write the current file-backed buffer unless it changed on disk."
+        );
         assert_ne!(command.summary, command.doc);
+
+        let write_file = registry
+            .get("write-file")
+            .expect("write-file should be registered");
+        assert_eq!(
+            write_file.doc,
+            "Prompt for a path not visited by another buffer and write there."
+        );
     }
 
     #[test]

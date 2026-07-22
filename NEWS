@@ -7,6 +7,16 @@ SPDX-License-Identifier: GPL-3.0-or-later
 
 Security fixes:
 
+* File buffers now reuse canonical saveable path identities across relative,
+  `..`, and symlinked-parent aliases. `write-file` refuses destinations already
+  visited by another buffer. Ordinary saves reject files modified, replaced,
+  deleted, or unexpectedly created since open or the previous save, preventing
+  stale alias buffers and external changes from being overwritten silently.
+  Final symbolic links remain view-only and hard-link pathnames remain distinct.
+  Unix uses file identity and change metadata; other targets have weaker
+  same-size replacement detection, and a narrow final-check-to-rename race
+  remains against concurrent writers.
+
 * Syntax, search, region, and persistent-highlight spans now merge with an
   ordered boundary sweep instead of rescanning every span at every boundary.
   Opening or redrawing a recognized source file with a keyword-dense long line

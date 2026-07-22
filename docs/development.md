@@ -694,6 +694,30 @@ link for viewing.  Permission and missing-parent errors propagate as `I/O error`
 values, policy rejections report `invalid input`, and failed saves keep the
 buffer dirty.
 
+Documents keep the path spelling shown to users separately from a visited-path
+identity. Existing regular paths are canonicalized, final symbolic links use a
+distinct parent-canonicalized identity, and missing files canonicalize their
+parent when possible. Buffer reuse recomputes identity as missing paths or
+symlinked parents change. Hard-link pathnames are not merged because replacing
+one pathname atomically does not replace its peers.
+
+Existing files are read and stamped through one descriptor. On Unix, expected
+state includes device, inode, length, modification time, and change time.
+Ordinary saves compare the destination with the open or last-save state before
+backup creation and again immediately before rename. Creation, deletion,
+replacement, and metadata changes reject the save without marking the buffer
+clean or deleting recovery data. Non-Unix targets currently fall back to length
+and modification time, so same-size replacement detection is weaker there. A
+narrow check-to-rename race remains because portable `rename` does not provide a
+compare-and-replace operation.
+
+Auto-save cleanup records the path and file stamp of every recovery file written
+by the current session. A successful save is committed even if later cleanup
+fails; the editor reports a cleanup warning, retains the exact pending cleanup
+record for retry, and preserves a repurposed or externally replaced path when
+the identity change is observed before deletion. A narrow check-to-delete race
+remains against concurrent replacement.
+
 ## Terminal Decision
 
 Rile currently uses direct Unix termios and ANSI escape sequences with only the `libc` crate for platform bindings. This keeps behavior explicit and dependency count low while the terminal model is still small. A higher-level terminal crate can be reconsidered later if portability or feature needs outweigh the extra abstraction.

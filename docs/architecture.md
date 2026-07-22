@@ -144,13 +144,17 @@ byte column, and editing helpers validate UTF-8 boundaries. Display-column
 helpers account for tabs, grapheme clusters, and double-width characters where
 rendering needs them.
 
-`Document` wraps a buffer with document kind, path, read-only state, dirty state,
-and file metadata. Existing files open as strict UTF-8, missing files create clean
-named buffers, NUL-containing binary files are rejected, and saves write through a
+`Document` wraps a buffer with document kind, displayed path, visited-path
+identity, read-only state, dirty state, and expected file metadata. Existing
+files open as strict UTF-8, missing files create clean named buffers,
+NUL-containing binary files are rejected, and saves write through a
 same-directory temporary file before rename.
 
 `BufferManager` owns all buffers and preserves stable `BufferId` values. Opening
-an already-open path reuses the existing buffer instead of creating a duplicate.
+an existing saveable path, or a missing path beneath a resolvable parent, reuses
+the same buffer across lexical and symlinked-parent aliases. Final symbolic links
+and hard-link pathnames deliberately retain distinct identities. Retargeting a
+buffer cannot claim a destination already owned by another live buffer.
 
 ## Windows And Viewports
 
