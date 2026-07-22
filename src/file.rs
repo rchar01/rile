@@ -1361,11 +1361,12 @@ mod tests {
     fn backup_rejects_source_replacement_after_metadata_capture() {
         let directory = TestDir::new();
         let path = directory.path().join("source.txt");
+        let replacement = directory.path().join("replacement.txt");
         let backup = directory.path().join("source.txt~");
         fs::write(&path, "original").expect("source should be written");
+        fs::write(&replacement, "replacement").expect("replacement should be written");
         let expected = fs::symlink_metadata(&path).expect("source metadata should read");
-        fs::remove_file(&path).expect("source should be removed");
-        fs::write(&path, "replacement").expect("replacement should be written");
+        fs::rename(&replacement, &path).expect("replacement should replace source path");
 
         let error = super::write_backup(&path, None, &expected)
             .expect_err("replaced backup source should fail");
