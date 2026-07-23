@@ -16,7 +16,11 @@ reference tools named here.
 Run the full development verification suite:
 
 ```sh
+# One-shot dev container from the host.
 make verify
+
+# Prepared host, or from inside `make shell`.
+./scripts/verify
 ```
 
 Common targeted commands:
@@ -30,7 +34,16 @@ make visual-demos
 make visual-frames
 ```
 
-`make verify` runs inside the dev container and covers build, tests, parsed-screen snapshot checks, formatting/lints, advisory/license/dependency policy checks, and unused dependency checks. It intentionally does not run VHS visual tooling or optional performance smoke tests.
+On a prepared host or inside `make shell`, invoke the corresponding task script,
+for example `./scripts/test`, `./scripts/test-cargo`, or
+`./scripts/snapshot-test`.
+
+Both commands run the same task scripts. `make verify` enters the dev container
+before invoking `scripts/verify`; direct invocation uses the tools in the current
+environment. The gate covers build, tests, parsed-screen snapshot checks,
+formatting/lints, advisory/license/dependency policy checks, and unused
+dependency checks. It intentionally does not run VHS visual tooling or optional
+performance smoke tests.
 
 ## Test Layers
 

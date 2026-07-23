@@ -8,36 +8,48 @@ missing=0
 
 check_tool() {
   tool=$1
+  requirement=$2
   if command -v "$tool" >/dev/null 2>&1; then
     version=$($tool --version 2>&1)
-    printf '%-18s %s\n' "$tool" "${version%%$'\n'*}"
+    printf '%-18s %-8s %s\n' "$tool" "$requirement" "${version%%$'\n'*}"
   else
-    printf '%-18s MISSING\n' "$tool" >&2
-    missing=1
+    printf '%-18s %-8s MISSING\n' "$tool" "$requirement" >&2
+    if [ "$requirement" = required ]; then
+      missing=1
+    fi
   fi
 }
 
 check_cargo_command() {
   command=$1
   label=$2
+  requirement=$3
   if cargo "$command" --version >/dev/null 2>&1; then
     version=$(cargo "$command" --version 2>&1)
-    printf '%-18s %s\n' "$label" "${version%%$'\n'*}"
+    printf '%-18s %-8s %s\n' "$label" "$requirement" "${version%%$'\n'*}"
   else
-    printf '%-18s MISSING\n' "$label" >&2
-    missing=1
+    printf '%-18s %-8s MISSING\n' "$label" "$requirement" >&2
+    if [ "$requirement" = required ]; then
+      missing=1
+    fi
   fi
 }
 
-check_tool rustup
-check_tool cargo
-check_tool rustfmt
-check_tool clippy-driver
-check_tool rust-analyzer
-check_cargo_command nextest cargo-nextest
-check_cargo_command deny cargo-deny
-check_cargo_command insta cargo-insta
-check_cargo_command audit cargo-audit
-check_cargo_command machete cargo-machete
+printf '%-18s %-8s %s\n' TOOL STATUS VERSION
+check_tool rustc required
+check_tool cargo required
+check_cargo_command fmt cargo-fmt required
+check_cargo_command clippy cargo-clippy required
+check_cargo_command insta cargo-insta required
+check_cargo_command deny cargo-deny required
+check_cargo_command audit cargo-audit required
+check_cargo_command machete cargo-machete required
+check_tool rustup optional
+check_tool rust-analyzer optional
+check_cargo_command nextest cargo-nextest optional
+
+if [ "$missing" -ne 0 ]; then
+  printf '%s\n' 'Install the missing required tools before running scripts/verify.' >&2
+fi
 
 exit "$missing"

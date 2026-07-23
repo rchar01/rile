@@ -757,7 +757,10 @@ The preferred quality gate is:
 make verify
 ```
 
-`make verify` builds the dev container and runs the project scripts inside it. The scripts are the source of truth for CI and local verification; the Makefile is the friendly command interface.
+`make verify` builds the dev container and runs the project scripts inside it.
+The environment-neutral task scripts are the source of truth for verification;
+the Makefile is the container-first command interface. A prepared host, or an
+interactive dev-container shell, runs `./scripts/verify` directly.
 
 ## Required Tools
 
@@ -768,22 +771,29 @@ Host requirements:
 | `podman` | Builds and runs the dev container. |
 | `make` | Provides stable local command targets. |
 
+These are the only host requirements for the container workflow. Direct host
+development instead requires GNU Bash and the Rust tools listed below.
+
 The dev container in `Containerfile.dev` provides:
 
 | Tool | Purpose | Required |
 | --- | --- | --- |
-| `rustup` | Toolchain and component management. | Yes |
+| `rustup` | Toolchain and component management. | Useful, not part of `verify` |
 | `cargo` | Build, test, run, and package commands. | Yes |
 | `rustfmt` | Rust formatting checks. | Yes |
 | `clippy` | Rust lint checks. | Yes |
 | `rust-analyzer` | Editor/LSP support. | Useful, not part of `verify` |
-| `cargo-nextest` | Preferred test runner. | Yes, with `cargo test` fallback in `scripts/test` |
+| `cargo-nextest` | Preferred test runner. | Useful; `scripts/test` falls back to `cargo test` |
 | `cargo-insta` | Parsed-screen snapshot checks. | Yes, used by `make verify` |
 | `cargo-deny` | License, advisory, source, and dependency policy checks. | Yes |
 | `cargo-audit` | Security advisory checks. | Yes |
 | `cargo-machete` | Unused dependency detection. | Yes |
 
-Current host status in this workspace: `cargo`, `podman`, and `make` are available; `rustup`, `rustfmt`, clippy, `rust-analyzer`, `cargo-nextest`, `cargo-insta`, `cargo-deny`, `cargo-audit`, and `cargo-machete` are not. That is why the dev container is the canonical tooling environment.
+`rust-toolchain.toml` selects Rust 1.96.1 with rustfmt and Clippy. The dev
+container pins its Cargo quality tools to the versions used by the documented
+host installation commands. `scripts/tools` reports every tool and exits with a
+failure only when a tool required by `scripts/verify` is missing. Rustup,
+rust-analyzer, and cargo-nextest are reported as optional.
 
 The visual tooling container in `Containerfile.visual` provides `vhs`, `ttyd`, `ffmpeg`, Chromium, and Rust for optional visual artifact generation. It is separate from the normal dev container so `make verify` stays smaller, faster, and independent of browser/video tooling.
 
@@ -801,6 +811,9 @@ make shell
 Emacs-style `C-p` movement reaches terminal editors instead of being held as
 the first byte of Podman's default `Ctrl-p Ctrl-q` detach sequence. Override it
 with `PODMAN_DETACH_KEYS`, for example `PODMAN_DETACH_KEYS=ctrl-^ make shell`.
+Once inside the shell, invoke `./scripts/build`, `./scripts/test`,
+`./scripts/verify`, and the other task scripts directly. Running the Make quality
+targets inside the shell would attempt to start a nested Podman container.
 
 One-shot tasks:
 
@@ -834,18 +847,52 @@ The Makefile delegates to scripts:
 - `scripts/verify` runs build, tests, snapshot checks, lint, audit, and unused dependency checks.
 - `scripts/visual-demos` validates VHS tapes, builds Rile once, and records optional GIFs.
 - `scripts/visual-frames` regenerates visual demos and verifies named PNG screenshots.
-- `scripts/tools` prints the versions of expected tools.
+- `scripts/tools` reports required and optional tool availability and versions.
+
+Only `scripts/in-container`, `scripts/devshell`, and
+`scripts/release-in-container` start Podman. Build, test, formatting, lint,
+audit, snapshot, unused-dependency, run, and verification scripts operate in
+their current environment.
 
 `cargo-deny` reads policy from `deny.toml`. The current policy denies yanked crates, denies unknown registries and git sources, denies wildcard dependencies, warns on multiple dependency versions, and allows Rile's GPL license plus the permissive licenses used by current dependencies.
 
 ## Direct Host Workflow
 
-Direct host development is supported if the same tools are installed locally. Use scripts directly:
+Direct host development is supported with GNU Bash and the pinned Rust tooling.
+Rustup is the recommended way to install the selected compiler and components:
+
+```sh
+rustup toolchain install 1.96.1 --profile minimal --component clippy,rustfmt
+cargo +1.96.1 install --locked \
+  cargo-audit@0.22.2 \
+  cargo-deny@0.20.2 \
+  cargo-insta@1.48.0 \
+  cargo-machete@0.9.2
+```
+
+Cargo-nextest and rust-analyzer are optional:
+
+```sh
+cargo +1.96.1 install --locked cargo-nextest@0.9.140
+rustup component add --toolchain 1.96.1 rust-analyzer
+```
+
+An equivalent Rust installation can be used without rustup; `scripts/tools`
+checks the executable tools rather than requiring a particular installer. Run
+the preflight and complete gate directly:
+
+```sh
+./scripts/tools
+./scripts/verify
+```
+
+Individual task scripts are also available:
 
 ```sh
 ./scripts/build
 ./scripts/fmt
 ./scripts/fmt-check
+./scripts/test
 ./scripts/test-cargo
 ./scripts/snapshot-test
 ./scripts/lint
@@ -853,12 +900,15 @@ Direct host development is supported if the same tools are installed locally. Us
 ./scripts/unused-deps
 ```
 
-On this host, only `./scripts/build` and `./scripts/test-cargo` are expected to work until the missing Rust components and cargo subcommands are installed.
+The existing Make quality targets intentionally remain container-first. Host
+development does not require Podman or Make when the task scripts are invoked
+directly.
 
 ## CI Status
 
 CI is deferred until Forgejo CI is configured for the official repository.
-Future CI should call the same non-interactive scripts used by `make verify`;
+No CI workflow is added as part of the dual host/container development path.
+Future CI should call the same environment-neutral non-interactive scripts;
 it should not call `scripts/devshell`.
 
 Optional hosted CI visual artifact generation should be a separate, non-blocking job from `make verify`. That job may run `make visual-frames` in the visual tooling container and upload ignored files from `artifacts/` for review. GIFs and PNGs should remain review evidence only; PTY assertions and parsed-screen snapshots remain the correctness gates.

@@ -1,3 +1,17 @@
+2026-07-23  Robert Charusta  <rch-public@posteo.net>
+
+	Support equivalent host and dev-container task scripts.
+
+	* rust-toolchain.toml: New file. Pin Rust 1.96.1, rustfmt, and Clippy.
+	* Containerfile.dev (CARGO_AUDIT_VERSION, CARGO_DENY_VERSION,
+	CARGO_INSTA_VERSION, CARGO_MACHETE_VERSION,
+	CARGO_NEXTEST_VERSION): New build arguments.
+	Pin installed Cargo quality tools to the documented host versions.
+	* scripts/tools (check_tool, check_cargo_command): Distinguish required and
+	optional tools. Require only the tools used by scripts/verify.
+	* README.md, docs/development.md, docs/testing.md: Document prepared-host,
+	one-shot container, and interactive-container entry paths.
+
 2026-07-22  Robert Charusta  <rch-public@posteo.net>
 
 	Bound match-highlight memory on dense logical lines.

@@ -34,7 +34,8 @@ not implemented yet.
 
 Requirements for running from source:
 
-- Rust 2024 toolchain when developing directly on the host.
+- GNU Bash and the Rust 1.96.1 toolchain selected by `rust-toolchain.toml` when
+  developing directly on the host.
 - Or `podman` and `make` for the preferred dev-container workflow.
 
 Current binary behavior:
@@ -396,12 +397,14 @@ Copyright (c) 2026 Robert Charusta <rch-public@posteo.net>.
 
 ## Development
 
-The preferred development workflow uses Podman, `make`, and the project dev
+Development is supported through either the project dev container or a prepared
+host Rust environment. The preferred workflow uses Podman, `make`, and the dev
 container. See [docs/README.md](docs/README.md) for maintainer documentation,
 [docs/self-documentation.md](docs/self-documentation.md) for the implemented
 help/metadata architecture, [docs/testing.md](docs/testing.md) for the testing
 workflow, and [docs/external-projects.md](docs/external-projects.md) for links
-to external tooling and dependencies. The host only needs:
+to external tooling and dependencies. For the container path, the host only
+needs:
 
 - `podman`
 - `make`
@@ -422,7 +425,19 @@ make verify
 make perf-smoke
 ```
 
-For direct host development, install the same Rust tools locally and run the scripts under `scripts/` directly.
+The task scripts run in their current environment and do not invoke Podman. For
+direct host development, install the pinned Rust toolchain and Cargo quality
+tools, check them, and run the same quality gate directly:
+
+```sh
+./scripts/tools
+./scripts/verify
+```
+
+Inside `make shell`, use these direct scripts as well. Outside the container,
+`make build`, `make test`, `make lint`, and `make verify` remain the convenient
+one-shot container entry points. See [docs/development.md](docs/development.md)
+for host installation commands and the complete execution-path contract.
 
 `make perf-smoke` is optional and runs generated large-file and long-line
 performance smoke comparisons against Rile, GNU Emacs, GNU Zile, kg, and Debian

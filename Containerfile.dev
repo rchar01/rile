@@ -10,6 +10,11 @@ FROM docker.io/library/rust:${RUST_VERSION}-bookworm
 ARG GORELEASER_VERSION=2.17.0
 ARG RELEASE_TOOLS_VERSION=3.5.0
 ARG RELEASE_TOOLS_SHA256=bd2eb0eec47aa2b198d9a3983bb1768572beb5cd8c5824dafcb57bc41cf24d44
+ARG CARGO_AUDIT_VERSION=0.22.2
+ARG CARGO_DENY_VERSION=0.20.2
+ARG CARGO_INSTA_VERSION=1.48.0
+ARG CARGO_MACHETE_VERSION=0.9.2
+ARG CARGO_NEXTEST_VERSION=0.9.140
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -24,12 +29,12 @@ RUN apt-get update \
 RUN rustup component add rustfmt clippy rust-analyzer
 
 RUN cargo install --locked \
-    cargo-audit \
-    cargo-deny \
-    cargo-machete \
-    cargo-nextest
+    cargo-audit@${CARGO_AUDIT_VERSION} \
+    cargo-deny@${CARGO_DENY_VERSION} \
+    cargo-machete@${CARGO_MACHETE_VERSION} \
+    cargo-nextest@${CARGO_NEXTEST_VERSION}
 
-RUN cargo install --locked cargo-insta
+RUN cargo install --locked cargo-insta@${CARGO_INSTA_VERSION}
 
 RUN curl -fsSL -o /tmp/goreleaser.tar.gz \
     "https://github.com/goreleaser/goreleaser/releases/download/v${GORELEASER_VERSION}/goreleaser_Linux_x86_64.tar.gz" \
